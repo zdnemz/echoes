@@ -1,0 +1,22 @@
+# dependencies / build
+node_modules
+.next
+out
+dist
+*.log
+
+# env & secrets
+.env
+.env.local
+.env.*.local
+
+# database
+db/*.db
+db/*.db-journal
+prisma/migrations/dev.db
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea
+.vscode

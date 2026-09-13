@@ -1,0 +1,2 @@
+# Husky pre-commit: format + lint staged files (see lint-staged in package.json)
+bunx lint-staged

@@ -1,0 +1,2 @@
+# Never upload local secrets — production env is managed via `vercel env`.
+.env*

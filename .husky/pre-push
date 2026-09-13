@@ -1,0 +1,11 @@
+# Husky pre-push: full verification — nothing broken reaches the remote.
+# Staging-level checks (lint + format on changed files) run in pre-commit.
+echo "── pre-push: typecheck ────────────────────────────────"
+bun run typecheck || exit 1
+echo "── pre-push: lint ─────────────────────────────────────"
+bun run lint || exit 1
+echo "── pre-push: format check ─────────────────────────────"
+bun run format:check || exit 1
+echo "── pre-push: production build ─────────────────────────"
+bun run build || exit 1
+echo "── pre-push: all clear ✓ ──────────────────────────────"

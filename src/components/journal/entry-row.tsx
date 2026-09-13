@@ -1,0 +1,110 @@
+'use client'
+
+/**
+ * One entry, as an editorial row — hairline-separated, not boxed. Reused
+ * by the notebook list and search results.
+ */
+
+import { motion } from 'framer-motion'
+import { EyeSlash } from '@phosphor-icons/react/dist/ssr'
+import { MoodGlyph } from '@/components/mood/glyphs'
+import { excerpt, formatStamp } from '@/lib/format'
+import type { Entry } from '@/lib/api/types'
+
+export function EntryRow({
+  entry,
+  onOpen,
+  flash = false,
+  authorName,
+  showPrivate = false,
+  notebookTitle,
+}: {
+  entry: Entry
+  onOpen: (entry: Entry) => void
+  flash?: boolean
+  /** Set for shared notebooks: entries by other members. */
+  authorName?: string | null
+  /** Highlight the per-entry opt-out marker. */
+  showPrivate?: boolean
+  /** Set in search results: which notebook this entry lives in. */
+  notebookTitle?: string | null
+}) {
+  return (
+    <motion.li
+      layout="position"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+    >
+      <button
+        type="button"
+        onClick={() => onOpen(entry)}
+        className={`press group block w-full rounded-md px-3 py-4 text-left transition-colors sm:px-4 ${
+          flash ? 'bg-clay-tint/60' : 'hover:bg-paper-deep/50'
+        }`}
+      >
+        <div className="flex items-baseline gap-3">
+          <span className="shrink-0 font-mono text-[10.5px] text-ink-faint">{formatStamp(entry.created_at)}</span>
+          {notebookTitle && (
+            <span className="shrink-0 rounded-full bg-paper-deep px-2 py-0.5 font-mono text-[9.5px] text-ink-faint">
+              {notebookTitle}
+            </span>
+          )}
+          <span className="ml-auto flex items-center gap-2">
+            {entry.mood && (
+              <span title={entry.mood}>
+                <span style={{ color: `var(--mood-${entry.mood})` }}>
+                  <MoodGlyph mood={entry.mood} className="h-4 w-4" />
+                </span>
+              </span>
+            )}
+            {showPrivate && !entry.is_shared && (
+              <span
+                title="Kept private from the group"
+                className="inline-flex items-center gap-1 font-mono text-[9.5px] text-ink-faint"
+              >
+                <EyeSlash weight="light" className="h-3.5 w-3.5" /> private
+              </span>
+            )}
+          </span>
+        </div>
+
+        <h3 className="mt-1.5 font-display text-[19px] leading-snug text-ink transition-colors group-hover:text-clay-ink">
+          {entry.title}
+        </h3>
+
+        {entry.body.trim().length > 0 && (
+          <p className="mt-1 line-clamp-2 max-w-[70ch] font-serif text-[14px] leading-relaxed text-ink-soft">
+            {excerpt(entry.body, 150)}
+          </p>
+        )}
+
+        {(entry.tags.length > 0 || authorName) && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            {entry.tags.slice(0, 5).map((t) => (
+              <span key={t} className="font-mono text-[10.5px] text-ink-faint">
+                #{t}
+              </span>
+            ))}
+            {entry.tags.length > 5 && (
+              <span className="font-mono text-[10.5px] text-ink-ghost">+{entry.tags.length - 5}</span>
+            )}
+            {authorName && <span className="ml-auto font-mono text-[10.5px] text-ink-faint">by {authorName}</span>}
+          </div>
+        )}
+      </button>
+    </motion.li>
+  )
+}
+
+/** Skeleton variant — same silhouette, shimmering. */
+export function EntryRowSkeleton() {
+  return (
+    <li className="px-3 py-4 sm:px-4">
+      <div className="skeleton-line h-3 w-28" />
+      <div className="skeleton-line mt-3 h-5 w-2/3" />
+      <div className="skeleton-line mt-2.5 h-3.5 w-full max-w-[70ch]" />
+      <div className="skeleton-line mt-1.5 h-3.5 w-1/2" />
+    </li>
+  )
+}

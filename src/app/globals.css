@@ -1,0 +1,302 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================================
+   ECHOES — design tokens · "Paper & Ink"
+   ----------------------------------------------------------------------------
+   Three layers:
+     1. Primitives (:root)     — paper/ink/line/clay/mood scales, one warm hue
+     2. Semantic  (:root)      — shadcn-compatible surface/role mapping
+     3. Theme     (@theme)     — exposes every token as a Tailwind utility
+   Rules honored: one accent (clay), saturation < 80%, no pure black, no
+   purple/neon, hairlines over heavy borders, shadows tinted to the paper hue.
+   ========================================================================== */
+
+:root {
+  /* ---------------------------------------------------------- primitives */
+  --paper: #faf6ee; /* page canvas — warm cream */
+  --paper-raised: #fffdf7; /* cards, popovers — one step brighter */
+  --paper-deep: #f2ecdf; /* wells, code, hover fills */
+  --paper-sink: #eae2d0; /* pressed states, deepest well */
+
+  --ink: #272219; /* primary text — warm near-black, never #000 */
+  --ink-soft: #5f5746; /* secondary text */
+  --ink-faint: #9a8f78; /* tertiary/meta text */
+  --ink-ghost: #c8bfa9; /* disabled, placeholder rules */
+
+  --line: #e4dbc8; /* hairline borders */
+  --line-strong: #d3c7ae; /* emphasized hairlines, input borders */
+
+  --clay: #b85c3e; /* the single accent — muted terracotta */
+  --clay-deep: #9d4a2e; /* hover / pressed */
+  --clay-ink: #7c3a22; /* accent text on tint */
+  --clay-soft: #d9a38c; /* rings, quiet highlights */
+  --clay-tint: #f3e4dc; /* tint fills, chips, banners */
+
+  --mood-great: #bd8f34; /* ochre gold */
+  --mood-good: #7c8e5a; /* sage */
+  --mood-okay: #a29a89; /* warm stone */
+  --mood-low: #b08676; /* dusty clay rose */
+  --mood-rough: #6f5246; /* deep umber */
+
+  --sage: #6f7d51; /* success — quiet, desaturated */
+  --sage-tint: #e9eddd;
+  --ember: #a83f2a; /* destructive — warm red, not neon */
+  --ember-tint: #f6e2da;
+
+  /* ---------------------------------------------------------- semantic */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-raised);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--clay-deep);
+  --primary-foreground: #fdf8f2;
+  --secondary: var(--paper-deep);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-deep);
+  --muted-foreground: var(--ink-soft);
+  --accent: var(--clay-tint);
+  --accent-foreground: var(--clay-ink);
+  --destructive: var(--ember);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--clay-soft);
+  --chart-1: var(--clay);
+  --chart-2: var(--mood-good);
+  --chart-3: var(--mood-great);
+  --chart-4: var(--mood-low);
+  --chart-5: var(--mood-rough);
+  --sidebar: var(--paper-raised);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--clay-deep);
+  --sidebar-primary-foreground: #fdf8f2;
+  --sidebar-accent: var(--paper-deep);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--clay-soft);
+
+  --radius: 0.5rem;
+
+  /* ---------------------------------------------------------- motion */
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+  /* ---------------------------------------------------------- fonts */
+  --font-sans: var(--font-geist-sans), 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-newsreader), 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-mono: var(--font-geist-mono), 'Geist Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* ---------------------------------------------------------- palette */
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-paper-deep: var(--paper-deep);
+  --color-paper-sink: var(--paper-sink);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-ink-ghost: var(--ink-ghost);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-clay: var(--clay);
+  --color-clay-deep: var(--clay-deep);
+  --color-clay-ink: var(--clay-ink);
+  --color-clay-soft: var(--clay-soft);
+  --color-clay-tint: var(--clay-tint);
+  --color-mood-great: var(--mood-great);
+  --color-mood-good: var(--mood-good);
+  --color-mood-okay: var(--mood-okay);
+  --color-mood-low: var(--mood-low);
+  --color-mood-rough: var(--mood-rough);
+  --color-sage: var(--sage);
+  --color-sage-tint: var(--sage-tint);
+  --color-ember: var(--ember);
+  --color-ember-tint: var(--ember-tint);
+
+  /* ---------------------------------------------------------- semantic */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* ---------------------------------------------------------- radii */
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 10px);
+
+  /* ---------------------------------------------------------- motion */
+  --animate-marquee: marquee 46s linear infinite;
+  --animate-float-soft: float-soft 7s ease-in-out infinite;
+  --animate-breathe: breathe 2.6s ease-in-out infinite;
+  --animate-shimmer: shimmer 2.2s ease-in-out infinite;
+  --animate-rise: rise 0.7s var(--ease-out-soft) both;
+
+  @keyframes marquee {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @keyframes float-soft {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-7px);
+    }
+  }
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 0.55;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.25);
+    }
+  }
+  @keyframes shimmer {
+    0% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 0.9;
+    }
+    100% {
+      opacity: 0.45;
+    }
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* Backstop for absolutely-positioned flourishes (hero chips, washes) on
+       narrow screens. `clip` — not `hidden` — so sticky bars keep working. */
+    overflow-x: clip;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--clay) 22%, transparent);
+    color: var(--ink);
+  }
+
+  /* Paper-toned scrollbars — thin, warm, unobtrusive */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  /* Serif display type — editorial headline voice */
+  .font-display {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    font-variation-settings: 'opsz' 40;
+  }
+
+  /* Tactile press for every interactive element */
+  .press {
+    transition:
+      transform 0.15s var(--ease-out-soft),
+      box-shadow 0.2s var(--ease-out-soft),
+      background-color 0.2s var(--ease-out-soft),
+      color 0.2s var(--ease-out-soft),
+      border-color 0.2s var(--ease-out-soft);
+  }
+  .press:active {
+    transform: scale(0.97) translateY(1px);
+  }
+
+  /* Diffusion shadow — depth without clutter, tinted to the page hue */
+  .shadow-diffuse {
+    box-shadow:
+      0 1px 2px rgba(39, 34, 25, 0.04),
+      0 18px 40px -18px rgba(39, 34, 25, 0.14);
+  }
+  .shadow-lift {
+    box-shadow:
+      0 1px 2px rgba(39, 34, 25, 0.05),
+      0 28px 60px -24px rgba(39, 34, 25, 0.22);
+  }
+  .shadow-ink {
+    box-shadow: 0 10px 30px -14px rgba(157, 74, 46, 0.38);
+  }
+
+  /* The reading measure — journal text breathes at ~64ch */
+  .measure {
+    max-width: 64ch;
+  }
+
+  /* Skeleton shimmer block */
+  .skeleton-line {
+    @apply rounded-sm bg-paper-deep;
+    animation: var(--animate-shimmer);
+  }
+}
