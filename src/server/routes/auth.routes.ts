@@ -13,6 +13,7 @@ import {
   RefreshSchema,
   SessionSchema,
   SignUpSchema,
+  UpdatePasswordSchema,
   UpdateProfileSchema,
 } from '../schemas'
 import { requireAuth } from '../auth'
@@ -204,6 +205,53 @@ export function registerAuthRoutes(app: App) {
     if (!profile) throw Errors.notFound('Profile not found')
 
     return c.json({ ...profile, email: user.email ?? '' })
+  })
+
+  // ----------------------------------------------------------------- password
+  const updatePassword = createRoute({
+    method: 'post',
+    path: '/auth/password',
+    tags: ['Auth'],
+    summary: 'Change your password',
+    description:
+      'Updates the password on the caller’s own auth user. OAuth-only accounts (no password set) gain one; existing sessions stay valid.',
+    security: [bearerAuth],
+    middleware: [requireAuth],
+    request: { body: jsonBody(UpdatePasswordSchema) },
+    responses: {
+      ...errorResponses(400, 401, 422, 503),
+      200: {
+        description: 'Password changed',
+        content: {
+          'application/json': { schema: z.object({ message: z.string().openapi({ example: 'Password updated' }) }) },
+        },
+      },
+    },
+  })
+  app.openapi(updatePassword, async (c) => {
+    const { password } = c.req.valid('json')
+
+    // supabase-js updateUser() needs a stateful session, which the
+    // per-request RLS client deliberately does not keep — so call GoTrue's
+    // update-user endpoint directly with the verified bearer token.
+    const cfg = getSupabaseConfig()
+    if (!cfg) throw Errors.supabaseNotConfigured()
+    let res: Response
+    try {
+      res = await fetch(`${cfg.url}/auth/v1/user`, {
+        method: 'PUT',
+        headers: { apikey: cfg.anonKey, Authorization: `Bearer ${c.var.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+    } catch (cause) {
+      throw new ApiError(502, 'AUTH_UPSTREAM', 'Could not reach the auth provider', { cause: [String(cause)] })
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { msg?: string; error_description?: string } | null
+      throw new ApiError(400, 'AUTH_ERROR', body?.msg ?? body?.error_description ?? 'Could not update the password')
+    }
+
+    return c.json({ message: 'Password updated' })
   })
 
   // ----------------------------------------------------------------- google oauth (PKCE)

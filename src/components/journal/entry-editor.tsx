@@ -29,6 +29,7 @@ import { MOODS, MOOD_META, MoodGlyph } from '@/components/mood/glyphs'
 import { useSession } from '@/lib/auth/session'
 import { useCreateEntry, useDeleteEntry, useEntry, useNotebooks, useUpdateEntry } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
+import { getDefaultMood } from '@/lib/prefs'
 import { wordCount } from '@/lib/format'
 import type { Mood } from '@/components/mood/glyphs'
 import type { View } from './workspace'
@@ -151,7 +152,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
   // ---- form state
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
-  const [mood, setMood] = useState<Mood | null>(null)
+  const [mood, setMood] = useState<Mood | null>(() => (mode.compose ? getDefaultMood() : null))
   const [tags, setTags] = useState<string[]>([])
   const [isShared, setIsShared] = useState(true)
   const [hydrated, setHydrated] = useState(mode.compose)

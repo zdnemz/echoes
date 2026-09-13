@@ -108,6 +108,12 @@ export const RefreshSchema = z
   })
   .strict()
 
+export const UpdatePasswordSchema = z
+  .object({
+    password: z.string().min(8).max(72).openapi({ example: 'correct horse battery', minLength: 8 }),
+  })
+  .strict()
+
 export const OAuthStartResponseSchema = z
   .object({
     authorize_url: z.string().url().openapi({

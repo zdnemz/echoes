@@ -22,6 +22,7 @@ import { NotebookView } from './notebook-view'
 import { EntryEditor } from './entry-editor'
 import { GroupsView } from './groups-view'
 import { SearchView } from './search-view'
+import { SettingsView } from './settings-view'
 import { UserMenu } from './user-menu'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useSession } from '@/lib/auth/session'
@@ -35,6 +36,7 @@ export type View =
   | { kind: 'search'; q: string }
   | { kind: 'groups' }
   | { kind: 'group'; groupId: string }
+  | { kind: 'settings' }
 
 // --------------------------------------------------------------- restoring
 
@@ -177,7 +179,7 @@ export function Workspace() {
             </div>
           </form>
 
-          <UserMenu />
+          <UserMenu onNavigate={navigate} />
         </div>
       </header>
 
@@ -232,6 +234,8 @@ export function Workspace() {
             />
           ) : view.kind === 'search' ? (
             <SearchView initialQuery={view.q} onNavigate={navigate} />
+          ) : view.kind === 'settings' ? (
+            <SettingsView />
           ) : (
             <GroupsView selectedGroupId={view.kind === 'group' ? view.groupId : null} onNavigate={navigate} />
           )}

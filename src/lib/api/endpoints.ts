@@ -54,6 +54,9 @@ export const updateProfile = (displayName: string) =>
 
 export const logout = () => api<{ message: string }>('/api/auth/logout', { method: 'POST' })
 
+export const updatePassword = (password: string) =>
+  api<{ message: string }>('/api/auth/password', { method: 'POST', ...json({ password }) })
+
 // ----------------------------------------------------------------- notebooks
 
 export interface ListNotebooksParams {
