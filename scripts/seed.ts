@@ -207,25 +207,10 @@ async function main() {
     console.log(`✓ entries already present (${entryCount}), skipping`)
   }
 
-  // ---------------------------------------------------------------- invite (accepted, for sam)
-  const { data: existingInvite } = await db
-    .from('group_invites')
-    .select('id')
-    .eq('group_id', groupId)
-    .eq('email', 'sam@example.com')
-    .eq('status', 'accepted')
-    .maybeSingle()
-  if (!existingInvite) {
-    await db.from('group_invites').insert({
-      group_id: groupId,
-      email: 'sam@example.com',
-      token: `seed-accepted-${crypto.randomUUID()}`,
-      status: 'accepted',
-      invited_by: alexId,
-      expires_at: new Date(Date.now() + 3600_000).toISOString(),
-    })
-  }
-  console.log('✓ accepted invite record for sam (audit trail)')
+  // ---------------------------------------------------------------- invite link
+  // Leave the demo group linkless (owners create links from the UI); sam is
+  // already a member via the upsert above.
+  console.log('✓ invite link left unset (create one from the group sharing panel)')
 
   console.log('\nDone. Try it:')
   console.log('  curl -X POST <app>/api/auth/login -H "content-type: application/json" \\')

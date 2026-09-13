@@ -22,7 +22,7 @@ const SECTIONS = [
   },
   {
     heading: 'Invites are narrow',
-    body: "Invite links are single-use, expire on their own, and are addressed to one email. A member removed from a group loses access to its shared notebooks the moment they're removed.",
+    body: "Invite links are revocable, can expire on their own, and open exactly one group. A member removed from a group loses access to its shared notebooks the moment they're removed.",
   },
   {
     heading: 'No advertising, no data sales',

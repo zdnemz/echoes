@@ -20,6 +20,7 @@ interface GroupRow {
   owner_id: string
   name: string
   created_at: string
+  auto_accept: boolean
 }
 
 interface MemberRow {
@@ -36,6 +37,7 @@ function toGroupView(group: GroupRow, members: MemberRow[], me: string) {
     owner_id: group.owner_id,
     name: group.name,
     created_at: group.created_at,
+    auto_accept: group.auto_accept ?? false,
     my_role: (mine?.role as Role) ?? 'member',
     member_count: members.length,
   }
@@ -74,7 +76,7 @@ export function registerGroupRoutes(app: App) {
 
     const { data: groups, error } = await c.var.userClient
       .from('groups')
-      .select('id, owner_id, name, created_at, group_members(role, user_id)')
+      .select('id, owner_id, name, created_at, auto_accept, group_members(role, user_id)')
       .order('created_at', { ascending: true })
     if (error) throw fromPostgrestError(error)
 
@@ -115,7 +117,7 @@ export function registerGroupRoutes(app: App) {
     const { data: group, error } = await c.var.userClient
       .from('groups')
       .insert({ owner_id: me, name })
-      .select('id, owner_id, name, created_at')
+      .select('id, owner_id, name, created_at, auto_accept')
       .single()
     if (error) throw fromPostgrestError(error)
     if (!group) throw Errors.badRequest('Failed to create group')
@@ -137,6 +139,7 @@ export function registerGroupRoutes(app: App) {
         owner_id: group.owner_id,
         name: group.name,
         created_at: group.created_at,
+        auto_accept: (group as GroupRow).auto_accept ?? false,
         my_role: 'owner',
         member_count: 1,
       },
@@ -171,7 +174,9 @@ export function registerGroupRoutes(app: App) {
 
     const { data, error } = await c.var.userClient
       .from('groups')
-      .select('id, owner_id, name, created_at, group_members(role, joined_at, user_id, profiles(display_name))')
+      .select(
+        'id, owner_id, name, created_at, auto_accept, group_members(role, joined_at, user_id, profiles(display_name))',
+      )
       .eq('id', id)
       .maybeSingle()
     if (error) throw fromPostgrestError(error)
@@ -188,29 +193,33 @@ export function registerGroupRoutes(app: App) {
     })
   })
 
-  // ----------------------------------------------------------------- rename
+  // ----------------------------------------------------------------- update
   const update = createRoute({
     method: 'patch',
     path: '/groups/{id}',
     tags: ['Groups'],
-    summary: 'Rename a group (owner only)',
+    summary: 'Rename a group / flip auto-accept (owner only)',
     security: [bearerAuth],
     middleware: [requireAuth],
     request: { params: GroupIdParam, body: jsonBody(UpdateGroupSchema) },
     responses: {
       ...errorResponses(400, 401, 403, 404, 422, 503),
-      200: { description: 'Renamed group', content: { 'application/json': { schema: GroupSchema } } },
+      200: { description: 'Updated group', content: { 'application/json': { schema: GroupSchema } } },
     },
   })
   app.openapi(update, async (c) => {
     const { id } = c.req.valid('param')
-    const { name } = c.req.valid('json')
+    const { name, auto_accept } = c.req.valid('json')
+
+    const patch: Record<string, unknown> = {}
+    if (name !== undefined) patch.name = name
+    if (auto_accept !== undefined) patch.auto_accept = auto_accept
 
     const { data, error } = await c.var.userClient
       .from('groups')
-      .update({ name })
+      .update(patch)
       .eq('id', id)
-      .select('id, owner_id, name, created_at')
+      .select('id, owner_id, name, created_at, auto_accept')
       .maybeSingle()
     if (error) throw fromPostgrestError(error)
     if (!data) throw Errors.notFound('Group not found, or you are not its owner')

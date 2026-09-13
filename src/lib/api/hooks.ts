@@ -8,7 +8,7 @@
 
 import { useMutation, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as api from './endpoints'
-import type { Entry, Group, Invite, GroupDetail, Paginated } from './types'
+import type { Entry, Group, GroupDetail, Paginated } from './types'
 import type { Mood } from '@/components/mood/glyphs'
 import { useSession } from '@/lib/auth/session'
 import { ApiError, isUnconfigured, isUnauthorized } from './client'
@@ -179,7 +179,7 @@ export function useCreateGroup() {
 export function useUpdateGroup() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => api.updateGroup(id, name),
+    mutationFn: ({ id, ...input }: { id: string; name?: string; auto_accept?: boolean }) => api.updateGroup(id, input),
     onSuccess: (g: GroupDetail) => {
       qc.invalidateQueries({ queryKey: ['groups'] })
       qc.invalidateQueries({ queryKey: ['group', g.id] })
@@ -223,22 +223,39 @@ export function useLeaveGroup() {
   })
 }
 
-// ---------------------------------------------------------------- invites
+// ---------------------------------------------------------------- invites (link-based)
 
-export function useInvites(groupId: string | null, enabled = true) {
+export function useInviteLink(groupId: string | null, enabled = true) {
   const isEnabled = useAuthed() && groupId !== null && enabled
   return useQuery({
-    queryKey: ['invites', groupId],
-    queryFn: () => api.listInvites(groupId as string),
+    queryKey: ['invite-link', groupId],
+    queryFn: () => api.getInviteLink(groupId as string),
     enabled: isEnabled,
     retry: retryPolicy,
   })
 }
 
-export function useInviteInfo(token: string | null) {
+export function useRotateInviteLink() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ groupId, ...input }: { groupId: string; expires_in_hours?: number | null }) =>
+      api.rotateInviteLink(groupId, input),
+    onSuccess: (_link, { groupId }) => qc.invalidateQueries({ queryKey: ['invite-link', groupId] }),
+  })
+}
+
+export function useRevokeInviteLink() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (groupId: string) => api.revokeInviteLink(groupId),
+    onSuccess: (_v, groupId) => qc.invalidateQueries({ queryKey: ['invite-link', groupId] }),
+  })
+}
+
+export function useLinkInfo(token: string | null) {
   return useQuery({
-    queryKey: ['invite', token],
-    queryFn: () => api.inviteInfo(token as string),
+    queryKey: ['link', token],
+    queryFn: () => api.linkInfo(token as string),
     enabled: token !== null && token.length > 0,
     retry: (failureCount: number, error: unknown) => {
       if (error instanceof ApiError && error.status === 404) return false
@@ -247,30 +264,43 @@ export function useInviteInfo(token: string | null) {
   })
 }
 
-export function useCreateInvite() {
+export function useJoinViaLink() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ groupId, ...input }: { groupId: string; email: string; expires_in_hours?: number }) =>
-      api.createInvite(groupId, input),
-    onSuccess: (invite: Invite) => qc.invalidateQueries({ queryKey: ['invites', invite.group_id] }),
-  })
-}
-
-export function useRevokeInvite() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: api.revokeInvite,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['invites'] }),
-  })
-}
-
-export function useAcceptInvite() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: api.acceptInvite,
+    mutationFn: api.joinViaLink,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['groups'] })
       qc.invalidateQueries({ queryKey: ['notebooks'] })
+    },
+  })
+}
+
+export function useJoinRequests(groupId: string | null, enabled = true) {
+  const isEnabled = useAuthed() && groupId !== null && enabled
+  return useQuery({
+    queryKey: ['join-requests', groupId],
+    queryFn: () => api.listJoinRequests(groupId as string),
+    enabled: isEnabled,
+    retry: retryPolicy,
+  })
+}
+
+export function useDecideJoinRequest() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      groupId,
+      requestId,
+      decision,
+    }: {
+      groupId: string
+      requestId: string
+      decision: 'approved' | 'denied'
+    }) => api.decideJoinRequest(groupId, requestId, decision),
+    onSuccess: (_r, { groupId }) => {
+      qc.invalidateQueries({ queryKey: ['join-requests', groupId] })
+      qc.invalidateQueries({ queryKey: ['group', groupId] })
+      qc.invalidateQueries({ queryKey: ['groups'] })
     },
   })
 }

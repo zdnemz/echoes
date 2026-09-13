@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, CircleNotch } from '@phosphor-icons/react/dist/ssr'
 import { exchangeCallbackCode } from '@/lib/auth/oauth'
 import { adoptSession } from '@/lib/auth/session'
-import { acceptInvite } from '@/lib/api/endpoints'
 import { clearPendingInvite, popPendingInvite } from '@/lib/auth/invite-stash'
 import { isUnconfigured } from '@/lib/api/client'
 import { UnconfiguredNotice } from '@/components/unconfigured'
@@ -64,16 +63,13 @@ export default function AuthCallbackPage() {
         const session = await exchangeCallbackCode(code!)
         adoptSession(session)
 
-        // Same post-sign-in courtesy as the auth panel: consume a stashed
-        // invite (opened before signing in), then go write.
+        // Same post-sign-in courtesy as the auth panel: a stashed invite
+        // link sends the fresh session back to the accept page.
         const stashed = popPendingInvite()
         if (stashed) {
-          try {
-            await acceptInvite(stashed.token)
-            clearPendingInvite()
-          } catch {
-            clearPendingInvite()
-          }
+          clearPendingInvite()
+          router.replace(`/invites/accept?token=${encodeURIComponent(stashed.token)}`)
+          return
         }
         router.replace('/journal')
       } catch (err) {

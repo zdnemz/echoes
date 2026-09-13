@@ -73,7 +73,6 @@ marker table).
 
 ## e2e checks
 
-- `scripts/e2e-invite.ts` — invite → signup → accept → membership, and the
-  single-use guarantee.
+- `scripts/e2e-invite.ts` — link join (auto-accept), request → approve, and link revocation.
 
 It is rate-limit aware (the API's auth limiter is live!).

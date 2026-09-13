@@ -11,7 +11,7 @@ _A quiet place for loud thoughts._ A private journal: markdown entries with mood
 | Marketing site     | `/`, `/features`, `/pricing`, `/about`, `/privacy`, `/terms` | Multipage, server-rendered, Paper & Ink design system                     |
 | The journal        | `/journal`                                                   | Split-pane markdown editor, moods, tags, search, groups, shared notebooks |
 | Google OAuth       | `/auth/callback`                                             | PKCE flow, proxied through the API (anon key never client-side)           |
-| Invites            | `/invites/accept?token=…`                                    | Single-use, expiring, email-scoped                                        |
+| Invites            | `/invites/accept?token=…`                                    | One link per group; instant join or owner approval                        |
 | API (Hono)         | `/api/*`                                                     | 35 OpenAPI-documented endpoints; Zod validation; RLS-scoped queries       |
 | API console & docs | `/console`, `/api/docs`                                      | **Development only** — production returns 404                             |
 

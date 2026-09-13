@@ -7,7 +7,6 @@
 
 import { api, json } from './client'
 import type {
-  AcceptInviteResult,
   CreateEntryInput,
   CreateNotebookInput,
   Entry,
@@ -15,8 +14,10 @@ import type {
   GroupDetail,
   GroupMember,
   Health,
-  Invite,
-  InviteInfo,
+  InviteLink,
+  JoinRequest,
+  JoinResult,
+  LinkInfo,
   LoginInput,
   Notebook,
   Paginated,
@@ -122,8 +123,8 @@ export const createGroup = (name: string) => api<Group>('/api/groups', { method:
 
 export const getGroup = (id: string) => api<GroupDetail>(`/api/groups/${id}`)
 
-export const updateGroup = (id: string, name: string) =>
-  api<GroupDetail>(`/api/groups/${id}`, { method: 'PATCH', ...json({ name }) })
+export const updateGroup = (id: string, input: { name?: string; auto_accept?: boolean }) =>
+  api<GroupDetail>(`/api/groups/${id}`, { method: 'PATCH', ...json(input) })
 
 export const deleteGroup = (id: string) => api<void>(`/api/groups/${id}`, { method: 'DELETE' })
 
@@ -134,16 +135,21 @@ export const removeMember = (groupId: string, userId: string) =>
 
 export const leaveGroup = (groupId: string) => api<void>(`/api/groups/${groupId}/leave`, { method: 'POST' })
 
-// ----------------------------------------------------------------- invites
+// ----------------------------------------------------------------- invites (link-based)
 
-export const createInvite = (groupId: string, input: { email: string; expires_in_hours?: number }) =>
-  api<Invite>(`/api/groups/${groupId}/invites`, { method: 'POST', ...json(input) })
+export const getInviteLink = (groupId: string) => api<InviteLink>(`/api/groups/${groupId}/invite-link`)
 
-export const listInvites = (groupId: string) => api<Invite[]>(`/api/groups/${groupId}/invites`)
+export const rotateInviteLink = (groupId: string, input: { expires_in_hours?: number | null } = {}) =>
+  api<InviteLink>(`/api/groups/${groupId}/invite-link`, { method: 'POST', ...json(input) })
 
-export const inviteInfo = (token: string) => api<InviteInfo>(`/api/invites/${token}`)
+export const revokeInviteLink = (groupId: string) =>
+  api<void>(`/api/groups/${groupId}/invite-link`, { method: 'DELETE' })
 
-export const acceptInvite = (token: string) =>
-  api<AcceptInviteResult>(`/api/invites/${token}/accept`, { method: 'POST' })
+export const linkInfo = (token: string) => api<LinkInfo>(`/api/invites/link/${token}`)
 
-export const revokeInvite = (token: string) => api<Invite>(`/api/invites/${token}/revoke`, { method: 'POST' })
+export const joinViaLink = (token: string) => api<JoinResult>(`/api/invites/link/${token}/join`, { method: 'POST' })
+
+export const listJoinRequests = (groupId: string) => api<JoinRequest[]>(`/api/groups/${groupId}/requests`)
+
+export const decideJoinRequest = (groupId: string, requestId: string, decision: 'approved' | 'denied') =>
+  api<JoinRequest>(`/api/groups/${groupId}/requests/${requestId}/${decision}`, { method: 'POST' })

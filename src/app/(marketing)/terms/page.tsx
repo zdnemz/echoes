@@ -18,7 +18,7 @@ const SECTIONS = [
   },
   {
     heading: 'Be decent in groups',
-    body: "Groups exist for a handful of people you actually know. Don't invite strangers in bulk, don't use the service to harass, and remember the other members are reading along — in real time.",
+    body: "Groups exist for a handful of people you actually know. Don't share links in bulk, don't use the service to harass, and remember the other members are reading along.",
   },
   {
     heading: 'This page is a placeholder',

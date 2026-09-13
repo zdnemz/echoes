@@ -220,6 +220,9 @@ export const GroupSchema = z
     owner_id: UuidSchema,
     name: z.string().openapi({ example: 'Family' }),
     created_at: TimestampSchema,
+    auto_accept: z
+      .boolean()
+      .openapi({ description: 'Whether invite-link visitors join instantly or request approval' }),
     my_role: z.enum(['owner', 'member']).openapi({ description: 'Your role in this group' }),
     member_count: z.number().int().openapi({ example: 3 }),
   })
@@ -233,7 +236,11 @@ export const CreateGroupSchema = z
 
 export const UpdateGroupSchema = z
   .object({
-    name: z.string().min(1).max(80).openapi({ example: 'Family & close friends' }),
+    name: z.string().min(1).max(80).optional().openapi({ example: 'Family & close friends' }),
+    auto_accept: z.boolean().optional().openapi({
+      example: false,
+      description: 'When true, invite-link visitors join instantly; when false they file a join request for approval',
+    }),
   })
   .strict()
 
@@ -247,43 +254,62 @@ export const GroupMemberSchema = z
   })
   .openapi('GroupMember')
 
-// ---------------------------------------------------------------- invites
-export const InviteSchema = z
+// ---------------------------------------------------------------- invites (link-based)
+export const InviteLinkSchema = z
   .object({
-    id: UuidSchema,
-    group_id: UuidSchema,
-    email: z.string().openapi({ example: 'sam@example.com' }),
-    status: z.enum(['pending', 'accepted', 'expired', 'revoked']).openapi({ example: 'pending' }),
-    expires_at: TimestampSchema,
-    created_at: TimestampSchema,
-    accept_url: z
-      .string()
-      .openapi({
-        example: '/invites/accept?token=…',
-        description: 'Dev-mode convenience: the accept link (normally delivered by email)',
-      })
-      .optional(),
+    url: z.string().nullable().openapi({
+      example: '/invites/accept?token=…',
+      description: 'The shareable invite link, or null when the group has no active link',
+    }),
+    expires_at: TimestampSchema.nullable().openapi({
+      description: 'When the link stops working, or null when it never expires',
+    }),
+    auto_accept: z
+      .boolean()
+      .openapi({ description: 'Whether link visitors join instantly (true) or file a request (false)' }),
   })
-  .openapi('Invite')
+  .openapi('InviteLink')
 
-export const CreateInviteSchema = z
+export const CreateInviteLinkSchema = z
   .object({
-    email: z.email().openapi({ example: 'sam@example.com' }),
-    expires_in_hours: z.coerce.number().int().min(1).max(168).optional().openapi({
-      example: 48,
-      description: 'How long the invite stays valid (default 48h, max 7 days)',
+    expires_in_hours: z.coerce.number().int().min(1).max(720).nullable().optional().openapi({
+      example: 168,
+      description: 'How long the new link stays valid; null/omitted = never expires. Always rotates the token.',
     }),
   })
   .strict()
 
-export const InviteInfoSchema = z
+export const LinkInfoSchema = z
   .object({
     token: z.string().openapi({ example: '9f8e7d…' }),
     group_name: z.string().openapi({ example: 'Family' }),
     group_id: UuidSchema,
-    invited_email: z.string().openapi({ example: 'sam@example.com' }),
-    status: z.enum(['pending', 'accepted', 'expired', 'revoked', 'unknown_email']),
+    auto_accept: z.boolean(),
     expires_at: TimestampSchema.nullable(),
-    already_member: z.boolean().openapi({ description: 'Whether the invited email already belongs to the group' }),
+    usable: z.boolean().openapi({ description: 'False when the link is revoked or past its expiry' }),
   })
-  .openapi('InviteInfo')
+  .openapi('LinkInfo')
+
+export const JoinResultSchema = z
+  .object({
+    status: z.enum(['joined', 'requested', 'member', 'pending']).openapi({
+      description:
+        'joined = member now; requested = approval pending; member = already in; pending = request already open',
+    }),
+    group_id: UuidSchema,
+    group_name: z.string(),
+    message: z.string(),
+  })
+  .openapi('JoinResult')
+
+export const JoinRequestSchema = z
+  .object({
+    id: UuidSchema,
+    group_id: UuidSchema,
+    user_id: UuidSchema,
+    email: z.string().nullable().openapi({ example: 'sam@example.com' }),
+    display_name: z.string().nullable().openapi({ example: 'Sam Rivera' }),
+    status: z.enum(['pending', 'approved', 'denied']),
+    created_at: TimestampSchema,
+  })
+  .openapi('JoinRequest')

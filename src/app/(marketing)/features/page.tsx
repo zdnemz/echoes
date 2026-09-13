@@ -303,14 +303,14 @@ function GroupsDemo() {
               <UserPlus weight="light" className="h-4 w-4" />
             </span>
             <div>
-              <p className="text-[13px] text-ink-soft">Invite by email</p>
-              <p className="font-mono text-[10px] text-ink-faint">single-use · expires in 48h</p>
+              <p className="text-[13px] text-ink-soft">Share a link</p>
+              <p className="font-mono text-[10px] text-ink-faint">revocable any time</p>
             </div>
           </li>
         </ul>
       </div>
       <figcaption className="mt-3 font-mono text-[10px] text-ink-faint">
-        Groups stay small on purpose; invites are single-use and expiring.
+        Groups stay small on purpose; invite links are revocable and expirable.
       </figcaption>
     </figure>
   )
@@ -417,20 +417,20 @@ export default function FeaturesPage() {
 
         <Row
           eyebrow="Groups & invites"
-          title="Small circles, by email, with doors that lock themselves."
-          body="A group is a handful of people you actually know. Invites go out by email, work exactly once, and expire on their own within a week at most. Members can leave; owners can remove; nothing is discoverable or public."
+          title="Small circles, one link, doors that lock themselves."
+          body="A group is a handful of people you actually know. The owner shares one link that can expire on its own and die on command; new members either walk straight in or wait for approval — the owner's call. Members can leave; owners can remove; nothing is discoverable or public."
           bullets={[
             {
               label: 'Owner & member roles',
               desc: 'The owner links notebooks and manages members. Members read and write into shared notebooks.',
             },
             {
-              label: 'Single-use invites',
-              desc: 'Addressed to one email, expiring after 48 hours by default, revocable any time.',
+              label: 'One link per group',
+              desc: 'Expiring on your terms, revocable any time — rotating it kills the old one instantly.',
             },
             {
-              label: 'Presence, not pings',
-              desc: 'See who has the shared notebook open — no notifications demanding replies.',
+              label: 'Ask first, or walk in',
+              desc: 'Owners choose per group: instant join, or a request queue they approve one by one.',
             },
           ]}
         >
@@ -467,10 +467,10 @@ export default function FeaturesPage() {
               </div>
               <ul className="divide-y divide-line">
                 {[
-                  'Row-level security on profiles, notebooks, entries, groups, invites',
+                  'Row-level security on profiles, notebooks, entries, groups, join requests',
                   'Google OAuth via PKCE — the anon key never leaves the server',
                   'Sliding-window rate limits on every auth endpoint',
-                  'Single-use, expiring invite tokens',
+                  'Revocable invite links, expiring on your terms',
                   'No trackers, no analytics beacons, no ad identifiers',
                 ].map((line) => (
                   <li key={line} className="flex items-start gap-2.5 px-4 py-3">

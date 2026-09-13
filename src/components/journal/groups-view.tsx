@@ -2,17 +2,18 @@
 
 /**
  * Groups — the sharing circle manager. Two zones: the group list (left,
- * narrow) and the open group's members + invites (right, wide). Owners get
- * invite/rename/delete controls; members get a quiet Leave.
+ * narrow) and the open group's members + sharing (right, wide). Owners get
+ * link/approval/rename/delete controls; members get a quiet Leave.
  */
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import {
+  ArrowClockwise,
   ArrowLeft,
   Check,
   Copy,
-  PaperPlaneTilt,
+  LinkSimple,
   PencilSimple,
   SignOut,
   TrashSimple,
@@ -43,60 +44,66 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useSession } from '@/lib/auth/session'
 import {
-  useCreateInvite,
+  useDecideJoinRequest,
   useDeleteGroup,
   useGroup,
   useGroups,
+  useInviteLink,
+  useJoinRequests,
   useLeaveGroup,
   useRemoveMember,
+  useRevokeInviteLink,
+  useRotateInviteLink,
   useUpdateGroup,
-  useRevokeInvite,
-  useInvites,
 } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
 import { avatarTone, formatDay, initials } from '@/lib/format'
-import type { Group, Invite } from '@/lib/api/types'
+import type { Group } from '@/lib/api/types'
 import type { View } from './workspace'
 
-// --------------------------------------------------------------- invite dialog
+// --------------------------------------------------------------- sharing panel (owner)
 
-const EXPIRY_OPTIONS = [
+const LINK_EXPIRY_OPTIONS = [
+  { value: 'never', label: 'Never expires' },
   { value: '24', label: '24 hours' },
-  { value: '48', label: '2 days' },
-  { value: '72', label: '3 days' },
   { value: '168', label: '7 days' },
+  { value: '720', label: '30 days' },
 ]
 
-function InviteDialog({ group, onClose }: { group: Group; onClose: () => void }) {
-  const create = useCreateInvite()
-  const [email, setEmail] = useState('')
-  const [expiry, setExpiry] = useState('48')
-  const [error, setError] = useState<string | null>(null)
-  const [created, setCreated] = useState<Invite | null>(null)
-  const [copied, setCopied] = useState(false)
+function SharingPanel({ group }: { group: Group }) {
+  const link = useInviteLink(group.my_role === 'owner' ? group.id : null)
+  const requests = useJoinRequests(group.my_role === 'owner' ? group.id : null)
+  const rotate = useRotateInviteLink()
+  const revoke = useRevokeInviteLink()
+  const update = useUpdateGroup()
+  const decide = useDecideJoinRequest()
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const t = email.trim()
-    if (!t.includes('@')) return setError("That doesn't look like an email address.")
+  const [expiry, setExpiry] = useState('168')
+  const [copied, setCopied] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fail = (err: unknown, fallback: string) => {
+    if (isUnconfigured(err)) setError("The data layer isn't connected on this deployment.")
+    else setError(err instanceof Error ? err.message : fallback)
+  }
+
+  const createLink = async () => {
     setError(null)
     try {
-      const invite = await create.mutateAsync({
+      await rotate.mutateAsync({
         groupId: group.id,
-        email: t,
-        expires_in_hours: Number(expiry),
+        expires_in_hours: expiry === 'never' ? null : Number(expiry),
       })
-      setCreated(invite)
     } catch (err) {
-      if (isUnconfigured(err)) setError("The data layer isn't connected on this deployment.")
-      else setError(err instanceof Error ? err.message : "Couldn't create the invite.")
+      fail(err, "Couldn't create the link.")
     }
   }
 
   const copyLink = async () => {
-    if (!created?.accept_url) return
+    const url = link.data?.url
+    if (!url) return
     try {
-      await navigator.clipboard.writeText(created.accept_url)
+      await navigator.clipboard.writeText(url.startsWith('http') ? url : window.location.origin + url)
       setCopied(true)
       setTimeout(() => setCopied(false), 1600)
     } catch {
@@ -104,104 +111,212 @@ function InviteDialog({ group, onClose }: { group: Group; onClose: () => void })
     }
   }
 
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md border-line bg-paper-raised">
-        <DialogHeader>
-          <DialogTitle className="font-display text-lg text-ink">Invite someone to {group.name}</DialogTitle>
-          <DialogDescription className="text-[12.5px] leading-relaxed text-ink-soft">
-            The link is the invite — single-use, expiring, and addressed to one email.
-          </DialogDescription>
-        </DialogHeader>
+  const flipAutoAccept = async () => {
+    setError(null)
+    try {
+      await update.mutateAsync({ id: group.id, auto_accept: !group.auto_accept })
+      toast.success(group.auto_accept ? 'New members now need approval.' : 'New members join instantly.')
+    } catch (err) {
+      fail(err, "Couldn't change the setting.")
+    }
+  }
 
-        {created ? (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-sage/40 bg-sage-tint/60 px-4 py-3">
-              <p className="flex items-center gap-2 text-[12.5px] font-medium text-ink">
-                <Check weight="bold" className="h-4 w-4 text-sage" />
-                Invite created for {created.email}
-              </p>
-              {created.accept_url && (
-                <div className="mt-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
-                    dev mode — the accept link (no email is sent yet)
-                  </p>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <code className="min-w-0 flex-1 truncate rounded-md border border-line bg-paper px-2.5 py-1.5 font-mono text-[10.5px] text-ink-soft">
-                      {created.accept_url}
-                    </code>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="press h-8 w-8 shrink-0 border-line"
-                      onClick={copyLink}
-                      aria-label="Copy invite link"
-                    >
-                      {copied ? (
-                        <Check weight="bold" className="h-3.5 w-3.5 text-sage" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button type="button" onClick={onClose} className="press h-9 shadow-ink">
-                Done
+  const pending = (requests.data ?? []).filter((r) => r.status === 'pending')
+
+  return (
+    <div className="space-y-5">
+      {/* auto-accept */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[13.5px] font-medium text-ink">Let people in instantly</p>
+          <p className="mt-0.5 max-w-[52ch] text-[12px] leading-relaxed text-ink-faint">
+            {group.auto_accept
+              ? 'Anyone with the link joins on the spot.'
+              : 'Link visitors ask first — you approve each one below.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={group.auto_accept}
+          aria-label="Let people in instantly"
+          onClick={flipAutoAccept}
+          disabled={update.isPending}
+          className={`press relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+            group.auto_accept ? 'bg-clay' : 'bg-paper-sink'
+          }`}
+        >
+          <span
+            aria-hidden
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-paper-raised shadow transition-all ${
+              group.auto_accept ? 'left-[22px]' : 'left-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* link */}
+      <div>
+        <p className="text-[13.5px] font-medium text-ink">Invite link</p>
+        {link.isLoading ? (
+          <div className="skeleton-line mt-2 h-9 w-full" />
+        ) : link.data?.url ? (
+          <div className="mt-2">
+            <div className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded-md border border-line bg-paper px-2.5 py-2 font-mono text-[11px] text-ink-soft">
+                {link.data.url}
+              </code>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="press h-9 w-9 shrink-0 border-line"
+                onClick={copyLink}
+                aria-label="Copy invite link"
+              >
+                {copied ? <Check weight="bold" className="h-3.5 w-3.5 text-sage" /> : <Copy className="h-3.5 w-3.5" />}
               </Button>
-            </DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="press h-9 w-9 shrink-0 border-line"
+                onClick={createLink}
+                disabled={rotate.isPending}
+                aria-label="Rotate the link (old one dies)"
+                title="New link — the old one stops working"
+              >
+                <ArrowClockwise className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="press h-9 w-9 shrink-0 border-line text-ember"
+                onClick={() =>
+                  revoke.mutate(group.id, {
+                    onSuccess: () => toast.success('Link revoked.'),
+                    onError: (err) => fail(err, "Couldn't revoke."),
+                  })
+                }
+                aria-label="Revoke the link"
+                title="Revoke the link"
+              >
+                <X weight="bold" className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <p className="mt-1.5 font-mono text-[10.5px] text-ink-faint">
+              {link.data.expires_at ? (
+                <>expires {formatDay(link.data.expires_at)} · rotating kills this one instantly</>
+              ) : (
+                <>never expires · rotating kills this one instantly</>
+              )}
+            </p>
           </div>
         ) : (
-          <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="invite-email" className="text-[12.5px]">
-                Their email
-              </Label>
-              <Input
-                id="invite-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="jonas@wherever.com"
-                autoFocus
-                className="h-10 bg-paper"
-              />
-              {error && <p className="text-[11.5px] text-ember">{error}</p>}
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="invite-expiry" className="text-[12.5px]">
-                Expires after
+          <div className="mt-2 flex flex-wrap items-end gap-2.5">
+            <div className="flex min-w-36 flex-1 flex-col gap-2">
+              <Label htmlFor={`link-expiry-${group.id}`} className="text-[12px]">
+                Link lasts
               </Label>
               <Select value={expiry} onValueChange={setExpiry}>
-                <SelectTrigger id="invite-expiry" className="h-10 bg-paper">
+                <SelectTrigger id={`link-expiry-${group.id}`} className="h-10 bg-paper">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="border-line bg-paper-raised">
-                  {EXPIRY_OPTIONS.map((o) => (
+                  {LINK_EXPIRY_OPTIONS.map((o) => (
                     <SelectItem key={o.value} value={o.value} className="text-[13px]">
                       {o.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[11.5px] text-ink-faint">After that, the link stops working on its own.</p>
             </div>
-            <DialogFooter className="mt-1 gap-2">
-              <Button type="button" variant="ghost" onClick={onClose} className="press h-9">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={create.isPending} className="press h-9 gap-1.5 shadow-ink">
-                <PaperPlaneTilt weight="bold" className="h-3.5 w-3.5" />
-                {create.isPending ? 'Creating…' : 'Create invite'}
-              </Button>
-            </DialogFooter>
-          </form>
+            <Button onClick={createLink} disabled={rotate.isPending} className="press h-10 gap-1.5 shadow-ink">
+              <LinkSimple weight="bold" className="h-3.5 w-3.5" />
+              {rotate.isPending ? 'Creating…' : 'Create link'}
+            </Button>
+          </div>
         )}
-      </DialogContent>
-    </Dialog>
+        {error && <p className="mt-2 text-[11.5px] text-ember">{error}</p>}
+      </div>
+
+      {/* requests */}
+      <div>
+        <p className="text-[13.5px] font-medium text-ink">
+          Requests{' '}
+          {pending.length > 0 && (
+            <span className="ml-1 rounded-full bg-clay-tint px-1.5 py-0.5 font-mono text-[10px] text-clay-ink">
+              {pending.length}
+            </span>
+          )}
+        </p>
+        {requests.isLoading ? (
+          <div className="skeleton-line mt-2 h-9 w-full" />
+        ) : pending.length === 0 ? (
+          <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-faint">
+            {group.auto_accept
+              ? 'Nobody waiting — instant join is on, so the queue stays empty.'
+              : 'Nobody waiting. Share the link and requests land here.'}
+          </p>
+        ) : (
+          <ul className="mt-2 divide-y divide-line border-y border-line">
+            {pending.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
+                <span
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-mono text-[10px] font-semibold"
+                  style={{
+                    background: avatarTone(r.user_id).bg,
+                    color: avatarTone(r.user_id).fg,
+                  }}
+                  aria-hidden="true"
+                >
+                  {initials(r.display_name, '·')}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] text-ink">{r.display_name || r.email || 'Someone'}</p>
+                  {r.email && <p className="truncate font-mono text-[10.5px] text-ink-faint">{r.email}</p>}
+                </div>
+                <Button
+                  size="sm"
+                  className="press h-8 shadow-ink"
+                  disabled={decide.isPending}
+                  onClick={() =>
+                    decide.mutate(
+                      { groupId: group.id, requestId: r.id, decision: 'approved' },
+                      {
+                        onSuccess: () => toast.success(`${r.display_name ?? r.email ?? 'They'} joined ${group.name}.`),
+                        onError: (err) => fail(err, "Couldn't approve."),
+                      },
+                    )
+                  }
+                >
+                  Approve
+                </Button>
+                <button
+                  type="button"
+                  disabled={decide.isPending}
+                  onClick={() =>
+                    decide.mutate(
+                      { groupId: group.id, requestId: r.id, decision: 'denied' },
+                      {
+                        onSuccess: () => toast.success('Request declined.'),
+                        onError: (err) => fail(err, "Couldn't decline."),
+                      },
+                    )
+                  }
+                  className="press rounded-md p-1.5 text-ink-faint transition-colors hover:bg-ember-tint hover:text-ember"
+                  aria-label="Decline request"
+                  title="Decline"
+                >
+                  <X weight="bold" className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -269,31 +384,16 @@ export function GroupsView({
   const { user } = useSession()
   const groups = useGroups()
   const detail = useGroup(selectedGroupId)
-  const invites = useInvites(selectedGroupId, detail.data?.my_role === 'owner')
   const removeMember = useRemoveMember()
   const leave = useLeaveGroup()
   const removeGroup = useDeleteGroup()
-  const revoke = useRevokeInvite()
 
-  const [inviteOpen, setInviteOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [leaveOpen, setLeaveOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [copiedToken, setCopiedToken] = useState<string | null>(null)
 
   const group = detail.data ?? null
   const isOwner = group?.my_role === 'owner'
-
-  const copyInvite = async (invite: Invite) => {
-    if (!invite.accept_url) return
-    try {
-      await navigator.clipboard.writeText(invite.accept_url)
-      setCopiedToken(invite.id)
-      setTimeout(() => setCopiedToken(null), 1600)
-    } catch {
-      /* ignore */
-    }
-  }
 
   const list = groups.data ?? []
 
@@ -399,9 +499,6 @@ export function GroupsView({
                 <div className="flex flex-wrap items-center gap-2">
                   {isOwner ? (
                     <>
-                      <Button size="sm" className="press h-9 gap-1.5 shadow-ink" onClick={() => setInviteOpen(true)}>
-                        <PaperPlaneTilt weight="bold" className="h-3.5 w-3.5" /> Invite
-                      </Button>
                       <Button
                         variant="outline"
                         size="icon"
@@ -489,75 +586,11 @@ export function GroupsView({
                 </ul>
               </section>
 
-              {/* invites — owner only */}
-              {isOwner && (
-                <section aria-label="Invites" className="mt-8">
-                  <div className="flex items-center justify-between">
-                    <p className="pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">Invites</p>
-                    <button
-                      type="button"
-                      onClick={() => setInviteOpen(true)}
-                      className="press font-mono text-[10.5px] text-clay-ink underline underline-offset-4"
-                    >
-                      new invite
-                    </button>
-                  </div>
-                  {invites.isLoading ? (
-                    <div className="skeleton-line h-9 w-full" />
-                  ) : (invites.data ?? []).filter((i) => i.status === 'pending').length === 0 ? (
-                    <p className="py-3 text-[12.5px] leading-relaxed text-ink-faint">
-                      No open invites. Send one — the link is the invite.
-                    </p>
-                  ) : (
-                    <ul className="divide-y divide-line border-y border-line">
-                      {(invites.data ?? [])
-                        .filter((i) => i.status === 'pending')
-                        .map((invite) => (
-                          <li key={invite.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
-                            <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ink-soft">
-                              {invite.email}
-                            </span>
-                            <span className="font-mono text-[10px] text-ink-faint">
-                              expires {formatDay(invite.expires_at)}
-                            </span>
-                            {invite.accept_url && (
-                              <button
-                                type="button"
-                                onClick={() => copyInvite(invite)}
-                                className="press inline-flex items-center gap-1.5 rounded-md border border-line bg-paper-raised px-2.5 py-1 font-mono text-[10.5px] text-ink-soft hover:border-clay-soft hover:text-clay-ink"
-                                title="Copy the accept link"
-                              >
-                                {copiedToken === invite.id ? (
-                                  <>
-                                    <Check weight="bold" className="h-3 w-3 text-sage" /> copied
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="h-3 w-3" /> copy link
-                                  </>
-                                )}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                invite.token &&
-                                revoke.mutate(invite.token, {
-                                  onSuccess: () => toast.success('Invite revoked.'),
-                                  onError: (err) =>
-                                    toast.error(err instanceof Error ? err.message : "Couldn't revoke."),
-                                })
-                              }
-                              className="press rounded-md p-1.5 text-ink-faint transition-colors hover:bg-ember-tint hover:text-ember"
-                              aria-label="Revoke invite"
-                              title="Revoke invite"
-                            >
-                              <X weight="bold" className="h-3.5 w-3.5" />
-                            </button>
-                          </li>
-                        ))}
-                    </ul>
-                  )}
+              {/* sharing — owner only */}
+              {isOwner && group && (
+                <section aria-label="Sharing" className="mt-8">
+                  <p className="pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">Sharing</p>
+                  <SharingPanel key={group.id} group={group} />
                 </section>
               )}
             </div>
@@ -568,7 +601,6 @@ export function GroupsView({
       {/* ------------------------------------------------ dialogs */}
       {group && (
         <>
-          {inviteOpen && <InviteDialog key={group.id} group={group} onClose={() => setInviteOpen(false)} />}
           {renameOpen && <RenameGroupDialog key={group.id} group={group} onClose={() => setRenameOpen(false)} />}
 
           <AlertDialog open={leaveOpen} onOpenChange={setLeaveOpen}>
@@ -576,8 +608,8 @@ export function GroupsView({
               <AlertDialogHeader>
                 <AlertDialogTitle className="font-display text-lg text-ink">Leave {group.name}?</AlertDialogTitle>
                 <AlertDialogDescription className="text-[12.5px] leading-relaxed text-ink-soft">
-                  You lose access to notebooks shared with this group the moment you leave. You can only return by a
-                  fresh invite.
+                  You lose access to notebooks shared with this group the moment you leave. You can only return through
+                  a fresh invite link.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter className="gap-2">

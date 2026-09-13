@@ -19,7 +19,6 @@ import { useSession } from '@/lib/auth/session'
 import { isUnconfigured } from '@/lib/api/client'
 import { startGoogleOAuth } from '@/lib/auth/oauth'
 import { clearPendingInvite, popPendingInvite } from '@/lib/auth/invite-stash'
-import { acceptInvite } from '@/lib/api/endpoints'
 import { Check, CircleNotch, Copy, PaperPlaneTilt } from '@phosphor-icons/react/dist/ssr'
 
 export { stashPendingInvite } from '@/lib/auth/invite-stash'
@@ -103,20 +102,17 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
   const [oauthBusy, setOauthBusy] = useState(false)
   const [oauthError, setOauthError] = useState<string | null>(null)
 
-  // A stashed invite pre-fills the email (PRD 6.6 — signup pre-filled).
-  useEffect(() => {
+  // A stashed invite link sends the fresh session back to the accept page,
+  // which finishes the join (instantly or as a request).
+  const enterJournal = async () => {
     const stashed = popPendingInvite()
-    if (stashed?.invited_email) {
-      setEmail(stashed.invited_email)
-      setMagicEmail(stashed.invited_email)
-      setTab('signup')
+    if (stashed) {
+      clearPendingInvite()
+      router.push(`/invites/accept?token=${encodeURIComponent(stashed.token)}`)
+      return
     }
-  }, [])
-
-  // Already signed in? Straight to the journal.
-  useEffect(() => {
-    if (sessionStatus === 'authenticated') router.replace('/journal')
-  }, [sessionStatus, router])
+    router.push('/journal')
+  }
 
   const fail = (err: unknown, fallback: string) => {
     if (isUnconfigured(err)) {
@@ -143,21 +139,10 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
     }
   }
 
-  /** Post-sign-in: consume a stashed invite, then go write. */
-  const enterJournal = async () => {
-    const stashed = popPendingInvite()
-    if (stashed) {
-      try {
-        const result = await acceptInvite(stashed.token)
-        clearPendingInvite()
-        toast.success(result.message || `You joined ${result.group_name}`)
-      } catch {
-        // Not fatal — the invite page can still be revisited.
-        clearPendingInvite()
-      }
-    }
-    router.push('/journal')
-  }
+  // Already signed in? Straight to the journal.
+  useEffect(() => {
+    if (sessionStatus === 'authenticated') router.replace('/journal')
+  }, [sessionStatus, router])
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()

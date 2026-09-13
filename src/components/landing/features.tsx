@@ -294,7 +294,7 @@ export function FeatureStories() {
                 },
                 {
                   label: 'Tokens expire',
-                  desc: 'Invite links are single-use and time-boxed. Membership revoked, access gone.',
+                  desc: 'Invite links are revocable and time-boxed. Membership revoked, access gone.',
                 },
               ]}
             />

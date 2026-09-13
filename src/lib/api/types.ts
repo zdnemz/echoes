@@ -106,6 +106,7 @@ export interface Group {
   owner_id: string
   name: string
   created_at: string
+  auto_accept: boolean
   my_role: GroupRole
   member_count: number
 }
@@ -122,38 +123,42 @@ export interface GroupDetail extends Group {
   members: GroupMember[]
 }
 
-// ----------------------------------------------------------------- invites
+// ----------------------------------------------------------------- invites (link-based)
 
-export type InviteStatus = 'pending' | 'accepted' | 'expired' | 'revoked'
-
-export interface Invite {
-  id: string
-  group_id: string
-  email: string
-  status: InviteStatus
-  expires_at: string
-  created_at: string
-  /** Present in actual responses (full row) — used for revoke-by-token. */
-  token?: string
-  invited_by?: string
-  accept_url?: string
+export interface InviteLink {
+  url: string | null
+  expires_at: string | null
+  auto_accept: boolean
 }
 
-export interface InviteInfo {
+export interface LinkInfo {
   token: string
   group_name: string
   group_id: string
-  invited_email: string
-  status: InviteStatus | 'unknown_email'
+  auto_accept: boolean
   expires_at: string | null
-  already_member: boolean
+  usable: boolean
 }
 
-export interface AcceptInviteResult {
+export type JoinStatus = 'joined' | 'requested' | 'member' | 'pending'
+
+export interface JoinResult {
+  status: JoinStatus
   group_id: string
   group_name: string
-  role: GroupRole
   message: string
+}
+
+export type JoinRequestStatus = 'pending' | 'approved' | 'denied'
+
+export interface JoinRequest {
+  id: string
+  group_id: string
+  user_id: string
+  email: string | null
+  display_name: string | null
+  status: JoinRequestStatus
+  created_at: string
 }
 
 // ----------------------------------------------------------------- system
