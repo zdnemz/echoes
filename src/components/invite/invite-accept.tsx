@@ -8,11 +8,11 @@
  * wired — gets its own composed screen, never a dead end.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { CircleNotch, LinkSimple, UsersThree } from '@phosphor-icons/react/dist/ssr'
+import { CircleNotch, LinkSimple } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { Grain } from '@/components/grain'
 import { Wordmark } from '@/components/brand'
@@ -32,6 +32,28 @@ export function InviteAccept({ token }: { token: string | null }) {
   const [outcome, setOutcome] = useState<JoinResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [unconfigured, setUnconfigured] = useState(false)
+  const redirected = useRef(false)
+
+  // Members don't need the link — and dead links aren't destinations.
+  // Signed-in visitors go straight to the dashboard with an explanation;
+  // anonymous ones keep the explanatory screens below (they have nowhere
+  // to be sent yet).
+  const leave = (message: string) => {
+    if (redirected.current) return
+    redirected.current = true
+    toast.info(message)
+    router.replace('/journal')
+  }
+
+  useEffect(() => {
+    if (sessionStatus !== 'authenticated' || !token || redirected.current) return
+    if (info.data && !info.data.usable) {
+      const expired = info.data.expires_at && new Date(info.data.expires_at).getTime() < Date.now()
+      leave(expired ? 'That invite link expired — ask the owner for a fresh one.' : 'That invite link no longer works.')
+    } else if (info.isError && !isUnconfigured(info.error)) {
+      leave('That invite link no longer works.')
+    }
+  }, [info.data, info.isError, info.error, sessionStatus, token, router])
 
   // Stash usable links so anonymous visitors land back here after auth.
   useEffect(() => {
@@ -45,10 +67,16 @@ export function InviteAccept({ token }: { token: string | null }) {
     setError(null)
     try {
       const result = await join.mutateAsync(token)
-      setOutcome(result)
       if (result.status === 'joined' || result.status === 'member') {
+        // In — no interstitial. Already-members land here when they open
+        // a link they previously used: the invitation is spent.
+        if (redirected.current) return
+        redirected.current = true
         toast.success(result.message)
+        router.replace('/journal')
+        return
       }
+      setOutcome(result)
     } catch (err) {
       if (isUnconfigured(err)) setUnconfigured(true)
       else setError(err instanceof Error ? err.message : "Couldn't join.")
@@ -156,24 +184,7 @@ export function InviteAccept({ token }: { token: string | null }) {
 
   const data = info.data!
 
-  // In the group (or just joined / already waiting) — into the journal.
-  if (outcome?.status === 'joined' || outcome?.status === 'member') {
-    return frame(
-      <div>
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sage-tint">
-          <UsersThree weight="fill" className="h-6 w-6 text-sage" />
-        </div>
-        <h1 className="font-display mt-6 text-3xl text-ink">{data.group_name} has you.</h1>
-        <p className="mt-4 text-[14px] leading-relaxed text-ink-soft">
-          Shared notebooks from this circle appear in your rail — refreshed every time you open them.
-        </p>
-        <Button asChild className="press mt-7 h-11 shadow-ink" size="lg">
-          <Link href="/journal">Open your journal</Link>
-        </Button>
-      </div>,
-    )
-  }
-
+  // Awaiting approval — the one state worth lingering on.
   if (outcome?.status === 'requested' || outcome?.status === 'pending') {
     return frame(
       <div>

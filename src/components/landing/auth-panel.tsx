@@ -171,10 +171,16 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
     if (password.length < 8) return setError('Passwords need at least 8 characters.')
     setBusy(true)
     try {
-      const user = await signup(email, password, displayName || undefined)
-      if (!user) {
+      const fresh = await signup(email, password, displayName || undefined)
+      if (!fresh) {
         setConfirmationPending(true)
         setTab('signin')
+        return
+      }
+      // Nameless accounts finish onboarding first — the stash (if any)
+      // waits in storage for the welcome page to consume.
+      if (!(fresh.display_name ?? '').trim()) {
+        router.push('/welcome')
         return
       }
       await enterJournal()

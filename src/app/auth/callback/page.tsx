@@ -63,6 +63,12 @@ export default function AuthCallbackPage() {
         const session = await exchangeCallbackCode(code!)
         adoptSession(session)
 
+        // Nameless accounts (OAuth without a usable profile name) finish
+        // onboarding first — the stash waits for the welcome page.
+        if (!(session.user.display_name ?? '').trim()) {
+          router.replace('/welcome')
+          return
+        }
         // Same post-sign-in courtesy as the auth panel: a stashed invite
         // link sends the fresh session back to the accept page.
         const stashed = popPendingInvite()
