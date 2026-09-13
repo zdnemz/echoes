@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { MarkdownView } from '@/components/markdown/markdown-view'
 import { downloadTextFile, entryFilename, serializeEntry } from '@/lib/markdown'
+import { mdToHtml, htmlToMd } from '@/lib/editor-html'
 import { MOODS, MOOD_META, MoodGlyph } from '@/components/mood/glyphs'
 import { useSession } from '@/lib/auth/session'
 import { useCreateEntry, useDeleteEntry, useEntry, useNotebooks, useUpdateEntry } from '@/lib/api/hooks'
@@ -164,130 +165,126 @@ function TagsInput({
 // --------------------------------------------------------------- format bar
 
 /**
- * Markdown formatting toolbar — operates on the textarea selection
- * (wrap/toggle for inline marks, per-line toggle for blocks). Everything
- * is plain markdown in, plain markdown out; the preview proves it live.
+ * WYSIWYG formatting toolbar — operates on the contenteditable selection
+ * using execCommand for inline marks and block-level insertHTML for
+ * headings/lists/quotes/code. The editor renders live; no markdown shown.
  */
-interface MarkdownTools {
-  wrap: (before: string, after: string, placeholder?: string) => void
-  prefixLines: (prefix: string | null, ordered?: boolean) => void
+interface EditorTools {
+  exec: (command: string, value?: string) => void
+  insertHtml: (html: string) => void
   insertHr: () => void
   insertLink: () => void
 }
 
-function markdownTools(
-  bodyRef: React.RefObject<HTMLTextAreaElement | null>,
-  body: string,
-  setBody: (v: string) => void,
-  markDirty: () => void,
-): MarkdownTools {
-  const edit = (fn: (ta: HTMLTextAreaElement) => void) => {
-    const ta = bodyRef.current
-    if (!ta) return
-    fn(ta)
-    setBody(ta.value)
+function editorTools(editorRef: React.RefObject<HTMLDivElement | null>, markDirty: () => void): EditorTools {
+  const focus = () => {
+    const el = editorRef.current
+    if (!el) return
+    el.focus()
+  }
+
+  const exec = (command: string, value?: string) => {
+    focus()
+    document.execCommand(command, false, value)
     markDirty()
-    ta.focus()
   }
 
-  const wrap = (before: string, after: string, placeholder = 'text') => {
-    edit((ta) => {
-      const s = ta.selectionStart
-      const e = ta.selectionEnd
-      const sel = body.slice(s, e) || placeholder
-      const wrapped =
-        s !== e && body.slice(s - before.length, s) === before && body.slice(e, e + after.length) === after
-      if (wrapped) {
-        ta.setRangeText(sel, s - before.length, e + after.length)
-        ta.setSelectionRange(s - before.length, s - before.length + sel.length)
-      } else {
-        ta.setRangeText(`${before}${sel}${after}`, s, e, 'end')
-        if (s === e) ta.setSelectionRange(s + before.length, s + before.length + sel.length)
-      }
-    })
-  }
-
-  const prefixLines = (prefix: string | null, ordered = false) => {
-    edit((ta) => {
-      const s = ta.selectionStart
-      const e = ta.selectionEnd
-      const lineStart = body.lastIndexOf('\n', s - 1) + 1
-      const rawEnd = body.indexOf('\n', e)
-      const end = rawEnd === -1 ? body.length : rawEnd
-      const lines = body.slice(lineStart, end).split('\n')
-      const strip = (l: string) => l.replace(/^#{1,3}\s+|^>\s+|^-\s+\[[ x]\]\s+|^-\s+|^\d+\.\s+/, '')
-      let next: string[]
-      if (prefix === null) {
-        next = lines.map(strip)
-      } else if (ordered) {
-        const all = lines.every((l) => /^\d+\.\s+/.test(l))
-        next = all ? lines.map((l) => l.replace(/^\d+\.\s+/, '')) : lines.map((l, i) => `${i + 1}. ${strip(l)}`)
-      } else {
-        const all = lines.every((l) => l.startsWith(prefix))
-        next = all ? lines.map((l) => l.slice(prefix.length)) : lines.map((l) => prefix + strip(l))
-      }
-      ta.setRangeText(next.join('\n'), lineStart, end)
-    })
+  const insertHtml = (html: string) => {
+    focus()
+    document.execCommand('insertHTML', false, html)
+    markDirty()
   }
 
   const insertHr = () => {
-    edit((ta) => {
-      const s = ta.selectionStart
-      const e = ta.selectionEnd
-      ta.setRangeText(body.trim().length === 0 ? '---\n' : '\n\n---\n', s, e, 'end')
-    })
+    insertHtml('<hr><p><br></p>')
   }
 
-  const insertLink = () => wrap('[', '](https://)', 'link text')
+  const insertLink = () => {
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed) {
+      const url = window.prompt('Link URL:', 'https://')
+      if (!url) return
+      insertHtml(`<a href="${url}">${url}</a>`)
+      return
+    }
+    const url = window.prompt('Link URL:', 'https://')
+    if (!url) return
+    exec('createLink', url)
+  }
 
-  return { wrap, prefixLines, insertHr, insertLink }
+  return { exec, insertHtml, insertHr, insertLink }
 }
 
-function FormatBar({ tools }: { tools: MarkdownTools }) {
-  const { wrap, prefixLines, insertHr, insertLink } = tools
+function FormatBar({ tools }: { tools: EditorTools }) {
+  const { exec, insertHtml, insertHr, insertLink } = tools
   const buttons: Array<{
     label: string
     hint: string
     icon: React.ReactNode
     run: () => void
   }> = [
-    { label: 'Bold', hint: 'Bold (⌘B)', icon: <TextB className="h-4 w-4" />, run: () => wrap('**', '**') },
-    { label: 'Italic', hint: 'Italic (⌘I)', icon: <TextItalic className="h-4 w-4" />, run: () => wrap('*', '*') },
+    { label: 'Bold', hint: 'Bold (⌘B)', icon: <TextB className="h-4 w-4" />, run: () => exec('bold') },
+    { label: 'Italic', hint: 'Italic (⌘I)', icon: <TextItalic className="h-4 w-4" />, run: () => exec('italic') },
     {
       label: 'Strikethrough',
       hint: 'Strikethrough',
       icon: <TextStrikethrough className="h-4 w-4" />,
-      run: () => wrap('~~', '~~'),
+      run: () => exec('strikeThrough'),
     },
-    { label: 'Heading 1', hint: 'Heading 1', icon: <TextHOne className="h-4 w-4" />, run: () => prefixLines('# ') },
-    { label: 'Heading 2', hint: 'Heading 2', icon: <TextHTwo className="h-4 w-4" />, run: () => prefixLines('## ') },
-    { label: 'Heading 3', hint: 'Heading 3', icon: <TextHThree className="h-4 w-4" />, run: () => prefixLines('### ') },
-    { label: 'Quote', hint: 'Quote', icon: <Quotes className="h-4 w-4" />, run: () => prefixLines('> ') },
-    { label: 'Code', hint: 'Inline code (⌘E)', icon: <Code className="h-4 w-4" />, run: () => wrap('`', '`', 'code') },
+    {
+      label: 'Heading 1',
+      hint: 'Heading 1',
+      icon: <TextHOne className="h-4 w-4" />,
+      run: () => exec('formatBlock', 'h1'),
+    },
+    {
+      label: 'Heading 2',
+      hint: 'Heading 2',
+      icon: <TextHTwo className="h-4 w-4" />,
+      run: () => exec('formatBlock', 'h2'),
+    },
+    {
+      label: 'Heading 3',
+      hint: 'Heading 3',
+      icon: <TextHThree className="h-4 w-4" />,
+      run: () => exec('formatBlock', 'h3'),
+    },
+    {
+      label: 'Quote',
+      hint: 'Quote',
+      icon: <Quotes className="h-4 w-4" />,
+      run: () => exec('formatBlock', 'blockquote'),
+    },
+    {
+      label: 'Code',
+      hint: 'Inline code (⌘E)',
+      icon: <Code className="h-4 w-4" />,
+      run: () => insertHtml('<code>code</code>'),
+    },
     {
       label: 'Code block',
       hint: 'Code block',
       icon: <CodeBlock className="h-4 w-4" />,
-      run: () => wrap('```\n', '\n```', 'code'),
+      run: () => insertHtml('<pre><code>code</code></pre><p><br></p>'),
     },
     { label: 'Link', hint: 'Link (⌘K)', icon: <LinkSimple className="h-4 w-4" />, run: insertLink },
     {
       label: 'Bulleted list',
       hint: 'Bulleted list',
       icon: <ListBullets className="h-4 w-4" />,
-      run: () => prefixLines('- '),
+      run: () => exec('insertUnorderedList'),
     },
     {
       label: 'Numbered list',
       hint: 'Numbered list',
       icon: <ListNumbers className="h-4 w-4" />,
-      run: () => prefixLines(null, true),
+      run: () => exec('insertOrderedList'),
     },
     {
       label: 'Checklist',
       hint: 'Checklist',
       icon: <ListChecks className="h-4 w-4" />,
-      run: () => prefixLines('- [ ] '),
+      run: () => insertHtml('<ul><li data-checked="false"><input type="checkbox" disabled>Task</li></ul><p><br></p>'),
     },
     { label: 'Divider', hint: 'Horizontal divider', icon: <Minus className="h-4 w-4" />, run: insertHr },
   ]
@@ -328,7 +325,6 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
 
   // ---- form state
   const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
   const [mood, setMood] = useState<Mood | null>(() => (mode.compose ? getDefaultMood() : null))
   const [tags, setTags] = useState<string[]>([])
   const [isShared, setIsShared] = useState(true)
@@ -336,20 +332,34 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
   const [dirty, setDirty] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
-  const [pane, setPane] = useState<'write' | 'read'>('write')
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const bodyRef = useRef<HTMLTextAreaElement | null>(null)
+  const editorRef = useRef<HTMLDivElement | null>(null)
+
+  // Get markdown from the contenteditable editor
+  const getBody = useCallback((): string => {
+    const el = editorRef.current
+    if (!el) return ''
+    return htmlToMd(el.innerHTML)
+  }, [])
+
+  // Set editor content from markdown (on load / hydrate)
+  const setEditorContent = useCallback((md: string) => {
+    const el = editorRef.current
+    if (!el) return
+    el.innerHTML = mdToHtml(md)
+  }, [])
 
   // Hydrate the form once when the entry arrives.
   useEffect(() => {
     if (mode.compose || !entry || hydrated) return
     setTitle(entry.title)
-    setBody(entry.body)
     setMood(entry.mood)
     setTags(entry.tags)
     setIsShared(entry.is_shared)
     setHydrated(true)
-  }, [mode.compose, entry, hydrated])
+    // Set editor content after mount
+    requestAnimationFrame(() => setEditorContent(entry.body))
+  }, [mode.compose, entry, hydrated, setEditorContent])
 
   const notebook = useMemo(() => {
     const id = mode.compose ? mode.notebookId : entry?.notebook_id
@@ -366,7 +376,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
     setSavedAt(null)
   }, [])
 
-  const tools = markdownTools(bodyRef, body, setBody, markDirty)
+  const tools = editorTools(editorRef, markDirty)
 
   const exportEntry = useCallback(() => {
     if (!entry) return
@@ -382,9 +392,10 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
     const t = title.trim()
     if (!t) {
       toast.error('Give the entry a title — anything works.')
-      bodyRef.current?.blur()
+      editorRef.current?.blur()
       return
     }
+    const body = getBody()
     setSaving(true)
     try {
       if (mode.compose) {
@@ -422,7 +433,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
     } finally {
       setSaving(false)
     }
-  }, [mode, entry, title, body, mood, tags, isShared, groupLinked, create, update, onNavigate])
+  }, [mode, entry, title, getBody, mood, tags, isShared, groupLinked, create, update, onNavigate])
 
   // ⌘S / Ctrl+S saves — a writing app should honor the writer's reflex.
   useEffect(() => {
@@ -517,7 +528,6 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
 
   // --------------------------------------------------------------- edit / compose
 
-  const words = wordCount(body)
   const savedLabel = savedAt ? 'Saved' : dirty ? 'Unsaved changes' : 'Up to date'
 
   return (
@@ -548,8 +558,6 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
                 {savedLabel}
               </>
             )}
-            <span aria-hidden>·</span>
-            {words} {words === 1 ? 'word' : 'words'}
             <span aria-hidden>·</span>
             <span className="hidden md:inline">⌘S saves</span>
           </span>
@@ -653,70 +661,37 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
         )}
       </div>
 
-      {/* write/read switch — mobile only */}
-      <div className="mt-5 flex gap-1 lg:hidden" role="tablist" aria-label="Editor pane">
-        {(['write', 'read'] as const).map((p) => (
-          <button
-            key={p}
-            type="button"
-            role="tab"
-            aria-selected={pane === p}
-            onClick={() => setPane(p)}
-            className={`press rounded-full px-4 py-1.5 text-[11.5px] font-medium ${
-              pane === p ? 'bg-ink text-paper' : 'text-ink-faint hover:bg-paper-deep'
-            }`}
-          >
-            {p === 'write' ? 'Write' : 'Read'}
-          </button>
-        ))}
-      </div>
-
-      {/* split panes */}
-      <div className="mt-2 grid lg:mt-5 lg:grid-cols-2">
-        <div className={`${pane === 'write' ? 'block' : 'hidden'} lg:block lg:border-r lg:border-line lg:pr-6`}>
-          <FormatBar tools={tools} />
-          <textarea
-            ref={bodyRef}
-            value={body}
-            onChange={(e) => {
-              setBody(e.target.value)
-              markDirty()
-            }}
-            onKeyDown={(e) => {
-              if (!(e.metaKey || e.ctrlKey)) return
-              const k = e.key.toLowerCase()
-              if (k === 'b') {
-                e.preventDefault()
-                tools.wrap('**', '**')
-              } else if (k === 'i') {
-                e.preventDefault()
-                tools.wrap('*', '*')
-              } else if (k === 'k') {
-                e.preventDefault()
-                tools.insertLink()
-              } else if (k === 'e') {
-                e.preventDefault()
-                tools.wrap('`', '`', 'code')
-              }
-            }}
-            placeholder="The bread, the weather, the argument, the walk — start anywhere. Markdown welcome."
-            aria-label="Entry body — markdown"
-            spellCheck
-            className="min-h-[55dvh] w-full resize-none border-0 bg-transparent p-0 font-serif text-[16px] leading-[1.85] text-ink placeholder:text-ink-ghost/70 focus:outline-none lg:min-h-[60dvh]"
-          />
-        </div>
+      {/* WYSIWYG editor — live rendered, no markdown visible */}
+      <div className="mt-5">
+        <FormatBar tools={tools} />
         <div
-          className={`${pane === 'read' ? 'block' : 'hidden'} lg:block lg:pl-6 lg:pt-1`}
-          aria-label="Typeset preview"
-        >
-          {body.trim().length === 0 ? (
-            <p className="pt-8 font-serif text-[14px] italic text-ink-faint">
-              The typeset page appears here as you write.
-            </p>
-          ) : (
-            <MarkdownView>{body}</MarkdownView>
-          )}
-        </div>
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={markDirty}
+          onKeyDown={(e) => {
+            if (!(e.metaKey || e.ctrlKey)) return
+            const k = e.key.toLowerCase()
+            if (k === 'b') {
+              e.preventDefault()
+              tools.exec('bold')
+            } else if (k === 'i') {
+              e.preventDefault()
+              tools.exec('italic')
+            } else if (k === 'k') {
+              e.preventDefault()
+              tools.insertLink()
+            } else if (k === 'e') {
+              e.preventDefault()
+              tools.exec('formatBlock', 'blockquote')
+            }
+          }}
+          role="textbox"
+          aria-multiline="true"
+          aria-label="Entry body — rich text"
+          data-placeholder="The bread, the weather, the argument, the walk — start anywhere. Formatting renders live."
+          className="editor-content min-h-[55dvh] w-full border-0 bg-transparent p-0 font-serif text-[16px] leading-[1.85] text-ink focus:outline-none lg:min-h-[60dvh]"
+        />
       </div>
 
       {/* delete confirm */}
