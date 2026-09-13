@@ -57,7 +57,8 @@ import { wordCount } from '@/lib/format'
 import type { Mood } from '@/components/mood/glyphs'
 import type { View } from './workspace'
 
-type Mode = { compose: true; notebookId: string } | { compose: false; entryId: string }
+type Mode =
+  { compose: true; notebookId: string; fromGroup?: string } | { compose: false; entryId: string; fromGroup?: string }
 
 // --------------------------------------------------------------- mood picker
 
@@ -397,7 +398,12 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
         })
         setDirty(false)
         setSavedAt(Date.now())
-        onNavigate({ kind: 'entry', entryId: created.id, notebookId: created.notebook_id })
+        onNavigate({
+          kind: 'entry',
+          entryId: created.id,
+          notebookId: created.notebook_id,
+          fromGroup: mode.fromGroup,
+        })
       } else if (entry) {
         await update.mutateAsync({
           id: entry.id,
@@ -431,9 +437,15 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
   }, [canEdit, saving, save])
 
   const back = () => {
+    if (mode.fromGroup) {
+      onNavigate({ kind: 'group', groupId: mode.fromGroup, tab: 'journal' })
+      return
+    }
     const target = notebook ? { kind: 'notebook' as const, notebookId: notebook.id } : { kind: 'groups' as const }
     onNavigate(target)
   }
+
+  const backLabel = mode.fromGroup ? 'group journal' : (notebook?.title ?? 'notebook')
 
   // --------------------------------------------------------------- loading
 
@@ -473,7 +485,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           onClick={back}
           className="press -ml-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint hover:text-ink"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> back to {notebook?.title ?? 'notebook'}
+          <ArrowLeft className="h-3.5 w-3.5" /> back to {backLabel}
         </button>
 
         <header className="mt-6 border-b border-line pb-6">
@@ -517,7 +529,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           onClick={back}
           className="press -ml-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint hover:text-ink"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> back to {notebook?.title ?? 'notebook'}
+          <ArrowLeft className="h-3.5 w-3.5" /> back to {backLabel}
         </button>
 
         <span className="ml-auto flex items-center gap-2.5">

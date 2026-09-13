@@ -1,5 +1,17 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { CreateGroupSchema, GroupMemberSchema, GroupSchema, UpdateGroupSchema, UuidSchema } from '../schemas'
+import {
+  CreateGroupSchema,
+  EntrySchema,
+  GroupMemberSchema,
+  GroupSchema,
+  MoodSchema,
+  PageQuerySchema,
+  PaginatedSchema,
+  TimestampSchema,
+  UpdateGroupSchema,
+  UuidSchema,
+} from '../schemas'
+import { escapePostgrestValue } from './search.routes'
 import { Errors, fromPostgrestError } from '../errors'
 import { requireAuth } from '../auth'
 import { bearerAuth, errorResponses, jsonBody, type App } from './helpers'
@@ -393,5 +405,95 @@ export function registerGroupRoutes(app: App) {
     if (!data) throw Errors.notFound('You are not a member of this group')
 
     return c.body(null, 204)
+  })
+
+  // ----------------------------------------------------------------- group journal
+  const journalQuery = z
+    .object({
+      ...PageQuerySchema.shape,
+      author_id: UuidSchema.optional().openapi({ description: 'Only entries by this member' }),
+      mood: MoodSchema.optional().openapi({ description: 'Filter entries by mood' }),
+      tags: z.string().max(200).optional().openapi({
+        example: 'morning,gratitude',
+        description: 'Comma-separated tags — matches entries having any of them',
+      }),
+      q: z
+        .string()
+        .min(1)
+        .max(200)
+        .optional()
+        .openapi({ example: 'coffee', description: 'Search term matched against title and body' }),
+      since: TimestampSchema.optional().openapi({ description: 'Only entries created at or after this time' }),
+      until: TimestampSchema.optional().openapi({ description: 'Only entries created at or before this time' }),
+    })
+    .strict()
+
+  const journal = createRoute({
+    method: 'get',
+    path: '/groups/{id}/entries',
+    tags: ['Groups'],
+    summary: "The group's journal — shared entries across its notebooks",
+    description:
+      'One stream over every notebook linked to the group, newest first, filterable by author, time window, mood, tags and text. The entries RLS policy still decides row by row what you may see (private opt-outs stay invisible).',
+    security: [bearerAuth],
+    middleware: [requireAuth],
+    request: { params: GroupIdParam, query: journalQuery },
+    responses: {
+      ...errorResponses(400, 401, 404, 422, 503),
+      200: { description: 'Entries page', content: { 'application/json': { schema: PaginatedSchema(EntrySchema) } } },
+    },
+  })
+  app.openapi(journal, async (c) => {
+    const { id } = c.req.valid('param')
+    const { page, limit, author_id, mood, tags, q, since, until } = c.req.valid('query')
+    const from = (page - 1) * limit
+
+    const sinceMs = since ? Date.parse(since) : NaN
+    if (since && Number.isNaN(sinceMs)) throw Errors.badRequest('Invalid since timestamp')
+    const untilMs = until ? Date.parse(until) : NaN
+    if (until && Number.isNaN(untilMs)) throw Errors.badRequest('Invalid until timestamp')
+
+    // Group visible at all? (RLS decides; missing row reads as 404.)
+    const { data: group, error: groupErr } = await c.var.userClient
+      .from('groups')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle()
+    if (groupErr) throw fromPostgrestError(groupErr)
+    if (!group) throw Errors.notFound('Group not found (or not visible to you)')
+
+    // Notebooks linked here (RLS-filtered); empty link set → empty journal.
+    const { data: notebooks, error: nbErr } = await c.var.userClient.from('notebooks').select('id').eq('group_id', id)
+    if (nbErr) throw fromPostgrestError(nbErr)
+    const ids = (notebooks ?? []).map((n) => (n as { id: string }).id)
+    if (ids.length === 0) {
+      return c.json({ data: [], pagination: { page, limit, total: 0 } })
+    }
+
+    const query = c.var.userClient.from('entries').select('*', { count: 'exact' }).in('notebook_id', ids)
+    let filtered = query
+    if (author_id) filtered = filtered.eq('author_id', author_id)
+    if (mood) filtered = filtered.eq('mood', mood)
+    const tagList = (tags ?? '')
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean)
+    if (tagList.length > 0) filtered = filtered.overlaps('tags', tagList)
+    if (q) {
+      const likePattern = escapePostgrestValue(`%${q}%`)
+      filtered = filtered.or(`title.ilike.${likePattern},body.ilike.${likePattern}`)
+    }
+    if (since) filtered = filtered.gte('created_at', new Date(sinceMs).toISOString())
+    if (until) filtered = filtered.lte('created_at', new Date(untilMs).toISOString())
+
+    const { data, count, error } = await filtered
+      .order('created_at', { ascending: false })
+      .range(from, from + limit - 1)
+    if (error) throw fromPostgrestError(error)
+
+    return c.json({
+      data: data ?? [],
+      pagination: { page, limit, total: count ?? 0 },
+    })
   })
 }

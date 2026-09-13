@@ -31,11 +31,11 @@ import { isUnconfigured } from '@/lib/api/client'
 
 export type View =
   | { kind: 'notebook'; notebookId: string }
-  | { kind: 'compose'; notebookId: string }
-  | { kind: 'entry'; entryId: string; notebookId: string }
+  | { kind: 'compose'; notebookId: string; fromGroup?: string }
+  | { kind: 'entry'; entryId: string; notebookId: string; fromGroup?: string }
   | { kind: 'search'; q: string }
   | { kind: 'groups' }
-  | { kind: 'group'; groupId: string }
+  | { kind: 'group'; groupId: string; tab?: 'journal' | 'members' | 'sharing' }
   | { kind: 'settings' }
 
 // --------------------------------------------------------------- restoring
@@ -227,8 +227,8 @@ export function Workspace() {
               key={view.kind === 'compose' ? `compose:${view.notebookId}` : `entry:${view.entryId}`}
               mode={
                 view.kind === 'compose'
-                  ? { compose: true, notebookId: view.notebookId }
-                  : { compose: false, entryId: view.entryId }
+                  ? { compose: true, notebookId: view.notebookId, fromGroup: view.fromGroup }
+                  : { compose: false, entryId: view.entryId, fromGroup: view.fromGroup }
               }
               onNavigate={navigate}
             />
@@ -237,7 +237,11 @@ export function Workspace() {
           ) : view.kind === 'settings' ? (
             <SettingsView />
           ) : (
-            <GroupsView selectedGroupId={view.kind === 'group' ? view.groupId : null} onNavigate={navigate} />
+            <GroupsView
+              selectedGroupId={view.kind === 'group' ? view.groupId : null}
+              initialTab={view.kind === 'group' ? view.tab : 'journal'}
+              onNavigate={navigate}
+            />
           )}
         </main>
       </div>

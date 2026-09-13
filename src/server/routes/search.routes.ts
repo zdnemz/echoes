@@ -19,7 +19,7 @@ const SearchQuery = z
  * PostgREST `or` filter value escaping: wrap in double quotes and escape
  * backslashes + double quotes so user input cannot break out of the filter.
  */
-function escapePostgrestValue(value: string): string {
+export function escapePostgrestValue(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
 

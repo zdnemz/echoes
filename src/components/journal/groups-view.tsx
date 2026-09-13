@@ -1,22 +1,34 @@
 'use client'
 
 /**
- * Groups — the sharing circle manager. Two zones: the group list (left,
- * narrow) and the open group's members + sharing (right, wide). Owners get
- * link/approval/rename/delete controls; members get a quiet Leave.
+ * Groups — the sharing circle manager.
+ * Group panes are organized into tabs:
+ *  - Journal: shared entries across linked notebooks, with filters by time,
+ *    author, mood, tags and text search.
+ *  - Members: member list with roles and removal controls.
+ *  - Sharing (owner only): invite link rotation, auto-accept switch, request queue.
  */
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
   ArrowClockwise,
   ArrowLeft,
+  BookOpen,
+  CalendarBlank,
   Check,
+  CircleNotch,
+  Clock,
   Copy,
+  Funnel,
   LinkSimple,
+  MagnifyingGlass,
   PencilSimple,
+  PenNib,
+  Plus,
   SignOut,
   TrashSimple,
+  User,
   UsersThree,
   X,
 } from '@phosphor-icons/react/dist/ssr'
@@ -42,23 +54,29 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { MOODS, MOOD_META, MoodGlyph, type Mood } from '@/components/mood/glyphs'
+import { EntryRow, EntryRowSkeleton } from './entry-row'
 import { useSession } from '@/lib/auth/session'
 import {
+  useCreateNotebook,
   useDecideJoinRequest,
   useDeleteGroup,
   useGroup,
+  useGroupEntries,
   useGroups,
   useInviteLink,
   useJoinRequests,
   useLeaveGroup,
+  useNotebooks,
   useRemoveMember,
   useRevokeInviteLink,
   useRotateInviteLink,
   useUpdateGroup,
+  useUpdateNotebook,
 } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
 import { avatarTone, formatDay, initials } from '@/lib/format'
-import type { Group } from '@/lib/api/types'
+import type { Group, GroupDetail } from '@/lib/api/types'
 import type { View } from './workspace'
 
 // --------------------------------------------------------------- sharing panel (owner)
@@ -320,6 +338,531 @@ function SharingPanel({ group }: { group: Group }) {
   )
 }
 
+// --------------------------------------------------------------- group journal tab
+
+type TimePreset = 'all' | 'today' | 'week' | 'month' | 'custom'
+
+function getTimeBounds(preset: TimePreset, customSince: string, customUntil: string) {
+  if (preset === 'today') {
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    return { since: start.toISOString(), until: undefined }
+  }
+  if (preset === 'week') {
+    const start = new Date(Date.now() - 7 * 24 * 3600_000)
+    return { since: start.toISOString(), until: undefined }
+  }
+  if (preset === 'month') {
+    const start = new Date(Date.now() - 30 * 24 * 3600_000)
+    return { since: start.toISOString(), until: undefined }
+  }
+  if (preset === 'custom') {
+    const since = customSince ? new Date(customSince + 'T00:00:00').toISOString() : undefined
+    const until = customUntil ? new Date(customUntil + 'T23:59:59').toISOString() : undefined
+    return { since, until }
+  }
+  return { since: undefined, until: undefined }
+}
+
+function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate: (v: View) => void }) {
+  const { user } = useSession()
+  const notebooks = useNotebooks()
+  const createNotebook = useCreateNotebook()
+  const updateNotebook = useUpdateNotebook()
+
+  // Filter state
+  const [authorId, setAuthorId] = useState<string>('all')
+  const [timePreset, setTimePreset] = useState<TimePreset>('all')
+  const [customSince, setCustomSince] = useState('')
+  const [customUntil, setCustomUntil] = useState('')
+  const [mood, setMood] = useState<Mood | undefined>(undefined)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Link/compose dialog state
+  const [linkModalOpen, setLinkModalOpen] = useState(false)
+  const [newNotebookTitle, setNewNotebookTitle] = useState(`${group.name} Notes`)
+  const [selectedNotebookId, setSelectedNotebookId] = useState('')
+  const [modalMode, setModalMode] = useState<'create' | 'link'>('create')
+  const [busyModal, setBusyModal] = useState(false)
+
+  // Memoized time bounds
+  const { since, until } = useMemo(
+    () => getTimeBounds(timePreset, customSince, customUntil),
+    [timePreset, customSince, customUntil],
+  )
+
+  const filters = useMemo(
+    () => ({
+      author_id: authorId !== 'all' ? authorId : undefined,
+      mood,
+      q: searchQuery.trim() || undefined,
+      since,
+      until,
+    }),
+    [authorId, mood, searchQuery, since, until],
+  )
+
+  const entriesQuery = useGroupEntries(group.id, filters)
+  const entries = useMemo(() => entriesQuery.data?.pages.flatMap((p) => p.data) ?? [], [entriesQuery.data])
+  const total = entriesQuery.data?.pages[0]?.pagination.total ?? 0
+
+  // Map notebook IDs to their titles for display in EntryRow
+  const notebookTitleMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const nb of notebooks.data?.data ?? []) {
+      map.set(nb.id, nb.title)
+    }
+    return map
+  }, [notebooks.data])
+
+  // Resolve author names for display in EntryRow
+  const authorName = (aId: string) => {
+    if (aId === user?.id) return null
+    const m = group.members.find((member) => member.user_id === aId)
+    return m?.display_name || m?.email || 'a member'
+  }
+
+  // Notebooks linked to this group that the current user owns
+  const myLinkedNotebooks = useMemo(
+    () => (notebooks.data?.data ?? []).filter((nb) => nb.group_id === group.id && nb.owner_id === user?.id),
+    [notebooks.data, group.id, user?.id],
+  )
+
+  // Unlinked notebooks the user owns (available for linking)
+  const myUnlinkedNotebooks = useMemo(
+    () => (notebooks.data?.data ?? []).filter((nb) => !nb.group_id && nb.owner_id === user?.id),
+    [notebooks.data, user?.id],
+  )
+
+  // Total notebooks linked to this group across all members
+  const linkedNotebooksCount = useMemo(
+    () => (notebooks.data?.data ?? []).filter((nb) => nb.group_id === group.id).length,
+    [notebooks.data, group.id],
+  )
+
+  const handleComposeClick = () => {
+    if (myLinkedNotebooks.length === 1) {
+      onNavigate({ kind: 'compose', notebookId: myLinkedNotebooks[0].id, fromGroup: group.id })
+    } else {
+      // 0 linked notebooks (or multiple to choose from): open dialog
+      setSelectedNotebookId(myUnlinkedNotebooks[0]?.id ?? '')
+      setModalMode(myUnlinkedNotebooks.length > 0 ? 'link' : 'create')
+      setLinkModalOpen(true)
+    }
+  }
+
+  const handleLinkOrCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBusyModal(true)
+    try {
+      if (modalMode === 'create') {
+        const title = newNotebookTitle.trim() || `${group.name} Notes`
+        const created = await createNotebook.mutateAsync({ title })
+        await updateNotebook.mutateAsync({ id: created.id, group_id: group.id })
+        setLinkModalOpen(false)
+        onNavigate({ kind: 'compose', notebookId: created.id, fromGroup: group.id })
+      } else {
+        if (!selectedNotebookId) return
+        await updateNotebook.mutateAsync({ id: selectedNotebookId, group_id: group.id })
+        setLinkModalOpen(false)
+        onNavigate({ kind: 'compose', notebookId: selectedNotebookId, fromGroup: group.id })
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Action failed.')
+    } finally {
+      setBusyModal(false)
+    }
+  }
+
+  const hasActiveFilters =
+    authorId !== 'all' ||
+    timePreset !== 'all' ||
+    Boolean(customSince) ||
+    Boolean(customUntil) ||
+    mood !== undefined ||
+    Boolean(searchQuery.trim())
+
+  const clearFilters = () => {
+    setAuthorId('all')
+    setTimePreset('all')
+    setCustomSince('')
+    setCustomUntil('')
+    setMood(undefined)
+    setSearchQuery('')
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Action header bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-display text-lg text-ink">Group Journal</h3>
+          <p className="text-[12.5px] text-ink-soft">Entries shared across all notebooks linked to {group.name}.</p>
+        </div>
+        <Button size="sm" className="press h-9 gap-1.5 shadow-ink" onClick={handleComposeClick}>
+          <PenNib weight="bold" className="h-3.5 w-3.5" />
+          Write entry
+        </Button>
+      </div>
+
+      {/* Filter panel */}
+      <div className="space-y-3 rounded-lg border border-line bg-paper-raised p-3.5 sm:p-4">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Author filter */}
+          <div className="w-full sm:w-44">
+            <Select value={authorId} onValueChange={setAuthorId}>
+              <SelectTrigger className="h-8.5 gap-1.5 border-line bg-paper text-[12px]">
+                <User className="h-3.5 w-3.5 text-ink-faint" />
+                <SelectValue placeholder="All authors" />
+              </SelectTrigger>
+              <SelectContent className="border-line bg-paper-raised">
+                <SelectItem value="all" className="text-[12.5px]">
+                  All authors
+                </SelectItem>
+                {group.members.map((m) => (
+                  <SelectItem key={m.user_id} value={m.user_id} className="text-[12.5px]">
+                    {m.display_name || m.email || 'Member'} {m.user_id === user?.id ? '(you)' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Time filter */}
+          <div className="w-full sm:w-40">
+            <Select value={timePreset} onValueChange={(v) => setTimePreset(v as TimePreset)}>
+              <SelectTrigger className="h-8.5 gap-1.5 border-line bg-paper text-[12px]">
+                <Clock className="h-3.5 w-3.5 text-ink-faint" />
+                <SelectValue placeholder="All time" />
+              </SelectTrigger>
+              <SelectContent className="border-line bg-paper-raised">
+                <SelectItem value="all" className="text-[12.5px]">
+                  All time
+                </SelectItem>
+                <SelectItem value="today" className="text-[12.5px]">
+                  Today
+                </SelectItem>
+                <SelectItem value="week" className="text-[12.5px]">
+                  Past 7 days
+                </SelectItem>
+                <SelectItem value="month" className="text-[12.5px]">
+                  Past 30 days
+                </SelectItem>
+                <SelectItem value="custom" className="text-[12.5px]">
+                  Custom date range…
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Search input */}
+          <div className="relative min-w-[160px] flex-1">
+            <MagnifyingGlass className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search in this circle…"
+              className="h-8.5 w-full rounded-md border border-line bg-paper pl-8 pr-7 text-[12px] text-ink placeholder:text-ink-ghost focus:border-clay-soft focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="press absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
+                aria-label="Clear search query"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Custom date range inputs */}
+        {timePreset === 'custom' && (
+          <div className="flex flex-wrap items-center gap-3 border-t border-line pt-2.5 text-[12px]">
+            <span className="flex items-center gap-1 font-mono text-[11px] text-ink-faint">
+              <CalendarBlank className="h-3.5 w-3.5" /> Range:
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customSince}
+                onChange={(e) => setCustomSince(e.target.value)}
+                className="h-7 rounded border border-line bg-paper px-2 font-mono text-[11.5px] text-ink"
+                aria-label="Start date"
+              />
+              <span className="text-ink-faint">to</span>
+              <input
+                type="date"
+                value={customUntil}
+                onChange={(e) => setCustomUntil(e.target.value)}
+                className="h-7 rounded border border-line bg-paper px-2 font-mono text-[11.5px] text-ink"
+                aria-label="End date"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Mood pills row */}
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-line pt-2.5">
+          <button
+            type="button"
+            onClick={() => setMood(undefined)}
+            className={`press rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              mood === undefined ? 'bg-ink text-paper' : 'text-ink-faint hover:bg-paper-deep hover:text-ink'
+            }`}
+          >
+            All moods
+          </button>
+          {MOODS.map((m) => {
+            const active = mood === m
+            const meta = MOOD_META[m]
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMood(active ? undefined : m)}
+                title={meta.label}
+                className={`press inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  active
+                    ? 'border border-clay-soft bg-clay-tint text-clay-ink'
+                    : 'text-ink-soft hover:bg-paper-deep hover:text-ink'
+                }`}
+              >
+                <MoodGlyph mood={m} className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{meta.label}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Active filter summary & clear */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2.5 text-[11.5px] text-ink-faint">
+            <span>
+              Showing {total} {total === 1 ? 'entry' : 'entries'} matching filters
+            </span>
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="press font-mono text-[11px] text-clay-ink underline underline-offset-2 hover:text-clay-deep"
+            >
+              Clear all filters
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Entries stream */}
+      <div>
+        {entriesQuery.isLoading ? (
+          <div className="divide-y divide-line border-y border-line">
+            <EntryRowSkeleton />
+            <EntryRowSkeleton />
+            <EntryRowSkeleton />
+          </div>
+        ) : entriesQuery.isError ? (
+          <div className="rounded-lg border border-line bg-paper-raised p-6 text-center">
+            <p className="text-[13px] text-ember">
+              {entriesQuery.error instanceof Error ? entriesQuery.error.message : "Couldn't load group entries."}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="press mt-3 border-line"
+              onClick={() => entriesQuery.refetch()}
+            >
+              Try again
+            </Button>
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-line-strong px-6 py-12 text-center">
+            {hasActiveFilters ? (
+              <>
+                <Funnel weight="light" className="mx-auto h-7 w-7 text-ink-ghost" />
+                <p className="font-display mt-3 text-lg text-ink">No entries match your filters</p>
+                <p className="mx-auto mt-1.5 max-w-[42ch] text-[12.5px] text-ink-faint">
+                  Try clearing or relaxing your author, time, mood, or search filters.
+                </p>
+                <Button variant="outline" size="sm" className="press mt-4 border-line" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              </>
+            ) : linkedNotebooksCount === 0 ? (
+              <>
+                <BookOpen weight="light" className="mx-auto h-7 w-7 text-ink-ghost" />
+                <p className="font-display mt-3 text-lg text-ink">No notebooks linked yet</p>
+                <p className="mx-auto mt-1.5 max-w-[44ch] text-[12.5px] leading-relaxed text-ink-faint">
+                  Notebook owners can link notebooks to {group.name} from the notebook menu, or start a new notebook for
+                  this circle right now.
+                </p>
+                <Button size="sm" className="press mt-4 gap-1.5 shadow-ink" onClick={handleComposeClick}>
+                  <Plus weight="bold" className="h-3.5 w-3.5" />
+                  Link or create notebook
+                </Button>
+              </>
+            ) : (
+              <>
+                <BookOpen weight="light" className="mx-auto h-7 w-7 text-ink-ghost" />
+                <p className="font-display mt-3 text-lg text-ink">The circle is quiet</p>
+                <p className="mx-auto mt-1.5 max-w-[42ch] text-[12.5px] text-ink-faint">
+                  Be the first to share an entry with {group.name}.
+                </p>
+                <Button size="sm" className="press mt-4 gap-1.5 shadow-ink" onClick={handleComposeClick}>
+                  <PenNib weight="bold" className="h-3.5 w-3.5" />
+                  Write the first entry
+                </Button>
+              </>
+            )}
+          </div>
+        ) : (
+          <>
+            <ul className="divide-y divide-line border-y border-line">
+              {entries.map((entry) => (
+                <EntryRow
+                  key={entry.id}
+                  entry={entry}
+                  authorName={authorName(entry.author_id)}
+                  notebookTitle={notebookTitleMap.get(entry.notebook_id) ?? null}
+                  showPrivate={false}
+                  onOpen={(e) =>
+                    onNavigate({
+                      kind: 'entry',
+                      entryId: e.id,
+                      notebookId: e.notebook_id,
+                      fromGroup: group.id,
+                    })
+                  }
+                />
+              ))}
+            </ul>
+
+            {entriesQuery.hasNextPage && (
+              <div className="mt-6 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={entriesQuery.isFetchingNextPage}
+                  className="press h-9 border-line bg-paper-raised"
+                  onClick={() => entriesQuery.fetchNextPage()}
+                >
+                  {entriesQuery.isFetchingNextPage ? (
+                    <>
+                      <CircleNotch weight="bold" className="mr-1.5 h-3.5 w-3.5 animate-spin text-clay" />
+                      Loading more…
+                    </>
+                  ) : (
+                    'Load more entries'
+                  )}
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Link or Create Notebook Dialog */}
+      <Dialog open={linkModalOpen} onOpenChange={setLinkModalOpen}>
+        <DialogContent className="max-w-md border-line bg-paper-raised">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg text-ink">Write in {group.name}</DialogTitle>
+            <DialogDescription className="text-[12.5px] leading-relaxed text-ink-soft">
+              Entries in Echoes belong to notebooks. Link an existing notebook to this group or start a dedicated one.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleLinkOrCreate} className="flex flex-col gap-4">
+            {myUnlinkedNotebooks.length > 0 && (
+              <div className="flex gap-2" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={modalMode === 'link'}
+                  onClick={() => setModalMode('link')}
+                  className={`press rounded-full px-3 py-1 text-[11.5px] font-medium ${
+                    modalMode === 'link' ? 'bg-ink text-paper' : 'text-ink-faint hover:bg-paper-deep'
+                  }`}
+                >
+                  Link existing notebook
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={modalMode === 'create'}
+                  onClick={() => setModalMode('create')}
+                  className={`press rounded-full px-3 py-1 text-[11.5px] font-medium ${
+                    modalMode === 'create' ? 'bg-ink text-paper' : 'text-ink-faint hover:bg-paper-deep'
+                  }`}
+                >
+                  Create new notebook
+                </button>
+              </div>
+            )}
+
+            {modalMode === 'create' ? (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="create-nb-title" className="text-[12.5px]">
+                  Notebook name
+                </Label>
+                <Input
+                  id="create-nb-title"
+                  value={newNotebookTitle}
+                  onChange={(e) => setNewNotebookTitle(e.target.value)}
+                  placeholder={`${group.name} Notes`}
+                  autoFocus
+                  className="h-10 bg-paper"
+                />
+                <p className="text-[11.5px] text-ink-faint">
+                  This notebook will be linked to {group.name} and shared with its members.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="select-unlinked-nb" className="text-[12.5px]">
+                  Select notebook to link
+                </Label>
+                <Select value={selectedNotebookId} onValueChange={setSelectedNotebookId}>
+                  <SelectTrigger id="select-unlinked-nb" className="h-10 bg-paper">
+                    <SelectValue placeholder="Choose a notebook…" />
+                  </SelectTrigger>
+                  <SelectContent className="border-line bg-paper-raised">
+                    {myUnlinkedNotebooks.map((nb) => (
+                      <SelectItem key={nb.id} value={nb.id} className="text-[13px]">
+                        {nb.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11.5px] text-ink-faint">
+                  Its shared entries will immediately appear in {group.name}&apos;s journal.
+                </p>
+              </div>
+            )}
+
+            <DialogFooter className="mt-1 gap-2">
+              <Button type="button" variant="ghost" onClick={() => setLinkModalOpen(false)} className="press h-9">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busyModal} className="press h-9 gap-1.5 shadow-ink">
+                {busyModal ? (
+                  <>
+                    <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> Saving…
+                  </>
+                ) : modalMode === 'create' ? (
+                  'Create & Write'
+                ) : (
+                  'Link & Write'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
 // --------------------------------------------------------------- rename dialog
 
 function RenameGroupDialog({ group, onClose }: { group: Group; onClose: () => void }) {
@@ -376,9 +919,11 @@ function RenameGroupDialog({ group, onClose }: { group: Group; onClose: () => vo
 
 export function GroupsView({
   selectedGroupId,
+  initialTab = 'journal',
   onNavigate,
 }: {
   selectedGroupId: string | null
+  initialTab?: 'journal' | 'members' | 'sharing'
   onNavigate: (v: View) => void
 }) {
   const { user } = useSession()
@@ -388,13 +933,22 @@ export function GroupsView({
   const leave = useLeaveGroup()
   const removeGroup = useDeleteGroup()
 
+  const [chosenTab, setChosenTab] = useState<'journal' | 'members' | 'sharing' | null>(null)
+  const [prevGroupId, setPrevGroupId] = useState(selectedGroupId)
   const [renameOpen, setRenameOpen] = useState(false)
   const [leaveOpen, setLeaveOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
+  if (selectedGroupId !== prevGroupId) {
+    setPrevGroupId(selectedGroupId)
+    setChosenTab(null)
+  }
+
+  const activeTab = chosenTab ?? initialTab
+  const setActiveTab = (tab: 'journal' | 'members' | 'sharing') => setChosenTab(tab)
+
   const group = detail.data ?? null
   const isOwner = group?.my_role === 'owner'
-
   const list = groups.data ?? []
 
   return (
@@ -469,8 +1023,8 @@ export function GroupsView({
               <UsersThree weight="light" className="mx-auto h-7 w-7 text-ink-ghost" />
               <p className="font-display mt-4 text-xl text-ink">Open a group</p>
               <p className="mx-auto mt-2 max-w-[42ch] text-[12.5px] leading-relaxed text-ink-faint">
-                Pick a group on the left to see its members, send invites, or manage who&apos;s in — or create one from
-                the rail.
+                Pick a group on the left to read its shared journal, see members, or manage who&apos;s in — or create
+                one from the rail.
               </p>
             </div>
           ) : !group ? (
@@ -531,68 +1085,120 @@ export function GroupsView({
                 </div>
               </div>
 
-              {/* members */}
-              <section aria-label="Members" className="mt-6">
-                <p className="pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">Members</p>
-                <ul className="divide-y divide-line border-y border-line">
-                  {group.members.map((m) => {
-                    const tone = avatarTone(m.user_id)
-                    const isSelf = m.user_id === user?.id
-                    const canRemove = isOwner && !isSelf
-                    return (
-                      <li key={m.user_id} className="flex items-center gap-3.5 py-3">
-                        <span
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-semibold"
-                          style={{ background: tone.bg, color: tone.fg }}
-                          aria-hidden="true"
-                        >
-                          {initials(m.display_name, '·')}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[13.5px] text-ink">
-                            {m.display_name || 'Unnamed member'}
-                            {isSelf && <span className="ml-1.5 font-mono text-[10px] text-clay">you</span>}
-                          </p>
-                          <p className="truncate font-mono text-[10.5px] text-ink-faint">
-                            {m.role} · joined {formatDay(m.joined_at)}
-                          </p>
-                        </div>
-                        {canRemove && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              removeMember.mutate(
-                                { groupId: group.id, userId: m.user_id },
-                                {
-                                  onSuccess: () =>
-                                    toast.success(
-                                      `${m.display_name ?? 'Member'} removed — their access is gone immediately.`,
-                                    ),
-                                  onError: (err) =>
-                                    toast.error(err instanceof Error ? err.message : "Couldn't remove."),
-                                },
-                              )
-                            }
-                            className="press rounded-md p-1.5 text-ink-faint transition-colors hover:bg-ember-tint hover:text-ember"
-                            aria-label={`Remove ${m.display_name ?? 'member'}`}
-                            title="Remove member"
-                          >
-                            <X weight="bold" className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </li>
-                    )
-                  })}
-                </ul>
-              </section>
+              {/* Group Tabs Navigation */}
+              <div className="flex border-b border-line" role="tablist" aria-label="Group sections">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'journal'}
+                  onClick={() => setActiveTab('journal')}
+                  className={`press relative -mb-px flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium transition-colors ${
+                    activeTab === 'journal' ? 'border-b-2 border-clay text-ink' : 'text-ink-faint hover:text-ink'
+                  }`}
+                >
+                  <BookOpen className="h-4 w-4" />
+                  <span>Journal</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'members'}
+                  onClick={() => setActiveTab('members')}
+                  className={`press relative -mb-px flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium transition-colors ${
+                    activeTab === 'members' ? 'border-b-2 border-clay text-ink' : 'text-ink-faint hover:text-ink'
+                  }`}
+                >
+                  <UsersThree className="h-4 w-4" />
+                  <span>Members</span>
+                  <span className="rounded-full bg-paper-deep px-1.5 py-0.5 font-mono text-[10px] text-ink-soft">
+                    {group.member_count}
+                  </span>
+                </button>
+                {isOwner && (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'sharing'}
+                    onClick={() => setActiveTab('sharing')}
+                    className={`press relative -mb-px flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium transition-colors ${
+                      activeTab === 'sharing' ? 'border-b-2 border-clay text-ink' : 'text-ink-faint hover:text-ink'
+                    }`}
+                  >
+                    <LinkSimple className="h-4 w-4" />
+                    <span>Sharing</span>
+                  </button>
+                )}
+              </div>
 
-              {/* sharing — owner only */}
-              {isOwner && group && (
-                <section aria-label="Sharing" className="mt-8">
-                  <p className="pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">Sharing</p>
-                  <SharingPanel key={group.id} group={group} />
-                </section>
-              )}
+              {/* Tab Contents */}
+              <div className="pt-6">
+                {activeTab === 'journal' && <GroupJournalTab group={group} onNavigate={onNavigate} />}
+
+                {activeTab === 'members' && (
+                  <section aria-label="Members">
+                    <p className="pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">Members</p>
+                    <ul className="divide-y divide-line border-y border-line">
+                      {group.members.map((m) => {
+                        const tone = avatarTone(m.user_id)
+                        const isSelf = m.user_id === user?.id
+                        const canRemove = isOwner && !isSelf
+                        return (
+                          <li key={m.user_id} className="flex items-center gap-3.5 py-3">
+                            <span
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-semibold"
+                              style={{ background: tone.bg, color: tone.fg }}
+                              aria-hidden="true"
+                            >
+                              {initials(m.display_name, '·')}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[13.5px] text-ink">
+                                {m.display_name || 'Unnamed member'}
+                                {isSelf && <span className="ml-1.5 font-mono text-[10px] text-clay">you</span>}
+                              </p>
+                              <p className="truncate font-mono text-[10.5px] text-ink-faint">
+                                {m.role} · joined {formatDay(m.joined_at)}
+                              </p>
+                            </div>
+                            {canRemove && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removeMember.mutate(
+                                    { groupId: group.id, userId: m.user_id },
+                                    {
+                                      onSuccess: () =>
+                                        toast.success(
+                                          `${m.display_name ?? 'Member'} removed — their access is gone immediately.`,
+                                        ),
+                                      onError: (err) =>
+                                        toast.error(err instanceof Error ? err.message : "Couldn't remove."),
+                                    },
+                                  )
+                                }
+                                className="press rounded-md p-1.5 text-ink-faint transition-colors hover:bg-ember-tint hover:text-ember"
+                                aria-label={`Remove ${m.display_name ?? 'member'}`}
+                                title="Remove member"
+                              >
+                                <X weight="bold" className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </section>
+                )}
+
+                {activeTab === 'sharing' && isOwner && (
+                  <section aria-label="Sharing">
+                    <p className="pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">
+                      Sharing & invite link
+                    </p>
+                    <SharingPanel key={group.id} group={group} />
+                  </section>
+                )}
+              </div>
             </div>
           )}
         </div>

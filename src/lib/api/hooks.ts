@@ -108,6 +108,7 @@ export function useCreateEntry() {
       api.createEntry(notebookId, input),
     onSuccess: (entry) => {
       qc.invalidateQueries({ queryKey: ['entries', entry.notebook_id] })
+      qc.invalidateQueries({ queryKey: ['group-entries'] })
       qc.invalidateQueries({ queryKey: ['notebooks'] })
     },
   })
@@ -121,6 +122,7 @@ export function useUpdateEntry() {
     onSuccess: (entry) => {
       qc.setQueryData(['entry', entry.id], entry)
       qc.invalidateQueries({ queryKey: ['entries', entry.notebook_id] })
+      qc.invalidateQueries({ queryKey: ['group-entries'] })
       qc.invalidateQueries({ queryKey: ['search'] })
     },
   })
@@ -132,9 +134,47 @@ export function useDeleteEntry() {
     mutationFn: api.deleteEntry,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['entries'] })
+      qc.invalidateQueries({ queryKey: ['group-entries'] })
       qc.invalidateQueries({ queryKey: ['notebooks'] })
       qc.invalidateQueries({ queryKey: ['search'] })
     },
+  })
+}
+
+// ---------------------------------------------------------------- group journal
+
+export interface GroupJournalFilters {
+  author_id?: string
+  mood?: Mood
+  tags?: string
+  q?: string
+  since?: string
+  until?: string
+}
+
+export function useGroupEntries(groupId: string | null, filters: GroupJournalFilters = {}) {
+  const enabled = useAuthed() && groupId !== null
+  const { author_id, mood, tags, q, since, until } = filters
+  return useInfiniteQuery({
+    queryKey: ['group-entries', groupId, author_id ?? '', mood ?? '', tags ?? '', q ?? '', since ?? '', until ?? ''],
+    queryFn: ({ pageParam }) =>
+      api.listGroupEntries(groupId as string, {
+        page: pageParam as number,
+        author_id,
+        mood,
+        tags,
+        q,
+        since,
+        until,
+      }),
+    initialPageParam: 1,
+    getNextPageParam: (last: Paginated<Entry>) => {
+      const { page, limit, total } = last.pagination
+      return page * limit < total ? page + 1 : undefined
+    },
+    enabled,
+    retry: retryPolicy,
+    placeholderData: (prev) => prev,
   })
 }
 

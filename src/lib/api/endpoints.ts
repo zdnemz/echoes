@@ -108,6 +108,32 @@ export const updateEntry = (id: string, input: UpdateEntryInput) =>
 
 export const deleteEntry = (id: string) => api<void>(`/api/entries/${id}`, { method: 'DELETE' })
 
+// ----------------------------------------------------------------- group journal
+
+export interface GroupJournalParams {
+  page?: number
+  limit?: number
+  author_id?: string
+  mood?: Mood
+  tags?: string
+  q?: string
+  since?: string
+  until?: string
+}
+
+export const listGroupEntries = (groupId: string, params: GroupJournalParams = {}) => {
+  const q = new URLSearchParams()
+  q.set('page', String(params.page ?? 1))
+  q.set('limit', String(params.limit ?? 20))
+  if (params.author_id) q.set('author_id', params.author_id)
+  if (params.mood) q.set('mood', params.mood)
+  if (params.tags) q.set('tags', params.tags)
+  if (params.q) q.set('q', params.q)
+  if (params.since) q.set('since', params.since)
+  if (params.until) q.set('until', params.until)
+  return api<Paginated<Entry>>(`/api/groups/${groupId}/entries?${q}`)
+}
+
 // ----------------------------------------------------------------- search
 
 export const searchEntries = (term: string, page = 1, limit = 20) => {
