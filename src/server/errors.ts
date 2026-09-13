@@ -76,8 +76,14 @@ export function fromPostgrestError(postgrestError: {
         'The data layer does not see the required tables yet — run the Supabase migrations, then reload the PostgREST schema cache',
       )
     case '23505':
-    case '23503':
       return new ApiError(409, 'CONFLICT', 'The request conflicts with existing data')
+    case '23503':
+      // Foreign-key violation: the request references a row that is not
+      // there (e.g. a profile for a pre-migration account). 409, not 400:
+      // retrying the identical request cannot succeed, and the previous
+      // message ("conflicts with existing data") sent reporters hunting
+      // for a duplicate that does not exist.
+      return new ApiError(409, 'CONFLICT', 'The request references related data that does not exist')
     case '42501':
       return new ApiError(403, 'RLS_DENIED', 'Row level security denied this operation')
     case '23514':
