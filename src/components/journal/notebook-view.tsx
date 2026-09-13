@@ -6,10 +6,20 @@
  * sharing, delete).
  */
 
-import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMemo, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { CaretDown, DotsThree, LinkSimple, Lock, PenNib, TrashSimple } from '@phosphor-icons/react/dist/ssr'
+import {
+  CaretDown,
+  CircleNotch,
+  DotsThree,
+  DownloadSimple,
+  LinkSimple,
+  Lock,
+  PenNib,
+  TrashSimple,
+  UploadSimple,
+} from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -42,7 +52,16 @@ import { Label } from '@/components/ui/label'
 import { MOODS, MOOD_META, MoodGlyph } from '@/components/mood/glyphs'
 import { EntryRow, EntryRowSkeleton } from './entry-row'
 import { useSession } from '@/lib/auth/session'
-import { useDeleteNotebook, useEntries, useGroups, useNotebooks, useUpdateNotebook } from '@/lib/api/hooks'
+import {
+  useCreateEntry,
+  useDeleteNotebook,
+  useEntries,
+  useGroups,
+  useNotebooks,
+  useUpdateNotebook,
+} from '@/lib/api/hooks'
+import { listEntries } from '@/lib/api/endpoints'
+import { downloadTextFile, entryFilename, parseEntryFile } from '@/lib/markdown'
 import { isUnconfigured } from '@/lib/api/client'
 import type { Mood } from '@/components/mood/glyphs'
 import type { Notebook } from '@/lib/api/types'
@@ -180,8 +199,79 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
   const [renameOpen, setRenameOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  // ---- markdown interchange: whole-notebook export, single-file import
   const remove = useDeleteNotebook()
   const update = useUpdateNotebook()
+  const createEntry = useCreateEntry()
+  const qc = useQueryClient()
+  const [busyIo, setBusyIo] = useState(false)
+  const fileRef = useRef<HTMLInputElement | null>(null)
+
+  const exportNotebook = async () => {
+    if (!notebook || busyIo) return
+    setBusyIo(true)
+    try {
+      const all: Array<{
+        title: string
+        body: string
+        mood: Mood | null
+        tags: string[]
+        created_at: string
+      }> = []
+      let page = 1
+      for (;;) {
+        const res = await listEntries(notebook.id, { page, limit: 100 })
+        all.push(...res.data)
+        if (all.length >= res.pagination.total || res.data.length === 0) break
+        page += 1
+      }
+      const doc = [
+        `# ${notebook.title}`,
+        '',
+        `Exported ${new Date().toISOString().slice(0, 10)} · ${all.length} ${all.length === 1 ? 'entry' : 'entries'}`,
+        '',
+        ...all.flatMap((e) => [
+          `## ${e.title || 'Untitled entry'}`,
+          `*${e.created_at.slice(0, 10)}${e.mood ? ` · ${e.mood}` : ''}${e.tags.length > 0 ? ` · ${e.tags.map((t) => `#${t}`).join(' ')}` : ''}*`,
+          '',
+          e.body.trim(),
+          '',
+        ]),
+      ].join('\n')
+      downloadTextFile(entryFilename(notebook.title), doc)
+      toast.success(`Exported ${all.length} ${all.length === 1 ? 'entry' : 'entries'}.`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed.')
+    } finally {
+      setBusyIo(false)
+    }
+  }
+
+  const importFile = async (file: File) => {
+    if (!notebook || busyIo) return
+    setBusyIo(true)
+    try {
+      const parsed = parseEntryFile(file.name, await file.text())
+      if (!parsed.body.trim()) {
+        toast.error('Nothing to import — the file has no body text.')
+        return
+      }
+      await createEntry.mutateAsync({
+        notebookId: notebook.id,
+        title: parsed.title,
+        body: parsed.body,
+        mood: parsed.mood ?? undefined,
+        tags: parsed.tags,
+      })
+      await qc.invalidateQueries({ queryKey: ['entries', notebook.id] })
+      toast.success(`Imported “${parsed.title}”.`)
+    } catch (err) {
+      if (isUnconfigured(err)) toast.error("The data layer isn't connected on this deployment.")
+      else toast.error(err instanceof Error ? err.message : 'Import failed.')
+    } finally {
+      setBusyIo(false)
+    }
+  }
 
   const notebook = useMemo(
     () => notebooks.data?.data.find((nb) => nb.id === notebookId) ?? null,
@@ -244,6 +334,50 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            <Button
+              variant="outline"
+              size="icon"
+              className="press h-9 w-9 border-line bg-paper-raised"
+              aria-label="Export notebook as markdown"
+              title="Export as .md"
+              onClick={exportNotebook}
+              disabled={busyIo}
+            >
+              {busyIo ? (
+                <CircleNotch weight="bold" className="h-4 w-4 animate-spin" />
+              ) : (
+                <DownloadSimple weight="regular" className="h-4 w-4" />
+              )}
+            </Button>
+            {isOwner && (
+              <>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="press h-9 w-9 border-line bg-paper-raised"
+                  aria-label="Import a markdown file"
+                  title="Import .md"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={busyIo}
+                >
+                  <UploadSimple weight="regular" className="h-4 w-4" />
+                </Button>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".md,.markdown,text/markdown"
+                  className="hidden"
+                  aria-hidden
+                  tabIndex={-1}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    e.target.value = ''
+                    if (f) void importFile(f)
+                  }}
+                />
+              </>
+            )}
+
             {isOwner && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

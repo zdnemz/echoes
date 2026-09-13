@@ -12,7 +12,29 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ArrowLeft, Check, CircleNotch, Eye, EyeSlash, TrashSimple } from '@phosphor-icons/react/dist/ssr'
+import {
+  ArrowLeft,
+  Check,
+  CircleNotch,
+  Code,
+  CodeBlock,
+  DownloadSimple,
+  Eye,
+  EyeSlash,
+  LinkSimple,
+  ListBullets,
+  ListChecks,
+  ListNumbers,
+  Minus,
+  Quotes,
+  TextB,
+  TextHOne,
+  TextHThree,
+  TextHTwo,
+  TextItalic,
+  TextStrikethrough,
+  TrashSimple,
+} from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -25,6 +47,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { MarkdownView } from '@/components/markdown/markdown-view'
+import { downloadTextFile, entryFilename, serializeEntry } from '@/lib/markdown'
 import { MOODS, MOOD_META, MoodGlyph } from '@/components/mood/glyphs'
 import { useSession } from '@/lib/auth/session'
 import { useCreateEntry, useDeleteEntry, useEntry, useNotebooks, useUpdateEntry } from '@/lib/api/hooks'
@@ -137,6 +160,159 @@ function TagsInput({
   )
 }
 
+// --------------------------------------------------------------- format bar
+
+/**
+ * Markdown formatting toolbar — operates on the textarea selection
+ * (wrap/toggle for inline marks, per-line toggle for blocks). Everything
+ * is plain markdown in, plain markdown out; the preview proves it live.
+ */
+interface MarkdownTools {
+  wrap: (before: string, after: string, placeholder?: string) => void
+  prefixLines: (prefix: string | null, ordered?: boolean) => void
+  insertHr: () => void
+  insertLink: () => void
+}
+
+function markdownTools(
+  bodyRef: React.RefObject<HTMLTextAreaElement | null>,
+  body: string,
+  setBody: (v: string) => void,
+  markDirty: () => void,
+): MarkdownTools {
+  const edit = (fn: (ta: HTMLTextAreaElement) => void) => {
+    const ta = bodyRef.current
+    if (!ta) return
+    fn(ta)
+    setBody(ta.value)
+    markDirty()
+    ta.focus()
+  }
+
+  const wrap = (before: string, after: string, placeholder = 'text') => {
+    edit((ta) => {
+      const s = ta.selectionStart
+      const e = ta.selectionEnd
+      const sel = body.slice(s, e) || placeholder
+      const wrapped =
+        s !== e && body.slice(s - before.length, s) === before && body.slice(e, e + after.length) === after
+      if (wrapped) {
+        ta.setRangeText(sel, s - before.length, e + after.length)
+        ta.setSelectionRange(s - before.length, s - before.length + sel.length)
+      } else {
+        ta.setRangeText(`${before}${sel}${after}`, s, e, 'end')
+        if (s === e) ta.setSelectionRange(s + before.length, s + before.length + sel.length)
+      }
+    })
+  }
+
+  const prefixLines = (prefix: string | null, ordered = false) => {
+    edit((ta) => {
+      const s = ta.selectionStart
+      const e = ta.selectionEnd
+      const lineStart = body.lastIndexOf('\n', s - 1) + 1
+      const rawEnd = body.indexOf('\n', e)
+      const end = rawEnd === -1 ? body.length : rawEnd
+      const lines = body.slice(lineStart, end).split('\n')
+      const strip = (l: string) => l.replace(/^#{1,3}\s+|^>\s+|^-\s+\[[ x]\]\s+|^-\s+|^\d+\.\s+/, '')
+      let next: string[]
+      if (prefix === null) {
+        next = lines.map(strip)
+      } else if (ordered) {
+        const all = lines.every((l) => /^\d+\.\s+/.test(l))
+        next = all ? lines.map((l) => l.replace(/^\d+\.\s+/, '')) : lines.map((l, i) => `${i + 1}. ${strip(l)}`)
+      } else {
+        const all = lines.every((l) => l.startsWith(prefix))
+        next = all ? lines.map((l) => l.slice(prefix.length)) : lines.map((l) => prefix + strip(l))
+      }
+      ta.setRangeText(next.join('\n'), lineStart, end)
+    })
+  }
+
+  const insertHr = () => {
+    edit((ta) => {
+      const s = ta.selectionStart
+      const e = ta.selectionEnd
+      ta.setRangeText(body.trim().length === 0 ? '---\n' : '\n\n---\n', s, e, 'end')
+    })
+  }
+
+  const insertLink = () => wrap('[', '](https://)', 'link text')
+
+  return { wrap, prefixLines, insertHr, insertLink }
+}
+
+function FormatBar({ tools }: { tools: MarkdownTools }) {
+  const { wrap, prefixLines, insertHr, insertLink } = tools
+  const buttons: Array<{
+    label: string
+    hint: string
+    icon: React.ReactNode
+    run: () => void
+  }> = [
+    { label: 'Bold', hint: 'Bold (⌘B)', icon: <TextB className="h-4 w-4" />, run: () => wrap('**', '**') },
+    { label: 'Italic', hint: 'Italic (⌘I)', icon: <TextItalic className="h-4 w-4" />, run: () => wrap('*', '*') },
+    {
+      label: 'Strikethrough',
+      hint: 'Strikethrough',
+      icon: <TextStrikethrough className="h-4 w-4" />,
+      run: () => wrap('~~', '~~'),
+    },
+    { label: 'Heading 1', hint: 'Heading 1', icon: <TextHOne className="h-4 w-4" />, run: () => prefixLines('# ') },
+    { label: 'Heading 2', hint: 'Heading 2', icon: <TextHTwo className="h-4 w-4" />, run: () => prefixLines('## ') },
+    { label: 'Heading 3', hint: 'Heading 3', icon: <TextHThree className="h-4 w-4" />, run: () => prefixLines('### ') },
+    { label: 'Quote', hint: 'Quote', icon: <Quotes className="h-4 w-4" />, run: () => prefixLines('> ') },
+    { label: 'Code', hint: 'Inline code (⌘E)', icon: <Code className="h-4 w-4" />, run: () => wrap('`', '`', 'code') },
+    {
+      label: 'Code block',
+      hint: 'Code block',
+      icon: <CodeBlock className="h-4 w-4" />,
+      run: () => wrap('```\n', '\n```', 'code'),
+    },
+    { label: 'Link', hint: 'Link (⌘K)', icon: <LinkSimple className="h-4 w-4" />, run: insertLink },
+    {
+      label: 'Bulleted list',
+      hint: 'Bulleted list',
+      icon: <ListBullets className="h-4 w-4" />,
+      run: () => prefixLines('- '),
+    },
+    {
+      label: 'Numbered list',
+      hint: 'Numbered list',
+      icon: <ListNumbers className="h-4 w-4" />,
+      run: () => prefixLines(null, true),
+    },
+    {
+      label: 'Checklist',
+      hint: 'Checklist',
+      icon: <ListChecks className="h-4 w-4" />,
+      run: () => prefixLines('- [ ] '),
+    },
+    { label: 'Divider', hint: 'Horizontal divider', icon: <Minus className="h-4 w-4" />, run: insertHr },
+  ]
+
+  return (
+    <div
+      role="toolbar"
+      aria-label="Format text"
+      className="flex flex-wrap items-center gap-0.5 border-b border-line pb-2.5"
+    >
+      {buttons.map((b) => (
+        <button
+          key={b.label}
+          type="button"
+          title={b.hint}
+          aria-label={b.label}
+          onClick={b.run}
+          className="press rounded-md p-2 text-ink-faint transition-colors hover:bg-paper-deep hover:text-ink"
+        >
+          {b.icon}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // --------------------------------------------------------------- editor
 
 export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: View) => void }) {
@@ -188,6 +364,17 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
     setDirty(true)
     setSavedAt(null)
   }, [])
+
+  const tools = markdownTools(bodyRef, body, setBody, markDirty)
+
+  const exportEntry = useCallback(() => {
+    if (!entry) return
+    downloadTextFile(
+      entryFilename(entry.title || 'untitled'),
+      serializeEntry({ title: entry.title, body: entry.body, mood: entry.mood, tags: entry.tags }),
+    )
+    toast.success('Exported as markdown.')
+  }, [entry])
 
   // ---- save
   const save = useCallback(async () => {
@@ -356,15 +543,27 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           </span>
 
           {!mode.compose && entry && (
-            <Button
-              variant="outline"
-              size="icon"
-              className="press h-9 w-9 border-line bg-paper-raised text-ember"
-              aria-label="Delete entry"
-              onClick={() => setDeleteOpen(true)}
-            >
-              <TrashSimple weight="regular" className="h-4 w-4" />
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="icon"
+                className="press h-9 w-9 border-line bg-paper-raised"
+                aria-label="Export entry as markdown"
+                title="Export as .md"
+                onClick={exportEntry}
+              >
+                <DownloadSimple weight="regular" className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="press h-9 w-9 border-line bg-paper-raised text-ember"
+                aria-label="Delete entry"
+                onClick={() => setDeleteOpen(true)}
+              >
+                <TrashSimple weight="regular" className="h-4 w-4" />
+              </Button>
+            </>
           )}
 
           <Button size="sm" className="press h-9 gap-1.5 shadow-ink" onClick={save} disabled={saving}>
@@ -463,12 +662,30 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
       {/* split panes */}
       <div className="mt-2 grid lg:mt-5 lg:grid-cols-2">
         <div className={`${pane === 'write' ? 'block' : 'hidden'} lg:block lg:border-r lg:border-line lg:pr-6`}>
+          <FormatBar tools={tools} />
           <textarea
             ref={bodyRef}
             value={body}
             onChange={(e) => {
               setBody(e.target.value)
               markDirty()
+            }}
+            onKeyDown={(e) => {
+              if (!(e.metaKey || e.ctrlKey)) return
+              const k = e.key.toLowerCase()
+              if (k === 'b') {
+                e.preventDefault()
+                tools.wrap('**', '**')
+              } else if (k === 'i') {
+                e.preventDefault()
+                tools.wrap('*', '*')
+              } else if (k === 'k') {
+                e.preventDefault()
+                tools.insertLink()
+              } else if (k === 'e') {
+                e.preventDefault()
+                tools.wrap('`', '`', 'code')
+              }
             }}
             placeholder="The bread, the weather, the argument, the walk — start anywhere. Markdown welcome."
             aria-label="Entry body — markdown"
