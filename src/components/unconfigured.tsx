@@ -2,14 +2,29 @@
 
 /**
  * The calm state shown wherever the API answers 503 SUPABASE_NOT_CONFIGURED.
- * Instead of a wall of error toasts: one quiet card explaining exactly what
- * this deployment is missing and how to finish wiring it.
+ * Instead of a wall of error toasts: one quiet card.
+ *
+ * End users (production) get a plain "try again later" message — the wiring
+ * checklist below is a developer surface and only renders in development.
  */
 
 import Link from 'next/link'
 import { PlugsConnected } from '@phosphor-icons/react/dist/ssr'
 
 export function UnconfiguredNotice({ compact = false }: { compact?: boolean }) {
+  // Developer checklist — never shown to end users in production.
+  // (String() keeps this a runtime check; the build inlines NODE_ENV.)
+  if (String(process.env.NODE_ENV) === 'production') {
+    return (
+      <div role="status" className="rounded-lg border border-line bg-paper-deep px-5 py-4 text-ink">
+        <p className="text-[13.5px] font-medium">The journal is temporarily unavailable</p>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-soft">
+          We couldn&apos;t reach your notebooks just now. Please try again in a bit — nothing you wrote is lost.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div role="status" className="rounded-lg border border-clay-soft/60 bg-clay-tint/70 px-5 py-4 text-ink">
       <div className="flex items-center gap-2.5">

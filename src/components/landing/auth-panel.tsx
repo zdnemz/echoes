@@ -253,7 +253,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
         variant="outline"
         disabled={oauthBusy || busy}
         onClick={handleGoogle}
-        className="press mt-5 h-10 gap-2.5 bg-paper-raised"
+        className="press mt-5 h-10 w-full gap-2.5 bg-paper"
       >
         {oauthBusy ? (
           <>

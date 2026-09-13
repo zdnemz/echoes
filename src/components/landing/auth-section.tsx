@@ -1,6 +1,4 @@
-import Link from 'next/link'
-import { ArrowRight } from '@phosphor-icons/react/dist/ssr'
-import { Button } from '@/components/ui/button'
+import { AuthPanel } from '@/components/landing/auth-panel'
 
 const CHECKLIST = [
   {
@@ -47,25 +45,7 @@ export function AuthSection() {
           </div>
 
           <div className="flex lg:col-span-7 lg:justify-end">
-            <div className="flex w-full max-w-md flex-col justify-center rounded-xl border border-line bg-paper-raised p-6 shadow-lift sm:p-8">
-              <h3 className="font-display text-2xl tracking-tight text-ink">Your notebooks await</h3>
-              <p className="mt-2 text-[12.5px] leading-relaxed text-ink-soft">
-                One account, private by default. Share later, only if you want to.
-              </p>
-              <div className="mt-6 flex flex-col gap-2.5">
-                <Button asChild size="lg" className="press h-11 gap-2 shadow-ink">
-                  <Link href="/register">
-                    Start writing free <ArrowRight weight="bold" className="h-4 w-4" />
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" size="lg" className="press h-11 border-line bg-paper">
-                  <Link href="/login">Sign in</Link>
-                </Button>
-              </div>
-              <p className="mt-5 text-center font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint">
-                Google one-tap · email + password · or a magic link
-              </p>
-            </div>
+            <AuthPanel initialTab="signup" />
           </div>
         </div>
       </div>
