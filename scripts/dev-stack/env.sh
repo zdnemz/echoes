@@ -14,7 +14,7 @@ export STACK_PGDATA="$STACK_DIR/pgdata"
 mkdir -p "$STACK_TMP" "$STACK_LOGS"
 
 # --- ports ---------------------------------------------------------------------
-export PG_PORT=5432          # postgres
+export PG_PORT=5440          # postgres (5432-5434 taken on this machine)
 export GOTRUE_PORT=5999      # auth API (behind the gateway)
 export POSTGREST_PORT=5998   # data API (behind the gateway)
 export GATEWAY_PORT=54321    # single-origin supabase-compatible URL

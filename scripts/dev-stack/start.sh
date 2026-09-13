@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Start the full Echoes local dev stack:
-#   Postgres (embedded, 5432) -> GoTrue auth (5999) -> schema bootstrap
+#   Postgres (embedded, 5440) -> GoTrue auth (5999) -> schema bootstrap
 #   -> PostgREST (5998) -> gateway (54321, the SUPABASE_URL)
 # and wire the stack into the app's .env (managed block, idempotent).
 set -euo pipefail
@@ -8,6 +8,7 @@ source "$(dirname "$0")/env.sh"
 
 echo "── Echoes dev stack ─────────────────────────────────────────────"
 bash "$STACK_DIR/scripts/start-pg.sh"
+bash "$STACK_DIR/scripts/ensure-binaries.sh"
 bash "$STACK_DIR/scripts/start-gotrue.sh"
 node "$STACK_DIR/scripts/apply-schema.mjs"
 bash "$STACK_DIR/scripts/start-postgrest.sh"

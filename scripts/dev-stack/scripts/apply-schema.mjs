@@ -22,7 +22,7 @@ const keys = JSON.parse(readFileSync(join(stackDir, '.keys.json'), 'utf8'))
 
 const client = new pg.Client({
   host: '127.0.0.1',
-  port: 5432,
+  port: Number(process.env.PG_PORT ?? 5432),
   user: 'postgres',
   password: pw,
   database: 'postgres',
