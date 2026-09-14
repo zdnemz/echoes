@@ -83,6 +83,8 @@ export function ReflectView() {
         setNotice('The companion is not set up on this deployment yet — add AI_API_KEY to .env.')
       } else if (err instanceof ApiError && err.code === 'AI_RATE_LIMITED') {
         toast.error('The model provider is rate-limited — wait a minute and retry.')
+      } else if (err instanceof ApiError && err.code === 'AI_TIMEOUT') {
+        toast.error('The model was too slow to answer — free-tier models get sluggish under load. Try sending again.')
       } else {
         toast.error(err instanceof Error ? err.message : "Couldn't reach the companion.")
       }

@@ -190,6 +190,22 @@ export async function providerChat(
   return openAIChat(cfg, messages, tools)
 }
 
+/** Free-tier models can think for well over a minute; surface aborts as a 504, not a bare DOMException. */
+async function chatFetch(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(120_000) })
+  } catch (err) {
+    if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+      throw new ApiError(
+        504,
+        'AI_TIMEOUT',
+        'The model provider did not answer in time — free-tier models get slow under load. Try again, or set a faster AI_MODEL.',
+      )
+    }
+    throw err
+  }
+}
+
 async function openAIChat(
   cfg: AIConfig,
   messages: AgentMessage[],
@@ -199,7 +215,7 @@ async function openAIChat(
     ? cfg.entrypoint
     : `${cfg.entrypoint.replace(/\/+$/, '')}/chat/completions`
 
-  const res = await fetch(url, {
+  const res = await chatFetch(url, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${cfg.apiKey}`,
@@ -233,7 +249,6 @@ async function openAIChat(
           }
         : {}),
     }),
-    signal: AbortSignal.timeout(60_000),
   })
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) throw aiNotConfigured()
@@ -311,7 +326,7 @@ async function anthropicChat(
     }
   }
 
-  const res = await fetch(url, {
+  const res = await chatFetch(url, {
     method: 'POST',
     headers: {
       'x-api-key': cfg.apiKey,
@@ -333,7 +348,6 @@ async function anthropicChat(
           }
         : {}),
     }),
-    signal: AbortSignal.timeout(60_000),
   })
 
   if (!res.ok) {
