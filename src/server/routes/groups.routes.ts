@@ -227,6 +227,11 @@ export function registerGroupRoutes(app: App) {
     if (name !== undefined) patch.name = name
     if (auto_accept !== undefined) patch.auto_accept = auto_accept
 
+    // Both fields are optional, so `{}` validates. PostgREST treats an empty
+    // patch as a no-op and returns no row, which used to surface as a
+    // misleading 404 ("not found, or not the owner") for an empty request.
+    if (Object.keys(patch).length === 0) throw Errors.badRequest('Nothing to update')
+
     const { data, error } = await c.var.userClient
       .from('groups')
       .update(patch)
