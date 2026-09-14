@@ -8,7 +8,7 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { GearSix, LinkSimple, Plus, UsersThree } from '@phosphor-icons/react/dist/ssr'
+import { BookOpen, GearSix, LinkSimple, MagnifyingGlass, Plus, UsersThree } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -175,9 +175,15 @@ export function Rail({
   const groups = useGroups()
   const [nbDialog, setNbDialog] = useState(false)
   const [grpDialog, setGrpDialog] = useState(false)
+  const [filter, setFilter] = useState('')
+  const q = filter.trim().toLowerCase()
 
   const mine = notebooks.filter((nb) => nb.owner_id === user?.id)
   const shared = notebooks.filter((nb) => nb.owner_id !== user?.id)
+  const matchQ = (s: string | null | undefined) => !q || (s ?? '').toLowerCase().includes(q)
+  const mineShown = mine.filter((nb) => matchQ(nb.title))
+  const sharedShown = shared.filter((nb) => matchQ(nb.title))
+  const groupsShown = (groups.data ?? []).filter((g) => matchQ(g.name))
   const groupName = (id: string | null) => (id ? (groups.data?.find((g) => g.id === id)?.name ?? 'a group') : null)
 
   const activeNotebookId =
@@ -207,6 +213,7 @@ export function Rail({
               className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-clay"
             />
           )}
+          <BookOpen weight={active ? 'fill' : 'regular'} className="h-4 w-4 shrink-0 text-ink-faint" />
           <span className="min-w-0 flex-1 truncate">{nb.title}</span>
           {gname && !isShared && (
             <span
@@ -232,9 +239,23 @@ export function Rail({
 
   return (
     <nav aria-label="Journal navigation" className={`text-[13.5px] ${embedded ? '' : ''}`}>
+      {/* filter — satu kolom cari untuk notebook + group */}
+      <div className="relative mb-1">
+        <MagnifyingGlass className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
+        <input
+          type="search"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter notebooks & groups…"
+          aria-label="Filter notebooks and groups"
+          className="h-9 w-full rounded-md border border-line bg-paper-raised pl-8 pr-3 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-clay-soft focus:outline-none focus:ring-2 focus:ring-clay-soft/40"
+        />
+      </div>
       {/* ------------------------------------------------ notebooks */}
       <div className="flex items-center justify-between">
-        <SectionLabel>Notebooks</SectionLabel>
+        <SectionLabel>
+          Notebooks · {mineShown.length}/{mine.length}
+        </SectionLabel>
         <button
           type="button"
           onClick={() => setNbDialog(true)}
@@ -245,25 +266,27 @@ export function Rail({
           <Plus weight="bold" className="h-3.5 w-3.5" />
         </button>
       </div>
-      {mine.length > 0 ? (
-        <ul className="space-y-0.5">{mine.map(row)}</ul>
+      {mineShown.length > 0 ? (
+        <ul className="space-y-0.5">{mineShown.map(row)}</ul>
       ) : (
         <p className="px-2.5 py-2 text-[12px] leading-relaxed text-ink-faint">
-          No notebooks yet — the first one is one click away.
+          {mine.length === 0 ? 'No notebooks yet — the first one is one click away.' : 'No notebooks match.'}
         </p>
       )}
 
       {/* ------------------------------------------------ shared with you */}
-      {shared.length > 0 && (
+      {sharedShown.length > 0 && (
         <>
-          <SectionLabel>Shared with you</SectionLabel>
-          <ul className="space-y-0.5">{shared.map(row)}</ul>
+          <SectionLabel>Shared with you · {sharedShown.length}</SectionLabel>
+          <ul className="space-y-0.5">{sharedShown.map(row)}</ul>
         </>
       )}
 
       {/* ------------------------------------------------ groups */}
       <div className="flex items-center justify-between">
-        <SectionLabel>Groups</SectionLabel>
+        <SectionLabel>
+          Groups · {groupsShown.length}/{groups.data?.length ?? 0}
+        </SectionLabel>
         <button
           type="button"
           onClick={() => setGrpDialog(true)}
@@ -274,9 +297,9 @@ export function Rail({
           <Plus weight="bold" className="h-3.5 w-3.5" />
         </button>
       </div>
-      {groups.data && groups.data.length > 0 ? (
+      {groupsShown.length > 0 ? (
         <ul className="space-y-0.5">
-          {groups.data.map((g) => {
+          {groupsShown.map((g) => {
             const active = view?.kind === 'groups' || (view?.kind === 'group' && view.groupId === g.id)
             const selected = view?.kind === 'group' && view.groupId === g.id
             return (
@@ -308,7 +331,7 @@ export function Rail({
         </ul>
       ) : (
         <p className="px-2.5 py-2 text-[12px] leading-relaxed text-ink-faint">
-          No groups. Create one when you&apos;re ready to share a notebook.
+          {q ? 'No groups match.' : "No groups. Create one when you're ready to share a notebook."}
         </p>
       )}
 
