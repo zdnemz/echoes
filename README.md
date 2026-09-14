@@ -2,9 +2,9 @@
 
 # Echoes
 
-**A quiet place for loud thoughts.**
+### A quiet place for loud thoughts.
 
-A contemplative personal journal crafted with a tactile _Paper & Ink_ aesthetic. Markdown entries with mood tracking and tag taxonomies, private notebooks you keep strictly to yourself — and the one notebook you choose to share live with the people who matter.
+A contemplative personal journaling sanctuary built with a tactile **Paper & Ink** editorial aesthetic. Write Markdown entries with mood tracking and tag taxonomies, keep your notebooks strictly private by default, selectively open live sharing circles with the people who matter most, and converse with a permission-grounded AI companion.
 
 [![Next.js 16](https://img.shields.io/badge/Next.js-16.3-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React 19](https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
@@ -15,192 +15,172 @@ A contemplative personal journal crafted with a tactile _Paper & Ink_ aesthetic.
 [![Tailwind CSS 4](https://img.shields.io/badge/Tailwind-CSS%204-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Bun](https://img.shields.io/badge/Bun-Runtime-fbf0df?style=for-the-badge&logo=bun&logoColor=black)](https://bun.sh/)
 
-[Key Features](#-key-features) • [Architecture](#-architecture) • [Quick Start](#-quick-start) • [Interactive Surfaces](#-interactive-surfaces) • [Project Layout](#-project-layout) • [Scripts](#-scripts) • [Setup Guide](./SETUP.md)
+[Why Echoes?](#-why-echoes) • [Core Experience](#-core-experience) • [Realtime & Circles](#-realtime-sharing-circles) • [Reflect AI](#-reflect--grounded-ai-companion) • [Quick Start](#-quick-start) • [Setup Guide](./SETUP.md)
 
 </div>
 
 ---
 
-## ✨ Key Features
+## 🍃 Why Echoes?
 
-- **🖋️ Paper & Ink Aesthetic**
-  - Warm cream canvas, Newsreader editorial serif typography, custom hand-drawn mood glyphs (_Sun, Sunrise, Level, Drizzle, Squall_), and distraction-free split-pane Markdown workspace.
-  - Zero generic UI templates — custom design tokens calibrated for thoughtful writing.
+Most modern notes apps try to be your second brain: endless kanban boards, complex backlink graphs, team workspaces, and productivity dashboards. Social apps demand your attention with streak guilt, gamification loops, and algorithmic feeds.
 
-- **🔒 Selective Sharing & Strict RLS**
-  - Private notebooks by default. Selectively link one notebook to a trusted group.
-  - PostgreSQL Row-Level Security (RLS) acts as the source of truth — user identity is verified server-side from signed JWTs, never trusted from client payloads.
+**Echoes is the digital equivalent of a linen-bound notebook** — something that holds the day, asks for nothing in return, and keeps its mouth shut.
 
-- **⚡ Zero-Credential Local Dev Stack**
-  - Self-contained local Supabase runtime: real PostgreSQL 17, GoTrue v2 auth server, and PostgREST v12 unified behind a local gateway.
-  - Test signups, logins, triggers, and full RLS policies offline without creating cloud accounts or managing API keys.
-
-- **🚀 Typed Hono API & OpenAPI 3.1**
-  - 35 endpoints built with Hono and `@hono/zod-openapi` mounted natively inside Next.js.
-  - Interactive Scalar API reference at `/api/docs` and development console at `/console`.
-  - Rate limiting with sliding windows and standard RFC-compliant error envelopes.
-
-- **🤝 Live Collaboration & Invites**
-  - Real-time notebook presence, broadcast updates, and secure group invite links with instant-join or owner-approval flows.
+- **No Streak Guilt**: No artificial red dots or guilt-tripping push notifications engineered to manipulate your dopamine.
+- **Privacy by Engine, Not by Policy**: Every notebook starts private and stays that way. Your privacy is enforced by PostgreSQL Row-Level Security directly at the database engine level — not by a terms of service promise.
+- **Selective Connection**: When you want to share, you don't broadcast to a public feed. You link one specific notebook to a small circle of trusted friends or family.
 
 ---
 
-## 🏛️ Architecture
+## 🖋️ Core Experience
 
-```
-                    ┌────────────────────────────────────────────────────────┐
-                    │                      Browser / Client                  │
-                    │      Next.js 16 App Router (Paper & Ink Design System) │
-                    └───────────────────────────┬────────────────────────────┘
-                                                │
-                          HTTP / REST           │  WebSockets (Presence & Updates)
-                        (Bearer Token)          │
-                                                ▼
-                    ┌────────────────────────────────────────────────────────┐
-                    │               API Layer: Hono on Next.js               │
-                    │  • OpenAPI 3.1 + Zod Schema Validation                 │
-                    │  • Auth Proxy & Sliding-Window Rate Limiting           │
-                    │  • Per-Request Authenticated Client Binding            │
-                    └───────────────────────────┬────────────────────────────┘
-                                                │
-                                                ▼
-                    ┌────────────────────────────────────────────────────────┐
-                    │             Supabase / Local Dev Stack Gateway         │
-                    ├───────────────────────────┬────────────────────────────┤
-                    │   GoTrue Auth Engine      │   PostgREST Data Engine    │
-                    │   • JWT & PKCE OAuth      │   • Direct SQL with RLS    │
-                    │   • Refresh Token Rot.    │   • Role Switching         │
-                    └─────────────┬─────────────┴──────────────┬─────────────┘
-                                  │                            │
-                                  ▼                            ▼
-                    ┌────────────────────────────────────────────────────────┐
-                    │                 PostgreSQL 17 Database                 │
-                    │   • Strict Row-Level Security Policies                 │
-                    │   • Triggers, Trigram Search (pg_trgm), GIN Indexes    │
-                    └────────────────────────────────────────────────────────┘
-```
+### 📜 Paper & Ink Editorial Aesthetic
 
-### Security & Data Isolation
+- **Tactile Palette**: Warm paper canvas, deep ink contrasts, and subtle earthen clay tones designed for long, comfortable writing sessions.
+- **Newsreader Serif Typography**: Generous line heights, thoughtful measures, and distraction-free split-pane Markdown composition.
+- **Hand-Crafted Mood Glyphs**: Rate your day through evocative, original weather glyphs: _Sun_ (Great), _Sunrise_ (Good), _Level_ (Okay), _Drizzle_ (Low), and _Squall_ (Rough).
+- **Taxonomies & Deep Search**: Organise thoughts with tag systems and full-text trigram indexing (`pg_trgm`) that searches across years of entries in milliseconds.
 
-- **Auth**: Supabase JWTs used as bearer tokens. OAuth and token refresh are proxied server-side (`/api/auth/oauth/*`, `/api/auth/refresh`), preventing client exposure of sensitive keys.
-- **Data Guardrails**: Every query resolves through a client scoped to the user's JWT. RLS policies in `supabase/migrations/` enforce tenant boundaries directly at the database engine level.
+---
+
+## ⭕ Realtime Sharing Circles
+
+A sharing circle is a private room for a handful of people you trust with a notebook.
+
+- **Live Chatroom Experience**: Seamlessly view shared notebook entries as a living chronological conversation.
+- **Zero-Refresh Live Sync**: Real-time Server-Sent Events (SSE) stream pushes new messages, member join/leave events, and pending requests instantly without page reloads.
+- **WhatsApp-Style Read Receipts**: Know when circle members have seen your entries with blue double checkmarks (`Checks`) and instant reader indicators.
+- **Live Typing & Ephemeral Presence**: Gentle, non-intrusive typing indicators keep conversations natural and alive.
+- **Instant Links & Approval Queues**: Invite trusted members with expiring capability links, toggling between instant-join or owner-approval modes.
+- **Discord & Slack Webhooks**: Configure a webhook URL per circle to receive peace-of-mind alerts in Discord or Slack whenever someone requests access, joins, or leaves.
+
+---
+
+## 🧠 Reflect — Grounded AI Companion
+
+A warm, thoughtful conversational companion — _not a guru, not a therapist_.
+
+- **Permission-Scoped by Design**: Tick only the specific notebooks Reflect is permitted to consult. Anything outside your selection remains strictly invisible.
+- **Grounded in Reality**: An autonomous tool loop searches your actual entries, inspects mood trends, and quotes real words instead of inventing platitudes.
+- **Any Provider (OpenAI & Anthropic Compatible)**: Completely open and decoupled from vendor lock-in. Connect your own API key and entrypoint:
+  - **OpenAI Compatible**: Groq, Together AI, DeepSeek, Cerebras, Ollama, vLLM, or OpenAI.
+  - **Anthropic Compatible**: Claude 3.5 Haiku, Claude 3.5 Sonnet.
+- **Zero Memory Leaks**: Entirely stateless per request; your private thoughts are never retained for model training.
 
 ---
 
 ## ⚡ Quick Start
 
+Experience Echoes locally in under two minutes with our self-contained, zero-cloud development stack.
+
 ### 1. Prerequisites
 
 - [Bun](https://bun.sh/) (v1.1+) installed locally.
-- _No cloud accounts or external databases required to start._
+- _No cloud accounts or external databases required._
 
 ### 2. One-Command Setup
 
-Clone the repository and run the local zero-dependency stack:
-
 ```bash
-# 1. Install root dependencies
+# 1. Clone repository & install dependencies
+git clone https://github.com/zdnemz/echoes.git
+cd echoes
 bun install
 
-# 2. Install local dev stack binaries (Postgres 17, GoTrue, PostgREST — ~25 MB, once)
+# 2. Install dev-stack binaries (Postgres 17, GoTrue, PostgREST — ~25 MB, run once)
 (cd scripts/dev-stack && bun install)
 
-# 3. Start local Supabase backend (automatically configures .env)
+# 3. Start local Supabase backend & seed demo data
 bun run stack:start
-
-# 4. Seed demo users, notebooks, and entries
 bun run db:seed
 
-# 5. Launch the application
+# 4. Start the application
 bun run dev
 ```
 
-Visit **[http://localhost:3000](http://localhost:3000)** to open Echoes.
+Visit **[http://localhost:3000](http://localhost:3000)** to begin writing.
 
-### 3. Demo Credentials
+### 3. Demo Accounts
 
-The seed script (`bun run db:seed`) provides ready-to-use accounts:
-
-| User     | Email              | Password       | Role / Data                                          |
-| :------- | :----------------- | :------------- | :--------------------------------------------------- |
-| **Alex** | `alex@example.com` | `Password123!` | Group owner; contains private & shared notebooks     |
-| **Sam**  | `sam@example.com`  | `Password123!` | Member of Alex's "Family" group; shared collaborator |
-
-> [!TIP]
-> Ready to switch from the local stack to hosted Supabase cloud or configure Google OAuth? Check out the full **[SETUP.md](./SETUP.md)** guide.
+| User     | Email              | Password       | Access                                         |
+| :------- | :----------------- | :------------- | :--------------------------------------------- |
+| **Alex** | `alex@example.com` | `Password123!` | Group owner with private and shared notebooks  |
+| **Sam**  | `sam@example.com`  | `Password123!` | Collaborator in Alex's "Family" sharing circle |
 
 ---
 
 ## 🧭 Interactive Surfaces
 
-| Surface               | Path                                                         | Description & Notes                                                               |
-| :-------------------- | :----------------------------------------------------------- | :-------------------------------------------------------------------------------- |
-| **Marketing Site**    | `/`, `/features`, `/pricing`, `/about`, `/privacy`, `/terms` | Server-rendered editorial storytelling with Paper & Ink design tokens.            |
-| **Journal Workspace** | `/journal`                                                   | Split-pane markdown editor, mood pickers, tags, search, and group notebook feeds. |
-| **Google OAuth**      | `/auth/callback`                                             | Server-proxied PKCE OAuth round-trip; anon key never leaks to client.             |
-| **Group Invites**     | `/invites/accept?token=…`                                    | Secure tokenized link flow for instant join or owner review.                      |
-| **API Engine**        | `/api/*`                                                     | 35 OpenAPI-documented endpoints with Zod validation and RLS scoping.              |
-| **API Documentation** | `/api/docs`                                                  | Interactive **Scalar** OpenAPI UI. _(Development only; 404 in production)_        |
-| **Developer Console** | `/console`                                                   | Live backend health, route inspector, and auth sandbox. _(Development only)_      |
+| Surface               | Route                     | Purpose                                                                        |
+| :-------------------- | :------------------------ | :----------------------------------------------------------------------------- |
+| **Editorial Landing** | `/`                       | Storytelling, feature breakdown, and pricing philosophy.                       |
+| **Journal Workspace** | `/journal`                | Split-pane markdown writing, mood glyph selector, and circle chats.            |
+| **Reflect Companion** | `/journal` (Reflect tab)  | Tool-augmented conversational reflection over chosen notebooks.                |
+| **Sharing Circles**   | `/journal` (Groups tab)   | Live chat, member roster, invite links, and webhook management.                |
+| **Invite Acceptance** | `/invites/accept?token=…` | Tokenized instant-join or request-approval landing page.                       |
+| **API Reference**     | `/api/docs`               | Interactive **Scalar** OpenAPI 3.1 documentation _(Development)_.              |
+| **System Console**    | `/console`                | Live backend diagnostics, route inspector, and health metrics _(Development)_. |
 
 ---
 
-## 📁 Project Layout
+## 🏗️ Architecture & Engineering Principles
 
-```text
-├── src/
-│   ├── app/                 # Next.js App Router (pages, layouts, route handlers)
-│   │   ├── (marketing)/     # Landing, story pages, pricing, legal
-│   │   ├── journal/         # Core journal split-pane workspace
-│   │   ├── console/         # Developer diagnostics and API inspector
-│   │   ├── invites/         # Invite acceptance and verification flows
-│   │   └── api/             # Hono entrypoint mounted at /api/[[...route]]
-│   ├── server/              # Hono backend application
-│   │   ├── routes/          # Typed route modules (auth, notebooks, entries, groups)
-│   │   ├── schemas/         # Shared Zod schemas and OpenAPI specifications
-│   │   └── middleware/      # Rate-limiting, auth verification, and error handlers
-│   ├── components/          # UI component library & Paper & Ink design system
-│   │   ├── ui/              # Radix UI primitives & custom styled controls
-│   │   ├── journal/         # Editor pane, viewer, tag selector, mood glyphs
-│   │   └── landing/         # Editorial interactive landing sections
-│   └── lib/                 # Shared utilities, API client, session external store
-├── supabase/
-│   └── migrations/          # SQL migrations, RLS policies, indexes, and triggers
-└── scripts/
-    ├── dev-stack/           # Embedded local Supabase-compatible runtime
-    ├── seed.ts              # Database seeding script for local/hosted environments
-    └── smoke-openapi.ts     # OpenAPI schema contract test suite
+```
+┌────────────────────────────────────────────────────────┐
+│                   Browser / Client                     │
+│   Next.js 16 App Router (Paper & Ink Design System)    │
+│   React 19 • Tailwind CSS 4 • TanStack Query v5        │
+└───────────────────────────┬────────────────────────────┘
+                            │
+      HTTP / REST (Bearer)  │  SSE Stream (Realtime Presence & Events)
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│              API Engine: Hono on Next.js               │
+│   • OpenAPI 3.1 Contract + Zod Schema Validation       │
+│   • Server-Side Auth Proxy & Rate Limiting Buckets     │
+│   • Outbound Webhook Dispatcher (Discord / Slack)      │
+│   • Tool-Calling Agent Loop (OpenAI & Anthropic)       │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│           Supabase / Embedded Dev Stack Gateway        │
+│   • GoTrue Auth (PKCE OAuth & JWT Rotation)            │
+│   • PostgREST Data Engine (Direct SQL with RLS)        │
+└─────────────┬────────────────────────────┬─────────────┘
+              │                            │
+              ▼                            ▼
+┌────────────────────────────────────────────────────────┐
+│                 PostgreSQL 17 Database                 │
+│   • Strict Row-Level Security (RLS) Isolation          │
+│   • Trigram Search (pg_trgm) & Automated Triggers      │
+└────────────────────────────────────────────────────────┘
 ```
 
+- **Strict RLS Enforcement**: The database is the true security boundary. Even if the UI is compromised, PostgreSQL refuses to disclose records across tenant boundaries.
+- **Zero Client Key Leakage**: Service roles, OAuth secrets, and AI provider API keys remain strictly confined to the server environment.
+- **Offline-First Developer Experience**: Embedded dev-stack spins up real PostgreSQL, GoTrue, and PostgREST in seconds for fully isolated testing.
+
 ---
 
-## 🛠️ Scripts
+## 🛠️ Developer Scripts
 
-| Command                | Description                                                  |
-| :--------------------- | :----------------------------------------------------------- |
-| `bun run dev`          | Starts Next.js development server on `http://localhost:3000` |
-| `bun run build`        | Compiles production-ready standalone Next.js build           |
-| `bun run start`        | Launches production standalone server                        |
-| `bun run lint`         | Runs ESLint across the codebase                              |
-| `bun run typecheck`    | Type-checks code with `tsc --noEmit`                         |
-| `bun run format`       | Formats all code with Prettier                               |
-| `bun run format:check` | Verifies code formatting adherence                           |
-| `bun run db:seed`      | Seeds demo accounts and notebook entries                     |
-| `bun run db:smoke`     | Executes OpenAPI contract verification tests                 |
-| `bun run stack:start`  | Boots local Supabase stack (Postgres + GoTrue + PostgREST)   |
-| `bun run stack:status` | Inspects status and port bindings of local services          |
-| `bun run stack:stop`   | Gracefully stops the local dev stack                         |
-| `bun run stack:reset`  | Resets local database storage and re-applies migrations      |
-| `bun run stack:e2e`    | Runs end-to-end invite and membership lifecycle tests        |
-
-> [!NOTE]
-> **Git Hooks (Husky)**:
->
-> - `pre-commit`: Automatically formats and lints staged files.
-> - `pre-push`: Validates types, formatting, linting, and runs a full production build before push.
+| Command                | Action                                                           |
+| :--------------------- | :--------------------------------------------------------------- |
+| `bun run dev`          | Launch Next.js local development server                          |
+| `bun run build`        | Compile standalone production Next.js artifact                   |
+| `bun run lint`         | Run ESLint across code and components                            |
+| `bun run typecheck`    | Validate TypeScript contracts with `tsc --noEmit`                |
+| `bun run format`       | Enforce code formatting with Prettier                            |
+| `bun test`             | Run fast unit test suites (API, agent, webhooks)                 |
+| `bun run stack:start`  | Boot embedded local dev stack (Postgres 17 + GoTrue + PostgREST) |
+| `bun run stack:status` | Check local stack health and port listeners                      |
+| `bun run stack:stop`   | Shut down local stack processes                                  |
+| `bun run db:seed`      | Seed demo accounts, notebooks, and journal entries               |
+| `bun run db:smoke`     | Run OpenAPI 3.1 schema and route contract smoke tests            |
 
 ---
 
 ## 📄 License
 
-Built by Stillwater Studio. Licensed under the [MIT License](LICENSE).
+Crafted by Stillwater Studio. Licensed under the [MIT License](LICENSE).
