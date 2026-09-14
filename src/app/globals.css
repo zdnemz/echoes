@@ -299,4 +299,47 @@
     @apply rounded-sm bg-paper-deep;
     animation: var(--animate-shimmer);
   }
+
+  /* ------------------------------------------------ WYSIWYG journal page
+     MDXEditor arrives in Radix slate/blue; re-token it to Paper & Ink.
+     Scoped under .mdxeditor (0,2,0) so these win regardless of import
+     order with the editor stylesheet. */
+  .mdxeditor {
+    --basePageBg: transparent;
+    --baseBase: var(--paper);
+    --baseBgSubtle: var(--paper-deep);
+    --baseBg: var(--paper-deep);
+    --baseBgHover: var(--paper-sink);
+    --baseBgActive: var(--paper-sink);
+    --baseLine: var(--line);
+    --baseBorder: var(--line-strong);
+    --baseBorderHover: var(--line-strong);
+    --baseText: var(--ink-soft);
+    --baseTextContrast: var(--ink);
+    --accentText: var(--clay-ink);
+    --accentSolid: var(--clay);
+    --accentSolidHover: var(--clay-ink);
+  }
+
+  /* Their toolbar wrapper is a rounded slate bar; ours is a borderless
+     row with a hairline — the JournalToolbar div inside draws the line. */
+  .mdxeditor .mdxeditor-toolbar {
+    background-color: transparent;
+    padding: 0;
+  }
+
+  /* The writing surface: same serif voice and measure as the old
+     textarea, headings/lists/quotes inherit it. */
+  .mdxeditor .echoes-rich {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    line-height: 1.85;
+    color: var(--ink);
+    padding-left: 0;
+    padding-right: 0;
+    min-height: 55dvh;
+  }
+  .mdxeditor .echoes-rich:focus {
+    outline: none;
+  }
 }
