@@ -253,12 +253,24 @@ export function Workspace() {
 function FirstRunGate({ onNavigate }: { onNavigate: (v: View) => void }) {
   const create = useCreateNotebook()
   const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const start = async (title: string) => {
     setCreating(true)
+    setError(null)
     try {
       const nb = await create.mutateAsync({ title })
       onNavigate({ kind: 'notebook', notebookId: nb.id })
+    } catch (err) {
+      // Previously the rejection was unhandled: the buttons simply re-enabled
+      // and nothing happened — the worst possible first interaction.
+      setError(
+        isUnconfigured(err)
+          ? "The journal backend isn't connected on this deployment, so a notebook can't be created yet."
+          : err instanceof Error
+            ? err.message
+            : "Couldn't create the notebook.",
+      )
     } finally {
       setCreating(false)
     }
@@ -285,6 +297,12 @@ function FirstRunGate({ onNavigate }: { onNavigate: (v: View) => void }) {
           </button>
         ))}
       </div>
+
+      {error && (
+        <p role="alert" className="mt-4 text-[12.5px] leading-relaxed text-ember">
+          {error}
+        </p>
+      )}
     </div>
   )
 }
