@@ -53,6 +53,7 @@ import { useSession } from '@/lib/auth/session'
 import { useCreateEntry, useDeleteEntry, useEntry, useNotebooks, useUpdateEntry } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
 import { useRovingSelection } from '@/hooks/use-roving-selection'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { getDefaultMood } from '@/lib/prefs'
 import { wordCount } from '@/lib/format'
 import type { Mood } from '@/components/mood/glyphs'
@@ -441,6 +442,23 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
       setSaving(false)
     }
   }, [mode, entry, title, body, mood, tags, isShared, groupLinked, create, update, onNavigate])
+
+  // Autosave with the shared bouncer: the form stays instant, the save only
+  // sees settled values. Edit mode only — in compose a pause would create
+  // the entry and navigate away mid-thought. `draft !== settled` (by
+  // reference) means the writer is still typing; the hook hands back the
+  // same reference once it settles, which is the save signal.
+  const draft = useMemo(() => ({ title, body, mood, tags, isShared }), [title, body, mood, tags, isShared])
+  const settled = useDebouncedValue(draft, 1500)
+
+  useEffect(() => {
+    if (mode.compose || !entry || !hydrated || !dirty || !canEdit || saving) return
+    if (draft !== settled) return
+    // A blank title is a manual-save conversation (it toasts), not a
+    // silent-save one — skip without noise.
+    if (!settled.title.trim()) return
+    save()
+  }, [mode.compose, entry, hydrated, dirty, canEdit, saving, draft, settled, save])
 
   // ⌘S / Ctrl+S saves — a writing app should honor the writer's reflex.
   useEffect(() => {
