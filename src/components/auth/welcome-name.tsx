@@ -7,7 +7,7 @@
  * that land here directly are forwarded on.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { CircleNotch } from '@phosphor-icons/react/dist/ssr'
@@ -28,7 +28,7 @@ export function WelcomeName() {
   const [busy, setBusy] = useState(false)
   const forwarded = useRef(false)
 
-  const forward = () => {
+  const forward = useCallback(() => {
     if (forwarded.current) return
     forwarded.current = true
     const stashed = popPendingInvite()
@@ -38,13 +38,13 @@ export function WelcomeName() {
     } else {
       router.replace('/journal')
     }
-  }
+  }, [router])
 
   // Anonymous → sign in. Named → nothing to do here.
   useEffect(() => {
     if (status === 'anonymous') router.replace('/login')
     else if (status === 'authenticated' && (user?.display_name ?? '').trim()) forward()
-  }, [status, user, router])
+  }, [status, user, router, forward])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -8,7 +8,7 @@
  * wired — gets its own composed screen, never a dead end.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -38,12 +38,15 @@ export function InviteAccept({ token }: { token: string | null }) {
   // Signed-in visitors go straight to the dashboard with an explanation;
   // anonymous ones keep the explanatory screens below (they have nowhere
   // to be sent yet).
-  const leave = (message: string) => {
-    if (redirected.current) return
-    redirected.current = true
-    toast.info(message)
-    router.replace('/journal')
-  }
+  const leave = useCallback(
+    (message: string) => {
+      if (redirected.current) return
+      redirected.current = true
+      toast.info(message)
+      router.replace('/journal')
+    },
+    [router],
+  )
 
   useEffect(() => {
     if (sessionStatus !== 'authenticated' || !token || redirected.current) return
@@ -53,7 +56,7 @@ export function InviteAccept({ token }: { token: string | null }) {
     } else if (info.isError && !isUnconfigured(info.error)) {
       leave('That invite link no longer works.')
     }
-  }, [info.data, info.isError, info.error, sessionStatus, token, router])
+  }, [info.data, info.isError, info.error, sessionStatus, token, leave])
 
   // Stash usable links so anonymous visitors land back here after auth.
   useEffect(() => {

@@ -17,22 +17,32 @@ export function useDebouncedValue<T>(value: T, delayMs = 300): T {
 }
 
 /**
- * Re-renders on a slow interval while `active`.
+ * A timestamp that advances on a slow interval while `active`.
  *
- * Needed for time filters that are relative to "now" (today / past 7 days /
- * past 30 days): a `useMemo` capturing `Date.now()` is computed once per
- * dependency change, so without a tick a tab left open overnight keeps
- * showing yesterday's window — the query key never changes and nothing
- * refetches.
+ * Needed for time filters relative to "now" (today / past 7 days / past 30
+ * days): a `useMemo` capturing `Date.now()` is computed once per dependency
+ * change, so without a tick a tab left open overnight keeps showing
+ * yesterday's window — the query key never changes, so nothing refetches.
+ *
+ * Returns the timestamp itself (rather than a counter) so callers can pass it
+ * into the computation and have a real dependency to declare.
  */
 export function useMinuteTick(active: boolean, intervalMs = 60_000): number {
-  const [tick, setTick] = useState(0)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
     if (!active) return
-    const id = setInterval(() => setTick((t) => t + 1), intervalMs)
-    return () => clearInterval(id)
+    // Refresh on activation, then on every interval. Both writes happen in
+    // callbacks — a synchronous setState in the effect body would cascade a
+    // render on every activation.
+    const refresh = () => setNowMs(Date.now())
+    const boot = setTimeout(refresh, 0)
+    const id = setInterval(refresh, intervalMs)
+    return () => {
+      clearTimeout(boot)
+      clearInterval(id)
+    }
   }, [active, intervalMs])
 
-  return tick
+  return nowMs
 }

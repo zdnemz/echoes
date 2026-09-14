@@ -93,7 +93,9 @@ export function Workspace() {
   }, [sessionStatus, router])
 
   const notebooks = useNotebooks()
-  const all = notebooks.data?.data ?? []
+  // Memoized: a fresh [] each render would invalidate the memo below on every
+  // render (and it is a dependency of the view-selection memo).
+  const all = useMemo(() => notebooks.data?.data ?? [], [notebooks.data])
 
   // ---- derived view: auto-select the first notebook once loaded, heal
   // stale references (e.g. a deleted notebook). No effect needed.
@@ -101,11 +103,7 @@ export function Workspace() {
     if (chosenView) {
       const needsNotebook =
         chosenView.kind === 'notebook' || chosenView.kind === 'compose' || chosenView.kind === 'entry'
-      if (
-        needsNotebook &&
-        all.length > 0 &&
-        !all.some((nb) => nb.id === (chosenView.kind === 'entry' ? chosenView.notebookId : chosenView.notebookId))
-      ) {
+      if (needsNotebook && all.length > 0 && !all.some((nb) => nb.id === chosenView.notebookId)) {
         return { kind: 'notebook', notebookId: all[0].id }
       }
       return chosenView

@@ -20,7 +20,10 @@ const eslintConfig = [
       '@typescript-eslint/no-unused-disable-directive': 'off',
 
       // React rules
-      'react-hooks/exhaustive-deps': 'off',
+      // Was 'off', which meant no dependency-array bug in this codebase was
+      // ever caught by CI. Now an error: the four existing findings are
+      // fixed, and a new one should fail the build rather than ship.
+      'react-hooks/exhaustive-deps': 'error',
       'react-hooks/purity': 'off',
       'react/no-unescaped-entities': 'off',
       'react/display-name': 'off',
