@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono'
 import { getAuthClient, createUserClient } from './supabase'
 import { Errors } from './errors'
+import { assertUserBudget } from './rate-limit'
 import type { AppEnv } from './types'
 
 export interface AppUser {
@@ -34,6 +35,9 @@ export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   if (error || !data?.user) {
     throw Errors.unauthorized('Invalid or expired session token')
   }
+
+  // Cheap per-user abuse ceiling for every authenticated route.
+  assertUserBudget(c, data.user.id)
 
   c.set('user', { id: data.user.id, email: data.user.email ?? null })
   c.set('userClient', createUserClient(token))

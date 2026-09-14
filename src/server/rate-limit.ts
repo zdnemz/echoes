@@ -269,6 +269,37 @@ export const authRateLimit = credentialRateLimit
 export const emailRateLimit = () => rateLimit({ key: 'email', max: 4, windowMs: 10 * 60_000 })
 
 /**
+ * Generous per-user ceiling for every authenticated route.
+ *
+ * Only the auth surface and one public invite lookup were limited before, so a
+ * single signed-in account could drive unlimited writes and the two expensive
+ * list endpoints (`?count=exact` plus a leading-wildcard `ilike`) as fast as it
+ * could send them. Keyed on the user id, which — unlike an address — cannot be
+ * spoofed and does not collapse a whole NAT behind one bucket.
+ *
+ * The ceiling is deliberately far above real use (a person does not make 240
+ * requests a minute); it exists to bound abuse, not to meter ordinary work.
+ */
+const USER_RULE: RateLimitOptions = { key: 'user', max: 240, windowMs: 60_000 }
+
+/** Throws 429 when this user is over the shared budget. Called by requireAuth. */
+export function assertUserBudget(c: Context, userId: string): void {
+  const now = Date.now()
+  sweep(now)
+  try {
+    consume(`${USER_RULE.key}:${userId}`, USER_RULE, now)
+  } catch (err) {
+    const hits = buckets.get(`${USER_RULE.key}:${userId}`) ?? []
+    const oldest = hits[0]
+    if (oldest !== undefined) {
+      const retryAfterSec = Math.max(1, Math.ceil((oldest + USER_RULE.windowMs - now) / 1000))
+      c.header('retry-after', String(retryAfterSec))
+    }
+    throw err
+  }
+}
+
+/**
  * Unauthenticated invite-link lookup.
  *
  * This is the only route that touches the database with the service-role key
