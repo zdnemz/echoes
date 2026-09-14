@@ -425,7 +425,7 @@ export function registerGroupRoutes(app: App) {
     tags: ['Groups'],
     summary: "The group's journal — shared entries across its notebooks",
     description:
-      'One stream over every notebook linked to the group, newest first, filterable by author, time window, mood, tags and text. The entries RLS policy still decides row by row what you may see (private opt-outs stay invisible).',
+      'One stream over every notebook linked to the group, newest first, filterable by author, time window, mood, tags and text. The entries RLS policy still decides row by row what you may see (private opt-outs stay invisible). List bodies are previews (first 400 chars) — fetch the entry by id for the whole text.',
     security: [bearerAuth],
     middleware: [requireAuth],
     request: { params: GroupIdParam, query: journalQuery },
@@ -447,15 +447,17 @@ export function registerGroupRoutes(app: App) {
     // Group visible at all? (RLS decides; missing row reads as 404.)
     await requireGroupVisible(c.var.userClient, id, 'id')
 
-    // Notebooks linked here (RLS-filtered); empty link set → empty journal.
-    const { data: notebooks, error: nbErr } = await c.var.userClient.from('notebooks').select('id').eq('group_id', id)
-    if (nbErr) throw fromPostgrestError(nbErr)
-    const ids = (notebooks ?? []).map((n) => (n as { id: string }).id)
-    if (ids.length === 0) {
-      return c.json({ data: [], pagination: { page, limit, total: 0 } })
-    }
-
-    const query = c.var.userClient.from('entries').select('*', { count: 'exact' }).in('notebook_id', ids)
+    // One query, not two: the previous version fetched every linked notebook id
+    // first and inlined them into an `in (...)` filter, whose URL grows with
+    // the group (~36 bytes per notebook — a few hundred links break the
+    // request). The inner join pushes that to the database instead.
+    const query = c.var.userClient
+      .from('entries')
+      .select(
+        'id, notebook_id, author_id, title, mood, tags, is_shared, created_at, updated_at, body, notebooks!inner(group_id)',
+        { count: 'exact' },
+      )
+      .eq('notebooks.group_id', id)
     let filtered = query
     if (author_id) filtered = filtered.eq('author_id', author_id)
     if (mood) filtered = filtered.eq('mood', mood)
@@ -476,8 +478,18 @@ export function registerGroupRoutes(app: App) {
       .range(from, from + limit - 1)
     if (error) throw fromPostgrestError(error)
 
+    // The list view renders a 150-char excerpt; body allows 100_000 chars, so
+    // a full page could approach 10 MB. Send a preview — the editor fetches
+    // the whole entry by id on open. Also strip the join artifact.
+    type ListEntry = z.infer<typeof EntrySchema>
+    const rows = ((data ?? []) as Array<ListEntry & { notebooks?: unknown }>).map((row) => {
+      const { notebooks: _joined, ...rest } = row
+      void _joined
+      return { ...rest, body: rest.body.slice(0, 400) }
+    })
+
     return c.json({
-      data: data ?? [],
+      data: rows,
       pagination: { page, limit, total: count ?? 0 },
     })
   })
