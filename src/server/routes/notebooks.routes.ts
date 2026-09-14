@@ -178,8 +178,16 @@ export function registerNotebookRoutes(app: App) {
     if (!before) throw Errors.notFound('Notebook not found (or not visible to you)')
     if (before.owner_id !== c.var.user.id) throw Errors.forbidden('Only the notebook owner can delete it')
 
-    const { error } = await c.var.userClient.from('notebooks').delete().eq('id', id)
+    // Same TOCTOU as entry deletion: a delete matching zero rows is not a
+    // success, so do not report 204.
+    const { data: deleted, error } = await c.var.userClient
+      .from('notebooks')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .maybeSingle()
     if (error) throw fromPostgrestError(error)
+    if (!deleted) throw Errors.notFound('Notebook not found (or not visible to you)')
 
     return c.body(null, 204)
   })

@@ -233,8 +233,17 @@ export function registerEntryRoutes(app: App) {
     if (!before) throw Errors.notFound('Entry not found (or not visible to you)')
     if ((before as EntryRow).author_id !== user.id) throw Errors.forbidden('Only the author can delete an entry')
 
-    const { error } = await c.var.userClient.from('entries').delete().eq('id', id)
+    // The pre-read above narrows the window but does not close it: the row can
+    // be deleted between the two statements. Reporting 204 for a delete that
+    // matched nothing told the client it succeeded when it did not.
+    const { data: deleted, error } = await c.var.userClient
+      .from('entries')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .maybeSingle()
     if (error) throw fromPostgrestError(error)
+    if (!deleted) throw Errors.notFound('Entry not found (or not visible to you)')
 
     return c.body(null, 204)
   })
