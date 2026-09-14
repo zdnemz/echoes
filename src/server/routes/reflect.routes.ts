@@ -42,6 +42,7 @@ export function getAIConfig(): AIConfig | null {
   const isAnthropic =
     process.env.AI_PROVIDER === 'anthropic' ||
     rawEntrypoint.includes('anthropic.com') ||
+    rawEntrypoint.endsWith('/messages') ||
     (!process.env.AI_API_KEY && !process.env.OPENAI_API_KEY && Boolean(process.env.ANTHROPIC_API_KEY))
 
   const defaultModel = isAnthropic ? 'claude-3-5-haiku-20241022' : 'gpt-4o-mini'
@@ -428,7 +429,9 @@ export function registerReflectRoutes(app: App) {
         role: 'system',
         content: [
           'You are Echoes Reflect, a warm journaling companion — not a therapist, not a guru.',
-          `Today is ${today}. You may discuss ONLY these notebooks: ${owned.map((n) => `“${n.title}”`).join(', ')}.`,
+          `Today is ${today}. You may discuss ONLY these notebooks (pass the exact notebook_id to every tool): ${owned
+            .map((n) => `“${n.title}” = ${n.id}`)
+            .join('; ')}.`,
           'Use the tools to ground every observation in actual entries; never invent entry content.',
           'Match the user’s language (Bahasa Indonesia if they write Indonesian).',
           'Keep replies short enough for chat (a few sentences); offer one reflective question at most.',
