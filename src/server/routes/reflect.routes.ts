@@ -153,7 +153,8 @@ function buildTools(client: SupabaseClient, ownedIds: Set<string>): ToolDef[] {
     },
     {
       name: 'mood_stats',
-      description: 'Count entries per mood across the selected notebooks, optionally since an ISO date.',
+      description:
+        'Count entries per mood across the selected notebooks, optionally since an ISO date. Counts say NOTHING about WHEN the entries were written — pair with list_entries when the question is about today or a recent period.',
       parameters: {
         type: 'object',
         properties: { since: { type: 'string', description: 'ISO date, e.g. 2026-08-01' } },
@@ -161,16 +162,18 @@ function buildTools(client: SupabaseClient, ownedIds: Set<string>): ToolDef[] {
       run: async (args) => {
         let query = client
           .from('entries')
-          .select('mood')
+          .select('mood, created_at')
           .in('notebook_id', [...ownedIds])
         if (typeof args.since === 'string' && args.since) query = query.gte('created_at', args.since)
         const { data, error } = await query.limit(500)
         if (error) throw fromPostgrestError(error)
         const counts: Record<string, number> = {}
-        for (const row of (data ?? []) as Array<{ mood: string | null }>) {
+        let latest: string | null = null
+        for (const row of (data ?? []) as Array<{ mood: string | null; created_at: string }>) {
           counts[row.mood ?? 'none'] = (counts[row.mood ?? 'none'] ?? 0) + 1
+          if (!latest || row.created_at > latest) latest = row.created_at
         }
-        return counts
+        return { counts, latest_entry_at: latest }
       },
     },
   ]
