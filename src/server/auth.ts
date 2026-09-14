@@ -37,7 +37,7 @@ export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
 
   // Cheap per-user abuse ceiling for every authenticated route.
-  assertUserBudget(c, data.user.id)
+  await assertUserBudget(c, data.user.id)
 
   c.set('user', { id: data.user.id, email: data.user.email ?? null })
   c.set('userClient', createUserClient(token))
