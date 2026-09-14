@@ -46,32 +46,6 @@ export function getServiceClient(): SupabaseClient | null {
 }
 
 /**
- * Look up auth users by email through the GoTrue admin REST endpoint.
- * (The supabase-js client types don't expose the `search` filter on
- * listUsers in this version, so we call the endpoint directly.)
- * Returns null when the service role is not configured.
- */
-export async function adminFindUserByEmail(email: string): Promise<{ id: string; email: string | null } | null> {
-  const config = getSupabaseConfig()
-  if (!config || !config.serviceRoleKey) return null
-
-  try {
-    const res = await fetch(`${config.url}/auth/v1/admin/users?search=${encodeURIComponent(email)}&perPage=100`, {
-      headers: {
-        apikey: config.serviceRoleKey,
-        Authorization: `Bearer ${config.serviceRoleKey}`,
-      },
-    })
-    if (!res.ok) return null
-    const body = (await res.json()) as { users?: Array<{ id: string; email?: string | null }> }
-    const match = (body.users ?? []).find((u) => (u.email ?? '').toLowerCase() === email.toLowerCase())
-    return match ? { id: match.id, email: match.email ?? null } : null
-  } catch {
-    return null
-  }
-}
-
-/**
  * Per-request RLS-scoped client. All reads/writes through this client are
  * filtered by the row level security policies defined in the SQL migration.
  */

@@ -99,19 +99,3 @@ export function MoodGlyph({ mood, className }: { mood: Mood; className?: ClassVa
     </span>
   )
 }
-
-/** A mood as an inline chip: glyph + label, tinted with the mood color. */
-export function MoodChip({ mood, className }: { mood: Mood; className?: ClassValue }) {
-  const meta = MOOD_META[mood]
-  return (
-    <span
-      className={twMerge(
-        clsx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium', className),
-      )}
-      style={{ background: meta.tint, color: meta.color }}
-    >
-      <MoodGlyph mood={mood} className="h-3.5 w-3.5" />
-      {meta.label}
-    </span>
-  )
-}

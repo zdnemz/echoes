@@ -75,8 +75,6 @@ export const listNotebooks = (params: ListNotebooksParams = {}) => {
 export const createNotebook = (input: CreateNotebookInput) =>
   api<Notebook>('/api/notebooks', { method: 'POST', ...json(input) })
 
-export const getNotebook = (id: string) => api<Notebook>(`/api/notebooks/${id}`)
-
 export const updateNotebook = (id: string, input: UpdateNotebookInput) =>
   api<Notebook>(`/api/notebooks/${id}`, { method: 'PATCH', ...json(input) })
 

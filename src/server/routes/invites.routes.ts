@@ -48,8 +48,6 @@ interface JoinRequestRow {
   created_at: string
 }
 
-const DEFAULT_LINK_EXPIRY_HOURS = 168 // 7 days
-
 /** Build the public accept link for an invite token. */
 export function inviteAcceptUrl(token: string): string {
   return `${getAppUrl()}/invites/accept?token=${encodeURIComponent(token)}`
@@ -134,6 +132,9 @@ export function registerInviteRoutes(app: App) {
     const me = c.var.user.id
 
     const token = newToken()
+    // Omitting expires_in_hours means "never expires". The UI always sends an
+    // explicit value (default 168 = 7 days); this stays the documented default
+    // for API callers.
     const expiresAt =
       expires_in_hours === null || expires_in_hours === undefined
         ? null

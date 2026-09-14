@@ -1,4 +1,3 @@
-import type { Context } from 'hono'
 import { z } from '@hono/zod-openapi'
 
 /**
@@ -50,11 +49,6 @@ export const Errors = {
       'SUPABASE_NOT_CONFIGURED',
       'Supabase credentials are missing. Set SUPABASE_URL and SUPABASE_ANON_KEY in .env',
     ),
-}
-
-/** Helper for handlers: throw this to produce a clean error response. */
-export function jsonError(c: Context, err: ApiError) {
-  return c.json({ error: { code: err.code, message: err.message, details: err.details ?? null } }, err.status as 400)
 }
 
 /** Map a PostgREST error to an ApiError with a sensible status code. */
