@@ -186,6 +186,9 @@ export function useGroupEntries(groupId: string | null, filters: GroupJournalFil
     enabled,
     retry: retryPolicy,
     placeholderData: (prev) => prev,
+    // ponytail: polling pengganti realtime — ganti Supabase Realtime + presence saat tabel read/typing ada.
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   })
 }
 

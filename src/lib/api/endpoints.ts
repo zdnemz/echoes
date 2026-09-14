@@ -177,3 +177,11 @@ export const listJoinRequests = (groupId: string) => api<JoinRequest[]>(`/api/gr
 
 export const decideJoinRequest = (groupId: string, requestId: string, decision: 'approved' | 'denied') =>
   api<JoinRequest>(`/api/groups/${groupId}/requests/${requestId}/${decision}`, { method: 'POST' })
+
+// ----------------------------------------------------------------- realtime (ephemeral)
+
+export const sendTyping = (groupId: string, input: { typing: boolean; name?: string }) =>
+  api<{ ok: boolean }>(`/api/groups/${groupId}/typing`, { method: 'POST', ...json(input) })
+
+export const sendSeen = (groupId: string, entryId: string) =>
+  api<{ ok: boolean }>(`/api/groups/${groupId}/seen`, { method: 'POST', ...json({ entry_id: entryId }) })

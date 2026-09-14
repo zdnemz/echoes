@@ -80,6 +80,7 @@ import {
 } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
 import { useCopy } from '@/hooks/use-copy'
+import { useGroupRealtime } from '@/hooks/use-group-realtime'
 import { useDebouncedValue, useMinuteTick } from '@/hooks/use-debounced-value'
 import { useRovingSelection } from '@/hooks/use-roving-selection'
 import { avatarTone, excerpt, formatDay, formatStamp, initials } from '@/lib/format'
@@ -501,6 +502,22 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
   )
   const quickTarget = myLinkedNotebooks.length === 1 ? myLinkedNotebooks[0] : null
 
+  // Live stream: push on new messages + typing/seen presence.
+  const realtime = useGroupRealtime(group.id)
+  const selfName = user?.display_name || user?.email || 'Someone'
+  const latestId = chatEntries.length > 0 ? chatEntries[chatEntries.length - 1].id : null
+  useEffect(() => {
+    if (latestId && document.visibilityState === 'visible') realtime.sendSeen(latestId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestId, group.id])
+  const myLast = [...chatEntries].reverse().find((e) => e.author_id === user?.id) ?? null
+  const seenBy =
+    myLast === null
+      ? []
+      : realtime.seen
+          .filter((s) => s.entry_id === myLast.id)
+          .map((s) => group.members.find((m) => m.user_id === s.user_id)?.display_name || 'Someone')
+
   const sendQuick = async (e: React.FormEvent) => {
     e.preventDefault()
     const body = quickText.trim()
@@ -574,7 +591,27 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
       {/* Action header bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-display text-lg text-ink">Group Journal</h3>
+          <h3 className="font-display flex items-center gap-2 text-lg text-ink">
+            Group Journal
+            <span
+              title={realtime.status === 'live' ? 'Live — new messages arrive automatically' : 'Connecting…'}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-wide ${
+                realtime.status === 'live' ? 'bg-sage-tint text-sage' : 'bg-paper-deep text-ink-faint'
+              }`}
+            >
+              <span className="relative flex h-1.5 w-1.5">
+                {realtime.status === 'live' && (
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sage opacity-75" />
+                )}
+                <span
+                  className={`relative inline-flex h-1.5 w-1.5 rounded-full ${
+                    realtime.status === 'live' ? 'bg-sage' : 'bg-ink-ghost'
+                  }`}
+                />
+              </span>
+              {realtime.status === 'live' ? 'live' : '…'}
+            </span>
+          </h3>
           <p className="text-[12.5px] text-ink-soft">Entries shared across all notebooks linked to {group.name}.</p>
         </div>
         <Button size="sm" className="press h-9 gap-1.5 shadow-ink" onClick={handleComposeClick}>
@@ -896,11 +933,28 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
 
             {/* Quick composer */}
             <div className="border-t border-line bg-paper-raised/60 px-3 py-3 sm:px-4">
+              {/* typing peers */}
+              <div aria-live="polite" className="min-h-5 px-1 pb-1.5">
+                {realtime.typing.length > 0 && (
+                  <p className="flex items-center gap-1.5 text-[11.5px] text-ink-faint">
+                    <span className="flex gap-0.5" aria-hidden="true">
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-ink-faint [animation-delay:-0.2s]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-ink-faint [animation-delay:-0.1s]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-ink-faint" />
+                    </span>
+                    {realtime.typing.map((t) => t.name).join(', ')} {realtime.typing.length === 1 ? 'is' : 'are'}{' '}
+                    typing…
+                  </p>
+                )}
+              </div>
               {quickTarget ? (
                 <form onSubmit={sendQuick} className="flex items-end gap-2">
                   <input
                     value={quickText}
-                    onChange={(e) => setQuickText(e.target.value)}
+                    onChange={(e) => {
+                      setQuickText(e.target.value)
+                      if (e.target.value.trim()) realtime.sendTyping(selfName)
+                    }}
                     placeholder={`Message ${group.name}… (Enter to send)`}
                     aria-label={`Message ${group.name}`}
                     className="min-h-10 max-h-28 flex-1 rounded-xl border border-line bg-paper px-3.5 py-2.5 text-[13.5px] text-ink placeholder:text-ink-faint focus:border-clay-soft focus:outline-none focus:ring-2 focus:ring-clay-soft/40"
@@ -925,7 +979,9 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
                 </Button>
               )}
               <p className="mt-1.5 text-center font-mono text-[10px] text-ink-faint">
-                {quickTarget ? `Posting to ${quickTarget.title}.` : 'Choose a notebook to post from.'}
+                {quickTarget
+                  ? `Posting to ${quickTarget.title} · live${seenBy.length > 0 ? ` · seen by ${seenBy.join(', ')}` : ''}.`
+                  : 'Choose a notebook to post from.'}
               </p>
             </div>
           </div>

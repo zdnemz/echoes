@@ -8,6 +8,7 @@ import { registerNotebookRoutes } from './routes/notebooks.routes'
 import { registerEntryRoutes } from './routes/entries.routes'
 import { registerSearchRoutes } from './routes/search.routes'
 import { registerGroupRoutes } from './routes/groups.routes'
+import { registerRealtimeRoutes } from './routes/realtime.routes'
 import { registerInviteRoutes } from './routes/invites.routes'
 import { registerHealthRoutes } from './routes/health.routes'
 
@@ -67,6 +68,7 @@ export function createApp(): OpenAPIHono<AppEnv> {
   registerEntryRoutes(app)
   registerSearchRoutes(app)
   registerGroupRoutes(app)
+  registerRealtimeRoutes(app)
   registerInviteRoutes(app)
 
   // ---------------------------------------------------------------- OpenAPI docs (dev only)
