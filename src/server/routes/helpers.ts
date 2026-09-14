@@ -38,7 +38,7 @@ export function errorResponses(
     429: 'Rate limit exceeded (per-IP sliding window on auth endpoints)',
     500: 'Unexpected server error',
     502: 'Upstream auth provider unreachable',
-    503: 'Supabase is not configured on this deployment',
+    503: 'Supabase is not configured on this deployment, or the service role key required by this route is missing',
   }
   return Object.fromEntries(
     codes.map((code) => [
