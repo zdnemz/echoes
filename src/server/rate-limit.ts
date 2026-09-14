@@ -182,17 +182,49 @@ async function bodyEmail(c: Context): Promise<string | null> {
 }
 
 /**
- * Credential endpoints (login, signup) are limited on two independent
- * dimensions.
+ * Record one hit against a bucket without enforcing anything.
+ * Used after a request finishes, to count only the attempts that matter.
+ */
+function record(bucket: string, now: number, windowMs: number): void {
+  const hits = (buckets.get(bucket) ?? []).filter((t) => t > now - windowMs)
+  hits.push(now)
+  buckets.set(bucket, hits)
+}
+
+/** How many hits a bucket holds inside its window. */
+function count(bucket: string, now: number, windowMs: number): number {
+  return (buckets.get(bucket) ?? []).filter((t) => t > now - windowMs).length
+}
+
+interface CredentialRule {
+  key: string
+  max: number
+  windowMs: number
+}
+
+function tooMany(options: CredentialRule, remainingSec: number): ApiError {
+  return new ApiError(429, 'RATE_LIMITED', `Too many requests — try again in ${remainingSec}s`, {
+    retry_after: [`${remainingSec}s`],
+  })
+}
+
+/**
+ * Credential endpoints (login, signup) limited on two independent dimensions.
  *
  * IP alone is not enough in either direction: credential stuffing arrives
  * from many IPs aimed at one account, while a shared NAT puts many accounts
- * behind one IP. Adding a per-account bucket means brute force is bounded
- * even when the caller can spoof or hide their address.
+ * behind one IP. The per-account bucket bounds brute force even when the
+ * caller can spoof or hide their address.
+ *
+ * Only *failed* attempts are charged. Charging every request would lock a
+ * legitimate user out after five ordinary sign-ins inside the window — a
+ * limiter that punishes correct use is worse than none. The IP dimension
+ * still charges every request (cheap DoS protection), while the account
+ * dimension is charged from the response status.
  */
 export function credentialRateLimit(): MiddlewareHandler<AppEnv> {
-  const ipRule: RateLimitOptions = { key: 'auth', max: 12, windowMs: 5 * 60_000 }
-  const accountRule: RateLimitOptions = { key: 'auth-account', max: 5, windowMs: 15 * 60_000 }
+  const ipRule: CredentialRule = { key: 'auth', max: 12, windowMs: 5 * 60_000 }
+  const accountRule: CredentialRule = { key: 'auth-account', max: 5, windowMs: 15 * 60_000 }
 
   return async (c, next) => {
     const now = Date.now()
@@ -207,14 +239,25 @@ export function credentialRateLimit(): MiddlewareHandler<AppEnv> {
     }
 
     const email = await bodyEmail(c)
-    if (email) {
-      // Hash: the bucket store is in memory, but keeping plaintext identifiers
-      // out of it avoids an email address lingering in a heap dump.
-      const digest = createHash('sha256').update(email).digest('hex').slice(0, 32)
-      consume(`${accountRule.key}:${digest}`, accountRule, now)
+    // Hash: keeps plaintext identifiers out of the in-memory bucket store.
+    const digest = email ? createHash('sha256').update(email).digest('hex').slice(0, 32) : null
+    const accountBucket = digest ? `${accountRule.key}:${digest}` : null
+
+    // Refuse before doing work if this account is already over budget.
+    if (accountBucket) {
+      const failures = count(accountBucket, now, accountRule.windowMs)
+      if (failures >= accountRule.max) {
+        const oldest = (buckets.get(accountBucket) ?? [])[0] ?? now
+        const retryAfterSec = Math.max(1, Math.ceil((oldest + accountRule.windowMs - now) / 1000))
+        throw tooMany(accountRule, retryAfterSec)
+      }
     }
 
     await next()
+
+    // Charge the account only for rejected credentials (4xx), so a correct
+    // password never counts against the user.
+    if (accountBucket && c.res.status >= 400) record(accountBucket, Date.now(), accountRule.windowMs)
   }
 }
 
