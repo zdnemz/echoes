@@ -8,7 +8,15 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { BookOpen, GearSix, LinkSimple, MagnifyingGlass, Plus, UsersThree } from '@phosphor-icons/react/dist/ssr'
+import {
+  BookOpen,
+  GearSix,
+  LinkSimple,
+  MagnifyingGlass,
+  Plus,
+  Sparkle,
+  UsersThree,
+} from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -335,8 +343,25 @@ export function Rail({
         </p>
       )}
 
-      {/* ------------------------------------------------ settings */}
-      <div className="mt-6 border-t border-line pt-3">
+      {/* ------------------------------------------------ reflect + settings */}
+      <div className="mt-6 space-y-0.5 border-t border-line pt-3">
+        <button
+          type="button"
+          onClick={() => onNavigate({ kind: 'reflect' })}
+          aria-current={view?.kind === 'reflect' ? 'page' : undefined}
+          className={`press relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[13.5px] transition-colors ${
+            view?.kind === 'reflect' ? 'bg-paper-deep text-ink' : 'text-ink-soft hover:bg-paper-deep/60 hover:text-ink'
+          }`}
+        >
+          {view?.kind === 'reflect' && (
+            <span
+              aria-hidden="true"
+              className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-clay"
+            />
+          )}
+          <Sparkle weight="regular" className="h-4 w-4 shrink-0 text-ink-faint" />
+          <span className="min-w-0 flex-1 truncate">Reflect</span>
+        </button>
         <button
           type="button"
           onClick={() => onNavigate({ kind: 'settings' })}
