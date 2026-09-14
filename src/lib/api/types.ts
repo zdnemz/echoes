@@ -109,6 +109,7 @@ export interface Group {
   auto_accept: boolean
   my_role: GroupRole
   member_count: number
+  webhook_url?: string | null
 }
 
 export interface GroupMember {

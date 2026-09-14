@@ -106,6 +106,25 @@ function SharingPanel({ group }: { group: Group }) {
 
   const [expiry, setExpiry] = useState('168')
   const [error, setError] = useState<string | null>(null)
+  const [webhookDraft, setWebhookDraft] = useState<string | null>(null)
+  const webhookUrl = webhookDraft ?? (group.webhook_url || '')
+
+  const saveWebhook = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    const trimmed = webhookUrl.trim()
+    try {
+      await update.mutateAsync({
+        id: group.id,
+        webhook_url: trimmed || null,
+      })
+      setWebhookDraft(null)
+      toast.success(trimmed ? 'Webhook URL saved.' : 'Webhook removed.')
+    } catch (err) {
+      fail(err, "Couldn't save webhook URL.")
+    }
+  }
+
   // Only a hash is stored server-side, so a freshly minted link is shown
   // exactly once. Hold the one we just created; it disappears on reload.
   const [freshUrl, setFreshUrl] = useState<string | null>(null)
@@ -373,6 +392,56 @@ function SharingPanel({ group }: { group: Group }) {
             ))}
           </ul>
         )}
+      </div>
+
+      {/* notification webhook */}
+      <div className="border-t border-line pt-6">
+        <div>
+          <p className="text-[13.5px] font-medium text-ink">Notification webhook</p>
+          <p className="mt-0.5 text-[12.5px] text-ink-faint">
+            Receive event notifications in Discord, Slack, or any webhook URL when users ask to join, join, leave, or
+            read messages.
+          </p>
+        </div>
+        <form onSubmit={saveWebhook} className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <Input
+            type="url"
+            value={webhookUrl}
+            onChange={(e) => setWebhookDraft(e.target.value)}
+            placeholder="https://discord.com/api/webhooks/..."
+            className="h-10 flex-1 bg-paper font-mono text-[12px]"
+          />
+          <div className="flex gap-2">
+            <Button
+              type="submit"
+              size="sm"
+              disabled={update.isPending || webhookUrl === (group.webhook_url || '')}
+              className="press h-10 shadow-ink"
+            >
+              {update.isPending ? 'Saving…' : 'Save webhook'}
+            </Button>
+            {group.webhook_url && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={update.isPending}
+                onClick={async () => {
+                  setWebhookDraft(null)
+                  try {
+                    await update.mutateAsync({ id: group.id, webhook_url: null })
+                    toast.success('Webhook removed.')
+                  } catch (err) {
+                    fail(err, "Couldn't remove webhook.")
+                  }
+                }}
+                className="press h-10 text-ember hover:bg-ember-tint hover:text-ember"
+              >
+                Remove
+              </Button>
+            )}
+          </div>
+        </form>
       </div>
     </div>
   )

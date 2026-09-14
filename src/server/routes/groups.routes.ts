@@ -15,6 +15,7 @@ import { escapePostgrestValue } from './search.routes'
 import { Errors, fromPostgrestError } from '../errors'
 import { requireAuth } from '../auth'
 import { bearerAuth, errorResponses, jsonBody, requireGroupOwner, requireGroupVisible, type App } from './helpers'
+import { sendGroupWebhook } from '../webhook'
 
 const GroupIdParam = z.object({
   id: UuidSchema.openapi({ param: { name: 'id', in: 'path' } }),
@@ -33,6 +34,7 @@ interface GroupRow {
   name: string
   created_at: string
   auto_accept: boolean
+  webhook_url?: string | null
 }
 
 interface MemberRow {
@@ -44,6 +46,7 @@ interface MemberRow {
 
 function toGroupView(group: GroupRow, members: MemberRow[], me: string) {
   const mine = members.find((m) => m.user_id === me)
+  const isOwner = group.owner_id === me || mine?.role === 'owner'
   return {
     id: group.id,
     owner_id: group.owner_id,
@@ -52,6 +55,7 @@ function toGroupView(group: GroupRow, members: MemberRow[], me: string) {
     auto_accept: group.auto_accept ?? false,
     my_role: (mine?.role as Role) ?? 'member',
     member_count: members.length,
+    webhook_url: isOwner ? (group.webhook_url ?? null) : null,
   }
 }
 
@@ -88,7 +92,7 @@ export function registerGroupRoutes(app: App) {
 
     const { data: groups, error } = await c.var.userClient
       .from('groups')
-      .select('id, owner_id, name, created_at, auto_accept, group_members(role, user_id)')
+      .select('id, owner_id, name, created_at, auto_accept, webhook_url, group_members(role, user_id)')
       .order('created_at', { ascending: true })
     if (error) throw fromPostgrestError(error)
 
@@ -129,7 +133,7 @@ export function registerGroupRoutes(app: App) {
     const { data: group, error } = await c.var.userClient
       .from('groups')
       .insert({ owner_id: me, name })
-      .select('id, owner_id, name, created_at, auto_accept')
+      .select('id, owner_id, name, created_at, auto_accept, webhook_url')
       .single()
     if (error) throw fromPostgrestError(error)
     if (!group) throw Errors.badRequest('Failed to create group')
@@ -187,7 +191,7 @@ export function registerGroupRoutes(app: App) {
     const { data, error } = await c.var.userClient
       .from('groups')
       .select(
-        'id, owner_id, name, created_at, auto_accept, group_members(role, joined_at, user_id, profiles(display_name))',
+        'id, owner_id, name, created_at, auto_accept, webhook_url, group_members(role, joined_at, user_id, profiles(display_name))',
       )
       .eq('id', id)
       .maybeSingle()
@@ -221,11 +225,12 @@ export function registerGroupRoutes(app: App) {
   })
   app.openapi(update, async (c) => {
     const { id } = c.req.valid('param')
-    const { name, auto_accept } = c.req.valid('json')
+    const { name, auto_accept, webhook_url } = c.req.valid('json')
 
     const patch: Record<string, unknown> = {}
     if (name !== undefined) patch.name = name
     if (auto_accept !== undefined) patch.auto_accept = auto_accept
+    if (webhook_url !== undefined) patch.webhook_url = webhook_url
 
     // Both fields are optional, so `{}` validates. PostgREST treats an empty
     // patch as a no-op and returns no row, which used to surface as a
@@ -236,7 +241,7 @@ export function registerGroupRoutes(app: App) {
       .from('groups')
       .update(patch)
       .eq('id', id)
-      .select('id, owner_id, name, created_at, auto_accept')
+      .select('id, owner_id, name, created_at, auto_accept, webhook_url')
       .maybeSingle()
     if (error) throw fromPostgrestError(error)
     if (!data) throw Errors.notFound('Group not found, or you are not its owner')
@@ -358,6 +363,8 @@ export function registerGroupRoutes(app: App) {
     if (error) throw fromPostgrestError(error)
     if (!data) throw Errors.notFound('Membership not found')
 
+    void sendGroupWebhook(id, 'group.member_left', { id: userId })
+
     return c.body(null, 204)
   })
 
@@ -394,6 +401,11 @@ export function registerGroupRoutes(app: App) {
       .maybeSingle()
     if (error) throw fromPostgrestError(error)
     if (!data) throw Errors.notFound('You are not a member of this group')
+
+    void sendGroupWebhook(id, 'group.member_left', {
+      id: me,
+      email: c.var.user.email,
+    })
 
     return c.body(null, 204)
   })

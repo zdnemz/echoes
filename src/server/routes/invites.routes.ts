@@ -14,6 +14,7 @@ import { getServiceClient } from '../supabase'
 import { getAppUrl, getSupabaseConfig } from '../env'
 import { bearerAuth, errorResponses, jsonBody, requireGroupOwner, requireServiceRoleConfig, type App } from './helpers'
 import { inviteLinkRateLimit } from '../rate-limit'
+import { sendGroupWebhook } from '../webhook'
 
 const GroupIdParam = z.object({
   id: UuidSchema.openapi({ param: { name: 'id', in: 'path' } }),
@@ -40,6 +41,7 @@ interface GroupLinkRow {
   /** sha256 of the live token — the plaintext is never stored. */
   invite_token_hash: string | null
   invite_expires_at: string | null
+  webhook_url: string | null
 }
 
 interface JoinRequestRow {
@@ -277,7 +279,7 @@ export function registerInviteRoutes(app: App) {
 
     const { data, error } = await service
       .from('groups')
-      .select('id, name, auto_accept, invite_token_hash, invite_expires_at')
+      .select('id, name, auto_accept, invite_token_hash, invite_expires_at, webhook_url')
       .eq('invite_token_hash', hashToken(token))
       .maybeSingle()
     if (error) throw fromPostgrestError(error)
@@ -336,6 +338,10 @@ export function registerInviteRoutes(app: App) {
         .from('group_members')
         .insert({ group_id: group.id, user_id: me.id, role: 'member' })
       if (joinErr) throw fromPostgrestError(joinErr)
+      void sendGroupWebhook({ id: group.id, name: group.name, webhook_url: group.webhook_url }, 'group.member_joined', {
+        id: me.id,
+        email: me.email,
+      })
       return c.json({
         status: 'joined' as const,
         group_id: group.id,
@@ -346,6 +352,10 @@ export function registerInviteRoutes(app: App) {
 
     const { error: reqErr } = await service.from('group_join_requests').insert({ group_id: group.id, user_id: me.id })
     if (reqErr) throw fromPostgrestError(reqErr)
+    void sendGroupWebhook({ id: group.id, name: group.name, webhook_url: group.webhook_url }, 'group.join_requested', {
+      id: me.id,
+      email: me.email,
+    })
     return c.json({
       status: 'requested' as const,
       group_id: group.id,
@@ -460,10 +470,10 @@ export function registerInviteRoutes(app: App) {
       const { id, requestId } = c.req.valid('param')
       const me = c.var.user.id
 
-      await requireGroupOwner(c.var.userClient, id, me, {
-        select: 'id, owner_id, name',
+      const ownerGroup = (await requireGroupOwner(c.var.userClient, id, me, {
+        select: 'id, owner_id, name, webhook_url',
         message: 'Only the group owner reviews join requests',
-      })
+      })) as unknown as { id: string; owner_id: string; name: string; webhook_url?: string | null }
 
       requireServiceRoleConfig()
       const service = getServiceClient()!
@@ -488,6 +498,18 @@ export function registerInviteRoutes(app: App) {
         // Already a member through another path (e.g. second link): still
         // consume the request instead of stranding it.
         if (joinErr && joinErr.code !== '23505') throw fromPostgrestError(joinErr)
+
+        const { data: requesterProfile } = await service
+          .from('profiles')
+          .select('display_name')
+          .eq('id', row.user_id)
+          .maybeSingle()
+
+        void sendGroupWebhook(
+          { id: ownerGroup.id, name: ownerGroup.name, webhook_url: ownerGroup.webhook_url },
+          'group.member_joined',
+          { id: row.user_id, display_name: requesterProfile?.display_name },
+        )
       }
 
       const { data: updated, error: updateErr } = await service

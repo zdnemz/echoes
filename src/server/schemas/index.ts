@@ -225,6 +225,12 @@ export const GroupSchema = z
       .openapi({ description: 'Whether invite-link visitors join instantly or request approval' }),
     my_role: z.enum(['owner', 'member']).openapi({ description: 'Your role in this group' }),
     member_count: z.number().int().openapi({ example: 3 }),
+    webhook_url: z
+      .string()
+      .url()
+      .nullable()
+      .optional()
+      .openapi({ example: 'https://discord.com/api/webhooks/123/xyz', description: 'Notification webhook URL' }),
   })
   .openapi('Group')
 
@@ -241,6 +247,14 @@ export const UpdateGroupSchema = z
       example: false,
       description: 'When true, invite-link visitors join instantly; when false they file a join request for approval',
     }),
+    webhook_url: z
+      .union([z.string().url(), z.literal(''), z.null()])
+      .optional()
+      .transform((v) => (v === '' ? null : v))
+      .openapi({
+        example: 'https://discord.com/api/webhooks/123/xyz',
+        description: 'Webhook URL for notifications, or null/empty to disable',
+      }),
   })
   .strict()
 

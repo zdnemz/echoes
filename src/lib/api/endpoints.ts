@@ -147,7 +147,7 @@ export const createGroup = (name: string) => api<Group>('/api/groups', { method:
 
 export const getGroup = (id: string) => api<GroupDetail>(`/api/groups/${id}`)
 
-export const updateGroup = (id: string, input: { name?: string; auto_accept?: boolean }) =>
+export const updateGroup = (id: string, input: { name?: string; auto_accept?: boolean; webhook_url?: string | null }) =>
   api<GroupDetail>(`/api/groups/${id}`, { method: 'PATCH', ...json(input) })
 
 export const deleteGroup = (id: string) => api<void>(`/api/groups/${id}`, { method: 'DELETE' })

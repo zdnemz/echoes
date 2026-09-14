@@ -242,7 +242,8 @@ export function useCreateGroup() {
 export function useUpdateGroup() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: string; name?: string; auto_accept?: boolean }) => api.updateGroup(id, input),
+    mutationFn: ({ id, ...input }: { id: string; name?: string; auto_accept?: boolean; webhook_url?: string | null }) =>
+      api.updateGroup(id, input),
     onSuccess: (g: GroupDetail) => {
       qc.invalidateQueries({ queryKey: ['groups'] })
       qc.invalidateQueries({ queryKey: ['group', g.id] })
