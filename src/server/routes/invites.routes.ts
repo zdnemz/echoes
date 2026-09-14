@@ -398,28 +398,33 @@ export function registerInviteRoutes(app: App) {
     if (profilesErr) throw fromPostgrestError(profilesErr)
     const names = new Map((profiles ?? []).map((p) => [p.id, p.display_name as string | null]))
 
-    // Emails come from Auth (admin API); best-effort, never blocking.
+    // Emails come from Auth (admin API); best-effort, never blocking. One
+    // paginated list call, matched in memory — the previous code fanned out
+    // one request per requester with unbounded concurrency.
     const cfg = getSupabaseConfig()
     const emails = new Map<string, string | null>()
-    await Promise.all(
-      rows.map(async (r) => {
-        if (!cfg?.serviceRoleKey) return
+    if (cfg?.serviceRoleKey && rows.length > 0) {
+      const wanted = new Set(rows.map((r) => r.user_id))
+      const headers = { apikey: cfg.serviceRoleKey, Authorization: `Bearer ${cfg.serviceRoleKey}` }
+      let page = 1
+      while (wanted.size > 0) {
+        let users: Array<{ id: string; email?: string | null }> = []
         try {
-          const res = await fetch(`${cfg.url}/auth/v1/admin/users/${r.user_id}`, {
-            headers: {
-              apikey: cfg.serviceRoleKey,
-              Authorization: `Bearer ${cfg.serviceRoleKey}`,
-            },
-          })
-          if (res.ok) {
-            const u = (await res.json()) as { email?: string | null }
-            emails.set(r.user_id, u.email ?? null)
-          }
+          const res = await fetch(`${cfg.url}/auth/v1/admin/users?page=${page}&per_page=100`, { headers })
+          if (!res.ok) break
+          const body = (await res.json()) as { users?: Array<{ id: string; email?: string | null }> }
+          users = body.users ?? []
         } catch {
-          /* cosmetic only */
+          break
         }
-      }),
-    )
+        if (users.length === 0) break
+        for (const u of users) {
+          if (wanted.delete(u.id)) emails.set(u.id, u.email ?? null)
+        }
+        if (users.length < 100) break
+        page += 1
+      }
+    }
 
     return c.json(
       rows.map((r) => ({
