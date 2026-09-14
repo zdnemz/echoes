@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MOODS, MOOD_META, MoodGlyph, type Mood } from '@/components/mood/glyphs'
+import { useCopy } from '@/hooks/use-copy'
 import { useSession } from '@/lib/auth/session'
 import { getDefaultMood, setDefaultMood } from '@/lib/prefs'
 import { useHealth } from '@/lib/api/hooks'
@@ -57,7 +58,9 @@ export function SettingsView() {
   const [defaultMood, setDefaultMoodState] = useState<Mood | null>(() => getDefaultMood())
 
   // ---- misc
-  const [copied, setCopied] = useState(false)
+  const { copied, copy } = useCopy({
+    onError: () => toast.error("Couldn't copy — select the text and copy it manually."),
+  })
 
   if (!user) return null
   const draftName = name ?? user.display_name ?? ''
@@ -94,16 +97,6 @@ export function SettingsView() {
       toast.error(err instanceof Error ? err.message : "Couldn't update the password.")
     } finally {
       setSavingPw(false)
-    }
-  }
-
-  const copyId = async () => {
-    try {
-      await navigator.clipboard.writeText(user.id)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1600)
-    } catch {
-      /* clipboard unavailable */
     }
   }
 
@@ -163,7 +156,7 @@ export function SettingsView() {
               type="button"
               variant="outline"
               size="icon"
-              onClick={copyId}
+              onClick={() => copy(user.id)}
               aria-label="Copy user id"
               className="press h-8 w-8 shrink-0"
             >

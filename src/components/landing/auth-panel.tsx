@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { UnconfiguredNotice } from '@/components/unconfigured'
+import { useCopy } from '@/hooks/use-copy'
 import { useSession } from '@/lib/auth/session'
 import { isUnconfigured } from '@/lib/api/client'
 import { startGoogleOAuth } from '@/lib/auth/oauth'
@@ -98,7 +99,9 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
 
   const [magicEmail, setMagicEmail] = useState('')
   const [magicSent, setMagicSent] = useState<{ message: string; dev_link: string | null } | null>(null)
-  const [copied, setCopied] = useState(false)
+  const { copied, copy } = useCopy({
+    onError: () => toast.error("Couldn't copy — select the link and copy it manually."),
+  })
   const [oauthBusy, setOauthBusy] = useState(false)
   const [oauthError, setOauthError] = useState<string | null>(null)
 
@@ -209,15 +212,9 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
     }
   }
 
-  const copyDevLink = async () => {
+  const copyDevLink = () => {
     if (!magicSent?.dev_link) return
-    try {
-      await navigator.clipboard.writeText(magicSent.dev_link)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1600)
-    } catch {
-      /* clipboard unavailable */
-    }
+    void copy(magicSent.dev_link)
   }
 
   return (

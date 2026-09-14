@@ -9,7 +9,7 @@
  *  - Sharing (owner only): invite link rotation, auto-accept switch, request queue.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
   ArrowClockwise,
@@ -76,6 +76,7 @@ import {
   useUpdateNotebook,
 } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
+import { useCopy } from '@/hooks/use-copy'
 import { useDebouncedValue, useMinuteTick } from '@/hooks/use-debounced-value'
 import { avatarTone, formatDay, initials } from '@/lib/format'
 import type { Group, GroupDetail } from '@/lib/api/types'
@@ -99,20 +100,13 @@ function SharingPanel({ group }: { group: Group }) {
   const decide = useDecideJoinRequest()
 
   const [expiry, setExpiry] = useState('168')
-  const [copied, setCopied] = useState(false)
+  const { copied, copy } = useCopy({
+    onError: () => setError("Couldn't copy — select the link and copy it manually."),
+  })
   const [error, setError] = useState<string | null>(null)
   // Only a hash is stored server-side, so a freshly minted link is shown
   // exactly once. Hold the one we just created; it disappears on reload.
   const [freshUrl, setFreshUrl] = useState<string | null>(null)
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(
-    () => () => {
-      if (copyTimer.current) clearTimeout(copyTimer.current)
-    },
-    [],
-  )
-
   const fail = (err: unknown, fallback: string) => {
     if (isUnconfigured(err)) setError("The data layer isn't connected on this deployment.")
     else setError(err instanceof Error ? err.message : fallback)
@@ -132,17 +126,6 @@ function SharingPanel({ group }: { group: Group }) {
   }
 
   const absoluteUrl = (url: string) => (url.startsWith('http') ? url : window.location.origin + url)
-
-  const copyLink = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(absoluteUrl(url))
-      setCopied(true)
-      if (copyTimer.current) clearTimeout(copyTimer.current)
-      copyTimer.current = setTimeout(() => setCopied(false), 1600)
-    } catch {
-      setError("Couldn't copy — select the link and copy it manually.")
-    }
-  }
 
   const flipAutoAccept = async () => {
     setError(null)
@@ -204,7 +187,7 @@ function SharingPanel({ group }: { group: Group }) {
                 variant="outline"
                 size="icon"
                 className="press h-9 w-9 shrink-0 border-line"
-                onClick={() => copyLink(freshUrl)}
+                onClick={() => void copy(absoluteUrl(freshUrl))}
                 aria-label="Copy invite link"
               >
                 {copied ? <Check weight="bold" className="h-3.5 w-3.5 text-sage" /> : <Copy className="h-3.5 w-3.5" />}
