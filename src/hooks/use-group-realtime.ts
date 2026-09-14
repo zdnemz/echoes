@@ -79,6 +79,12 @@ export function useGroupRealtime(groupId: string | null) {
             else if (event === 'entries') {
               setStatus('live')
               void qc.invalidateQueries({ queryKey: ['group-entries', groupId] })
+            } else if (event === 'members') {
+              setStatus('live')
+              void qc.invalidateQueries({ queryKey: ['group', groupId] })
+              void qc.invalidateQueries({ queryKey: ['group-members', groupId] })
+              void qc.invalidateQueries({ queryKey: ['groups'] })
+              void qc.invalidateQueries({ queryKey: ['join-requests', groupId] })
             } else if (event === 'presence') {
               try {
                 const p = JSON.parse(data) as { typing: TypingPeer[]; seen: SeenPeer[] }

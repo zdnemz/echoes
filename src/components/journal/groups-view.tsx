@@ -17,6 +17,7 @@ import {
   BookOpen,
   CalendarBlank,
   Check,
+  Checks,
   CircleNotch,
   Clock,
   Copy,
@@ -473,7 +474,15 @@ function getTimeBounds(preset: TimePreset, customSince: string, customUntil: str
   return { since: undefined, until: undefined }
 }
 
-function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate: (v: View) => void }) {
+function GroupJournalTab({
+  group,
+  onNavigate,
+  realtime,
+}: {
+  group: GroupDetail
+  onNavigate: (v: View) => void
+  realtime: ReturnType<typeof useGroupRealtime>
+}) {
   const { user } = useSession()
   const notebooks = useNotebooks()
   const createNotebook = useCreateNotebook()
@@ -553,6 +562,25 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
     return m?.display_name || m?.email || 'a member'
   }
 
+  const entryIndexMap = useMemo(() => {
+    const map = new Map<string, number>()
+    chatEntries.forEach((e, idx) => map.set(e.id, idx))
+    return map
+  }, [chatEntries])
+
+  // Get members who have seen this entry (or any subsequent entry in the chat)
+  const getEntryReaders = (entryId: string) => {
+    const currentIdx = entryIndexMap.get(entryId)
+    if (currentIdx === undefined) return []
+    return group.members.filter((m) => {
+      if (m.user_id === user?.id) return false
+      const peerSeen = realtime.seen.find((s) => s.user_id === m.user_id)
+      if (!peerSeen) return false
+      const seenIdx = entryIndexMap.get(peerSeen.entry_id)
+      return seenIdx !== undefined && seenIdx >= currentIdx
+    })
+  }
+
   // Notebooks linked to this group that the current user owns
   const myLinkedNotebooks = useMemo(
     () => (notebooks.data?.data ?? []).filter((nb) => nb.group_id === group.id && nb.owner_id === user?.id),
@@ -572,8 +600,7 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
   )
   const quickTarget = myLinkedNotebooks.length === 1 ? myLinkedNotebooks[0] : null
 
-  // Live stream: push on new messages + typing/seen presence.
-  const realtime = useGroupRealtime(group.id)
+  // Live stream: push on new messages + typing/seen presence (provided by GroupsView).
   const selfName = user?.display_name || user?.email || 'Someone'
   const latestId = chatEntries.length > 0 ? chatEntries[chatEntries.length - 1].id : null
   useEffect(() => {
@@ -1039,7 +1066,29 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
                               #{t}
                             </span>
                           ))}
-                          <span className="ml-auto font-mono">{formatStamp(entry.created_at)}</span>
+                          <span className="ml-auto inline-flex items-center gap-1 font-mono">
+                            <span>{formatStamp(entry.created_at)}</span>
+                            {mine &&
+                              (() => {
+                                const readers = getEntryReaders(entry.id)
+                                const names = readers.map((r) => r.display_name || r.email || 'Someone').join(', ')
+                                return readers.length > 0 ? (
+                                  <span
+                                    className="inline-flex items-center gap-0.5 text-sky-300 font-sans text-[9.5px]"
+                                    title={`Dibaca oleh: ${names}`}
+                                  >
+                                    <Checks weight="bold" className="h-3.5 w-3.5" />
+                                    <span>
+                                      {readers.length === 1 ? readers[0].display_name || '1' : readers.length}
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center text-paper/40" title="Terkirim">
+                                    <Checks weight="regular" className="h-3.5 w-3.5" />
+                                  </span>
+                                )
+                              })()}
+                          </span>
                         </span>
                       </button>
                     </div>
@@ -1297,6 +1346,7 @@ export function GroupsView({
   const removeMember = useRemoveMember()
   const leave = useLeaveGroup()
   const removeGroup = useDeleteGroup()
+  const realtime = useGroupRealtime(selectedGroupId)
 
   // The tab choice is remembered *with the group it was made for*, so
   // switching groups falls back to the default without a render-phase setState
@@ -1614,7 +1664,9 @@ export function GroupsView({
                 aria-labelledby={`group-tab-${activeTab}`}
                 tabIndex={0}
               >
-                {activeTab === 'journal' && <GroupJournalTab group={group} onNavigate={onNavigate} />}
+                {activeTab === 'journal' && (
+                  <GroupJournalTab group={group} onNavigate={onNavigate} realtime={realtime} />
+                )}
 
                 {activeTab === 'members' && (
                   <section aria-label="Members">

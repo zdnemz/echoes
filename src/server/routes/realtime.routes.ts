@@ -3,6 +3,7 @@ import { UuidSchema } from '../schemas'
 import { requireAuth } from '../auth'
 import { fromPostgrestError } from '../errors'
 import { requireGroupVisible, type App } from './helpers'
+import { sendSeenWebhookThrottled } from '../webhook'
 
 /**
  * Group realtime — Server-Sent Events push, no extra infrastructure.
@@ -76,6 +77,26 @@ async function journalVersion(userClient: Parameters<typeof requireGroupVisible>
   return `${count ?? 0}:${rows[0]?.updated_at ?? 'none'}`
 }
 
+/** Member count + latest joined timestamp + pending join requests count. */
+async function membersVersion(userClient: Parameters<typeof requireGroupVisible>[0], groupId: string) {
+  const [{ count: memberCount, data: latestMember, error: memberErr }, { count: pendingCount }] = await Promise.all([
+    userClient
+      .from('group_members')
+      .select('joined_at', { count: 'exact' })
+      .eq('group_id', groupId)
+      .order('joined_at', { ascending: false })
+      .limit(1),
+    userClient
+      .from('group_join_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('group_id', groupId)
+      .eq('status', 'pending'),
+  ])
+  if (memberErr) throw fromPostgrestError(memberErr)
+  const rows = (latestMember ?? []) as Array<{ joined_at: string }>
+  return `${memberCount ?? 0}:${rows[0]?.joined_at ?? 'none'}:req=${pendingCount ?? 0}`
+}
+
 const TypingBody = z.object({ typing: z.boolean(), name: z.string().trim().max(80).optional() }).strict()
 const SeenBody = z.object({ entry_id: UuidSchema }).strict()
 
@@ -107,6 +128,7 @@ export function registerRealtimeRoutes(app: App) {
         signal.addEventListener('abort', close)
 
         let lastVersion: string | null = null
+        let lastMembersVersion: string | null = null
         let lastPresence = ''
         // Bound the connection so a forgotten tab cannot hold it forever;
         // the client reconnects with backoff.
@@ -115,13 +137,18 @@ export function registerRealtimeRoutes(app: App) {
 
         while (!closed() && Date.now() < deadline) {
           try {
-            const [version, presence] = await Promise.all([
+            const [version, mVersion, presence] = await Promise.all([
               journalVersion(c.var.userClient, groupId),
+              membersVersion(c.var.userClient, groupId),
               Promise.resolve(presenceSnapshot(groupId, Date.now())),
             ])
             if (version !== lastVersion) {
               lastVersion = version
               send('entries', { version })
+            }
+            if (mVersion !== lastMembersVersion) {
+              lastMembersVersion = mVersion
+              send('members', { version: mVersion })
             }
             const key = presenceKey(presence)
             if (key !== lastPresence) {
@@ -181,6 +208,7 @@ export function registerRealtimeRoutes(app: App) {
     const groupId = parsed.data
     await requireGroupVisible(c.var.userClient, groupId, 'id')
     groupMarks(seen, groupId).set(c.var.user.id, { entryId: body.data.entry_id, at: Date.now() })
+    sendSeenWebhookThrottled(groupId, c.var.user)
     return c.json({ ok: true })
   })
 }
