@@ -474,7 +474,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
       if (!ok) return
     }
     if (mode.fromGroup) {
-      onNavigate({ kind: 'group', groupId: mode.fromGroup, tab: 'journal' })
+      onNavigate({ kind: 'group', groupId: mode.fromGroup })
       return
     }
     const target = notebook ? { kind: 'notebook' as const, notebookId: notebook.id } : { kind: 'groups' as const }

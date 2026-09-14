@@ -35,7 +35,7 @@ export type View =
   | { kind: 'entry'; entryId: string; notebookId: string; fromGroup?: string }
   | { kind: 'search'; q: string }
   | { kind: 'groups' }
-  | { kind: 'group'; groupId: string; tab?: 'journal' | 'members' | 'sharing' }
+  | { kind: 'group'; groupId: string }
   | { kind: 'settings' }
 
 // --------------------------------------------------------------- restoring
@@ -235,11 +235,7 @@ export function Workspace() {
           ) : view.kind === 'settings' ? (
             <SettingsView />
           ) : (
-            <GroupsView
-              selectedGroupId={view.kind === 'group' ? view.groupId : null}
-              initialTab={view.kind === 'group' ? view.tab : 'journal'}
-              onNavigate={navigate}
-            />
+            <GroupsView selectedGroupId={view.kind === 'group' ? view.groupId : null} onNavigate={navigate} />
           )}
         </main>
       </div>

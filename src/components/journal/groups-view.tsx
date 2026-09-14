@@ -990,11 +990,9 @@ function RenameGroupDialog({ group, onClose }: { group: Group; onClose: () => vo
 
 export function GroupsView({
   selectedGroupId,
-  initialTab = 'journal',
   onNavigate,
 }: {
   selectedGroupId: string | null
-  initialTab?: 'journal' | 'members' | 'sharing'
   onNavigate: (v: View) => void
 }) {
   const { user } = useSession()
@@ -1004,19 +1002,19 @@ export function GroupsView({
   const leave = useLeaveGroup()
   const removeGroup = useDeleteGroup()
 
-  const [chosenTab, setChosenTab] = useState<'journal' | 'members' | 'sharing' | null>(null)
-  const [prevGroupId, setPrevGroupId] = useState(selectedGroupId)
+  // The tab choice is remembered *with the group it was made for*, so
+  // switching groups falls back to the default without a render-phase setState
+  // (React's documented escape hatch; it discards the render and is fragile
+  // under concurrent rendering).
+  const [tabChoice, setTabChoice] = useState<{ groupId: string | null; tab: 'journal' | 'members' | 'sharing' } | null>(
+    null,
+  )
   const [renameOpen, setRenameOpen] = useState(false)
   const [leaveOpen, setLeaveOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
-  if (selectedGroupId !== prevGroupId) {
-    setPrevGroupId(selectedGroupId)
-    setChosenTab(null)
-  }
-
-  const activeTab = chosenTab ?? initialTab
-  const setActiveTab = (tab: 'journal' | 'members' | 'sharing') => setChosenTab(tab)
+  const activeTab = tabChoice && tabChoice.groupId === selectedGroupId ? tabChoice.tab : 'journal'
+  const setActiveTab = (tab: 'journal' | 'members' | 'sharing') => setTabChoice({ groupId: selectedGroupId, tab })
 
   const group = detail.data ?? null
   const isOwner = group?.my_role === 'owner'
