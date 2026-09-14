@@ -1,17 +1,19 @@
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
+import { createHash } from 'node:crypto'
 import { ApiError } from './errors'
 import type { AppEnv } from './types'
 
 /**
  * In-memory sliding-window rate limiter.
  *
- * Scope: per-IP limits on unauthenticated auth endpoints (login, signup,
- * magic link, OAuth start/callback, refresh). This is the brute-force /
- * email-bombing guard a single-instance deployment needs.
+ * Scope: limits on unauthenticated endpoints (login, signup, magic link,
+ * OAuth start/callback, refresh, invite-link lookup). This is the
+ * brute-force / email-bombing / scraping guard a single-instance deployment
+ * needs.
  *
  * Limitation (accepted): the window state lives in the process. Multi-instance
- * or edge deployments should swap this for a shared store (Redis, Upstash).
- * The limiter interface stays the same.
+ * or edge deployments should swap `buckets` for a shared store (Redis,
+ * Upstash). The limiter interface stays the same.
  */
 
 interface RateLimitOptions {
@@ -37,26 +39,109 @@ function sweep(now: number) {
   }
 }
 
-/** Client IP: x-real-ip first, else LAST hop of x-forwarded-for, else 'unknown'. */
-function clientIp(c: { req: { header(name: string): string | undefined } }): string {
-  // x-real-ip is set (and overwritten) by the edge, so it is the trustworthy
-  // client address on Vercel. x-forwarded-for is client-controlled unless a
-  // trusted proxy rewrites it, so it stays a fallback only.
-  const real = c.req.header('x-real-ip')?.trim()
-  if (real) return real
-  const fwd = c.req.header('x-forwarded-for')
-  // Proxies append the real client address to the END of the chain; the first
-  // entry is attacker-controlled (anyone can send their own X-Forwarded-For
-  // header), so keying on it would let clients rotate identities at will and
-  // walk around the limiter. The last entry is the one our edge added.
-  if (fwd) {
-    const hops = fwd
-      .split(',')
-      .map((h) => h.trim())
-      .filter(Boolean)
-    if (hops.length > 0) return hops[hops.length - 1]
+// ---------------------------------------------------------------- client identity
+
+/**
+ * How many proxies in front of us we own and therefore trust.
+ *
+ * Set TRUSTED_PROXY_HOPS=1 when the app runs behind your own nginx/Caddy that
+ * appends to X-Forwarded-For. 0 (the default) means "no trusted proxy", so
+ * forwarded headers are treated as attacker-controlled and ignored.
+ */
+function trustedProxyHops(): number {
+  const raw = process.env.TRUSTED_PROXY_HOPS
+  if (raw === undefined || raw.trim() === '') return 0
+  const n = Number.parseInt(raw, 10)
+  return Number.isFinite(n) && n >= 0 ? n : 0
+}
+
+/**
+ * Pick the address our own proxy chain saw.
+ *
+ * Every proxy appends the address it received the request from, so the
+ * entries our proxies added are at the END of the list; anything before them
+ * is attacker-supplied. Taking `hops` from the end lands on the real client
+ * even when the caller pre-seeded X-Forwarded-For with junk.
+ */
+function addressFromForwardedFor(fwd: string, hops: number): string | null {
+  const list = fwd
+    .split(',')
+    .map((h) => h.trim())
+    .filter(Boolean)
+  if (list.length === 0) return null
+  return list[Math.max(0, list.length - hops)] ?? null
+}
+
+/**
+ * Fallback identity when no trustworthy address is available.
+ *
+ * Previously every such client shared one 'unknown' bucket, so 12 failed
+ * logins from anywhere locked out every user behind that deployment. A
+ * coarse request fingerprint keeps unrelated clients in separate buckets.
+ * It is deliberately weak — it is a better-than-one-bucket fallback, not an
+ * identity.
+ */
+function requestFingerprint(c: Context): string {
+  const material = [c.req.header('user-agent'), c.req.header('accept-language'), c.req.header('accept-encoding')]
+    .map((v) => v ?? '')
+    .join('|')
+  return `fp:${createHash('sha256').update(material).digest('hex').slice(0, 16)}`
+}
+
+/**
+ * Best available client identity.
+ *
+ * X-Real-IP and X-Forwarded-For are both client-controlled unless a proxy we
+ * own rewrites them. Trusting X-Real-IP first — the old behaviour — meant any
+ * client could send `X-Real-IP: <random>` per request and walk straight
+ * through the login rate limit on a self-hosted deployment, because only
+ * Vercel's edge actually overwrites that header.
+ */
+function clientIp(c: Context): string {
+  const hops = trustedProxyHops()
+  if (hops > 0) {
+    const fwd = c.req.header('x-forwarded-for')
+    if (fwd) {
+      const ip = addressFromForwardedFor(fwd, hops)
+      if (ip) return ip
+    }
   }
-  return 'unknown'
+
+  // Vercel's edge sets (and overwrites) X-Real-IP on every request, so a
+  // client cannot forge it there.
+  if (process.env.VERCEL) {
+    const real = c.req.header('x-real-ip')?.trim()
+    if (real) return real
+  }
+
+  return requestFingerprint(c)
+}
+
+// ---------------------------------------------------------------- core
+
+/** Consume one token from `bucket`; throw 429 when the window is full. */
+function consume(bucket: string, options: RateLimitOptions, now: number): void {
+  const hits = (buckets.get(bucket) ?? []).filter((t) => t > now - options.windowMs)
+
+  if (hits.length >= options.max) {
+    const oldest = hits[0]
+    const retryAfterSec = Math.max(1, Math.ceil((oldest + options.windowMs - now) / 1000))
+    throw new ApiError(429, 'RATE_LIMITED', `Too many requests — try again in ${retryAfterSec}s`, {
+      retry_after: [`${retryAfterSec}s`],
+    })
+  }
+
+  hits.push(now)
+  buckets.set(bucket, hits)
+}
+
+/** Set the retry-after hint on a 429 response. */
+function withRetryHeader(c: Context, options: RateLimitOptions, now: number): void {
+  const hits = buckets.get(`${options.key}:${clientIp(c)}`) ?? []
+  const oldest = hits[0]
+  if (oldest === undefined) return
+  const retryAfterSec = Math.max(1, Math.ceil((oldest + options.windowMs - now) / 1000))
+  c.header('retry-after', String(retryAfterSec))
 }
 
 export function rateLimit(options: RateLimitOptions): MiddlewareHandler<AppEnv> {
@@ -64,25 +149,87 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler<AppEnv> 
     const now = Date.now()
     sweep(now)
 
-    const id = `${options.key}:${clientIp(c)}`
-    const hits = (buckets.get(id) ?? []).filter((t) => t > now - options.windowMs)
-
-    if (hits.length >= options.max) {
-      const oldest = hits[0]
-      const retryAfterSec = Math.max(1, Math.ceil((oldest + options.windowMs - now) / 1000))
-      c.header('retry-after', String(retryAfterSec))
-      throw new ApiError(429, 'RATE_LIMITED', `Too many requests — try again in ${retryAfterSec}s`, {
-        retry_after: [`${retryAfterSec}s`],
-      })
+    try {
+      consume(`${options.key}:${clientIp(c)}`, options, now)
+    } catch (err) {
+      withRetryHeader(c, options, now)
+      throw err
     }
 
-    hits.push(now)
-    buckets.set(id, hits)
     await next()
   }
 }
 
-/** Ready-made rules for the auth surface. */
-export const authRateLimit = () => rateLimit({ key: 'auth', max: 12, windowMs: 5 * 60_000 })
+// ---------------------------------------------------------------- account dimension
+
+/**
+ * Read the submitted email without consuming the request body.
+ * Returns null when there isn't a usable one (the IP limit still applies).
+ */
+async function bodyEmail(c: Context): Promise<string | null> {
+  try {
+    const text = await c.req.raw.clone().text()
+    if (!text) return null
+    const parsed: unknown = JSON.parse(text)
+    if (parsed && typeof parsed === 'object' && 'email' in parsed) {
+      const email = (parsed as { email: unknown }).email
+      if (typeof email === 'string' && email.includes('@')) return email.trim().toLowerCase()
+    }
+  } catch {
+    // Not JSON, or no email field — nothing to key on.
+  }
+  return null
+}
+
+/**
+ * Credential endpoints (login, signup) are limited on two independent
+ * dimensions.
+ *
+ * IP alone is not enough in either direction: credential stuffing arrives
+ * from many IPs aimed at one account, while a shared NAT puts many accounts
+ * behind one IP. Adding a per-account bucket means brute force is bounded
+ * even when the caller can spoof or hide their address.
+ */
+export function credentialRateLimit(): MiddlewareHandler<AppEnv> {
+  const ipRule: RateLimitOptions = { key: 'auth', max: 12, windowMs: 5 * 60_000 }
+  const accountRule: RateLimitOptions = { key: 'auth-account', max: 5, windowMs: 15 * 60_000 }
+
+  return async (c, next) => {
+    const now = Date.now()
+    sweep(now)
+
+    const ipBucket = `${ipRule.key}:${clientIp(c)}`
+    try {
+      consume(ipBucket, ipRule, now)
+    } catch (err) {
+      withRetryHeader(c, ipRule, now)
+      throw err
+    }
+
+    const email = await bodyEmail(c)
+    if (email) {
+      // Hash: the bucket store is in memory, but keeping plaintext identifiers
+      // out of it avoids an email address lingering in a heap dump.
+      const digest = createHash('sha256').update(email).digest('hex').slice(0, 32)
+      consume(`${accountRule.key}:${digest}`, accountRule, now)
+    }
+
+    await next()
+  }
+}
+
+// ---------------------------------------------------------------- ready-made rules
+
+/** Auth endpoints (login, signup, magic link, OAuth, refresh). */
+export const authRateLimit = credentialRateLimit
 /** Stricter still: endpoints that trigger email (magic link). */
 export const emailRateLimit = () => rateLimit({ key: 'email', max: 4, windowMs: 10 * 60_000 })
+
+/**
+ * Unauthenticated invite-link lookup.
+ *
+ * This is the only route that touches the database with the service-role key
+ * while requiring no session, so each call is an unmetered RLS-bypassing
+ * round-trip. Bounded per client to keep it from being an amplifier.
+ */
+export const inviteLinkRateLimit = () => rateLimit({ key: 'invite-link', max: 20, windowMs: 60_000 })

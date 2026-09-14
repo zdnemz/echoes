@@ -13,6 +13,7 @@ import { requireAuth } from '../auth'
 import { getServiceClient } from '../supabase'
 import { getAppUrl, getSupabaseConfig } from '../env'
 import { bearerAuth, errorResponses, jsonBody, requireServiceRoleConfig, type App } from './helpers'
+import { inviteLinkRateLimit } from '../rate-limit'
 
 const GroupIdParam = z.object({
   id: UuidSchema.openapi({ param: { name: 'id', in: 'path' } }),
@@ -193,9 +194,12 @@ export function registerInviteRoutes(app: App) {
     summary: 'Inspect an invite link (public)',
     description:
       'Pre-auth page data: which group the link opens and whether joining is instant. The token itself is the capability. Requires the service role key on the server.',
+    // No session required, but each call is an RLS-bypassing round-trip —
+    // bounded per client so it cannot be used as an amplifier.
+    middleware: [inviteLinkRateLimit()],
     request: { params: TokenParam },
     responses: {
-      ...errorResponses(404, 503),
+      ...errorResponses(404, 429, 503),
       200: { description: 'Link info', content: { 'application/json': { schema: LinkInfoSchema } } },
     },
   })
