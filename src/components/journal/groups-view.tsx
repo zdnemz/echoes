@@ -58,7 +58,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MOODS, MOOD_META, MoodGlyph, type Mood } from '@/components/mood/glyphs'
-import { EntryRowSkeleton } from './entry-row'
+import { EntryRow, EntryRowSkeleton } from './entry-row'
 import { QueryError } from '@/components/query-error'
 import { useSession } from '@/lib/auth/session'
 import {
@@ -82,6 +82,7 @@ import {
 } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
 import { useCopy } from '@/hooks/use-copy'
+import { getGroupLayout, type GroupLayout } from '@/lib/prefs'
 import { useGroupRealtime } from '@/hooks/use-group-realtime'
 import { useDebouncedValue, useMinuteTick } from '@/hooks/use-debounced-value'
 import { useRovingSelection } from '@/hooks/use-roving-selection'
@@ -538,8 +539,11 @@ function GroupJournalTab({
   const entriesQuery = useGroupEntries(group.id, filters)
   const entries = useMemo(() => entriesQuery.data?.pages.flatMap((p) => p.data) ?? [], [entriesQuery.data])
   const total = entriesQuery.data?.pages[0]?.pagination.total ?? 0
+  // The layout preference is local-only; mirror it so changing it in Settings
+  // (same tab session) is picked up on the next mount of this tab.
+  const [layout] = useState<GroupLayout>(() => getGroupLayout())
   // Chat shows oldest at top — the API returns newest first, so reverse once.
-  const chatEntries = useMemo(() => [...entries].reverse(), [entries])
+  const chatEntries = useMemo(() => (layout === 'chat' ? [...entries].reverse() : []), [layout, entries])
 
   // Quick composer — only when exactly one linked notebook exists, so the
   // target is unambiguous. Otherwise fall back to the link/create dialog.
@@ -600,9 +604,9 @@ function GroupJournalTab({
   const selfName = user?.display_name || user?.email || 'Someone'
   const latestId = chatEntries.length > 0 ? chatEntries[chatEntries.length - 1].id : null
   useEffect(() => {
-    if (latestId && document.visibilityState === 'visible') realtime.sendSeen(latestId)
+    if (layout === 'chat' && latestId && document.visibilityState === 'visible') realtime.sendSeen(latestId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [latestId, group.id])
+  }, [latestId, group.id, layout])
   const myLast = [...chatEntries].reverse().find((e) => e.author_id === user?.id) ?? null
   const seenBy =
     myLast === null
@@ -959,6 +963,39 @@ function GroupJournalTab({
                 </Button>
               </>
             )}
+          </div>
+        ) : layout === 'list' ? (
+          <div className="flex-1">
+            {entriesQuery.hasNextPage && (
+              <div className="flex justify-center border-b border-line bg-paper-raised/60 px-4 py-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={entriesQuery.isFetchingNextPage}
+                  className="press h-7 text-[11.5px] text-ink-soft"
+                  onClick={() => entriesQuery.fetchNextPage()}
+                >
+                  {entriesQuery.isFetchingNextPage ? 'Loading more…' : 'Older entries'}
+                </Button>
+              </div>
+            )}
+            <ul className="divide-y divide-line border-b border-line" aria-busy={entriesQuery.isFetching}>
+              {entries.map((entry) => (
+                <EntryRow
+                  key={entry.id}
+                  entry={entry}
+                  authorName={authorName(entry.author_id)}
+                  onOpen={(e) =>
+                    onNavigate({
+                      kind: 'entry',
+                      entryId: e.id,
+                      notebookId: e.notebook_id,
+                      fromGroup: group.id,
+                    })
+                  }
+                />
+              ))}
+            </ul>
           </div>
         ) : (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden rounded-none lg:rounded-xl border-0 lg:border border-line bg-paper">

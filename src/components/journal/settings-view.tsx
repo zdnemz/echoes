@@ -20,7 +20,7 @@ import { MOODS, MOOD_META, MoodGlyph, type Mood } from '@/components/mood/glyphs
 import { useCopy } from '@/hooks/use-copy'
 import { useRovingSelection } from '@/hooks/use-roving-selection'
 import { useSession } from '@/lib/auth/session'
-import { getDefaultMood, setDefaultMood } from '@/lib/prefs'
+import { getDefaultMood, getGroupLayout, setDefaultMood, setGroupLayout, type GroupLayout } from '@/lib/prefs'
 
 /** Explicit "none" first: a radiogroup must always have a checked member. */
 const MOOD_OPTIONS: Array<Mood | null> = [null, ...MOODS]
@@ -60,6 +60,7 @@ export function SettingsView() {
 
   // ---- preferences (local-only; state mirrors localStorage)
   const [defaultMood, setDefaultMoodState] = useState<Mood | null>(() => getDefaultMood())
+  const [groupLayout, setGroupLayoutState] = useState<GroupLayout>(() => getGroupLayout())
 
   // ---- misc
   const { copied, copy } = useCopy({
@@ -72,6 +73,13 @@ export function SettingsView() {
     setDefaultMoodState(m)
   }
   const moodGroup = useRovingSelection({ values: MOOD_OPTIONS, selected: defaultMood, onSelect: pickMood })
+
+  const LAYOUT_OPTIONS: Array<GroupLayout> = ['list', 'chat']
+  const pickLayout = (l: GroupLayout) => {
+    setGroupLayout(l)
+    setGroupLayoutState(l)
+  }
+  const layoutGroup = useRovingSelection({ values: LAYOUT_OPTIONS, selected: groupLayout, onSelect: pickLayout })
 
   if (!user) return null
   const draftName = name ?? user.display_name ?? ''
@@ -279,6 +287,50 @@ export function SettingsView() {
                 {MOOD_META[m].label}
               </button>
             ))}
+          </div>
+
+          <div className="mt-5 border-t border-line pt-4">
+            <p className="text-[13px] font-medium text-ink">Group journal layout</p>
+            <p className="mt-1 text-[11.5px] text-ink-faint">
+              How shared entries are shown in a group. Kept on this device only.
+            </p>
+            <div
+              className="mt-3 flex flex-wrap gap-2"
+              role="radiogroup"
+              aria-label="Group journal layout"
+              onKeyDown={layoutGroup.onKeyDown}
+            >
+              <button
+                ref={layoutGroup.registerItem('list')}
+                type="button"
+                role="radio"
+                aria-checked={groupLayout === 'list'}
+                tabIndex={layoutGroup.tabIndexFor('list')}
+                onClick={() => pickLayout('list')}
+                className={`press rounded-full border px-3.5 py-1.5 font-mono text-[11px] ${
+                  groupLayout === 'list'
+                    ? 'border-clay-soft bg-clay-tint text-clay-ink'
+                    : 'border-line bg-paper text-ink-faint hover:text-ink'
+                }`}
+              >
+                list
+              </button>
+              <button
+                ref={layoutGroup.registerItem('chat')}
+                type="button"
+                role="radio"
+                aria-checked={groupLayout === 'chat'}
+                tabIndex={layoutGroup.tabIndexFor('chat')}
+                onClick={() => pickLayout('chat')}
+                className={`press rounded-full border px-3.5 py-1.5 font-mono text-[11px] ${
+                  groupLayout === 'chat'
+                    ? 'border-clay-soft bg-clay-tint text-clay-ink'
+                    : 'border-line bg-paper text-ink-faint hover:text-ink'
+                }`}
+              >
+                chatroom
+              </button>
+            </div>
           </div>
         </Section>
 

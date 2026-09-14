@@ -21,3 +21,20 @@ export function setDefaultMood(mood: Mood | null): void {
   if (mood === null) window.localStorage.removeItem(DEFAULT_MOOD_KEY)
   else window.localStorage.setItem(DEFAULT_MOOD_KEY, mood)
 }
+
+const GROUP_LAYOUT_KEY = 'echoes.prefs.group-layout'
+
+export type GroupLayout = 'list' | 'chat'
+
+/** How the group journal tab renders entries. Defaults to the editorial list. */
+export function getGroupLayout(): GroupLayout {
+  if (typeof window === 'undefined') return 'list'
+  const raw = window.localStorage.getItem(GROUP_LAYOUT_KEY)
+  return raw === 'chat' ? 'chat' : 'list'
+}
+
+export function setGroupLayout(layout: GroupLayout): void {
+  if (typeof window === 'undefined') return
+  if (layout === 'list') window.localStorage.removeItem(GROUP_LAYOUT_KEY)
+  else window.localStorage.setItem(GROUP_LAYOUT_KEY, layout)
+}
