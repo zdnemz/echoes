@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono, Newsreader } from 'next/font/google'
-import './globals.css'
-// Editor theme — global CSS may only enter through the root layout.
 import '@mdxeditor/editor/style.css'
+import './globals.css'
+// NOTE: editor stylesheet first — our unlayered overrides below win all
+// same-specificity ties by source order.
 import { Providers } from '@/components/providers'
 
 const geistSans = Geist({

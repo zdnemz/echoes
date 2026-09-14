@@ -299,132 +299,136 @@
     @apply rounded-sm bg-paper-deep;
     animation: var(--animate-shimmer);
   }
+}
 
-  /* ------------------------------------------------ WYSIWYG journal page
-     MDXEditor arrives in Radix slate/blue; re-token it to Paper & Ink.
-     Scoped under .mdxeditor (0,2,0) so these win regardless of import
-     order with the editor stylesheet. */
-  .mdxeditor {
-    --basePageBg: transparent;
-    --baseBase: var(--paper);
-    --baseBgSubtle: var(--paper-deep);
-    --baseBg: var(--paper-deep);
-    --baseBgHover: var(--paper-sink);
-    --baseBgActive: var(--paper-sink);
-    --baseLine: var(--line);
-    --baseBorder: var(--line-strong);
-    --baseBorderHover: var(--line-strong);
-    --baseText: var(--ink-soft);
-    --baseTextContrast: var(--ink);
-    --accentText: var(--clay-ink);
-    --accentSolid: var(--clay);
-    --accentSolidHover: var(--clay-ink);
-  }
+/* ------------------------------------------------ WYSIWYG journal page
+   MDXEditor arrives in Radix slate/blue; re-token it to Paper & Ink.
+   DELIBERATELY UNLAYERED: the editor stylesheet is unlayered, and
+   unlayered rules beat same-specificity layered ones every time — the
+   first version of this block sat in @layer components and lost
+   silently, leaving headings indistinguishable from body text. These
+   selectors (0,2,0+) out-specify the editor's (0,1,0), so they win
+   regardless of stylesheet order. */
+.mdxeditor {
+  --basePageBg: transparent;
+  --baseBase: var(--paper);
+  --baseBgSubtle: var(--paper-deep);
+  --baseBg: var(--paper-deep);
+  --baseBgHover: var(--paper-sink);
+  --baseBgActive: var(--paper-sink);
+  --baseLine: var(--line);
+  --baseBorder: var(--line-strong);
+  --baseBorderHover: var(--line-strong);
+  --baseText: var(--ink-soft);
+  --baseTextContrast: var(--ink);
+  --accentText: var(--clay-ink);
+  --accentSolid: var(--clay);
+  --accentSolidHover: var(--clay-ink);
+}
 
-  /* Their toolbar wrapper is a rounded slate bar; ours is a borderless
-     row with a hairline — the JournalToolbar div inside draws the line. */
-  .mdxeditor .mdxeditor-toolbar {
-    background-color: transparent;
-    padding: 0;
-  }
+/* Their toolbar wrapper is a rounded slate bar; ours is a borderless
+   row with a hairline — the JournalToolbar div inside draws the line. */
+.mdxeditor .mdxeditor-toolbar {
+  background-color: transparent;
+  padding: 0;
+}
 
-  /* The writing surface: same serif voice and measure as the old
-     textarea, headings/lists/quotes inherit it. */
-  .mdxeditor .echoes-rich {
-    font-family: var(--font-serif);
-    font-size: 16px;
-    line-height: 1.85;
-    color: var(--ink);
-    padding-left: 0;
-    padding-right: 0;
-    min-height: 55dvh;
-  }
-  .mdxeditor .echoes-rich:focus {
-    outline: none;
-  }
+/* The writing surface: same serif voice and measure as the old
+   textarea, headings/lists/quotes inherit it. */
+.mdxeditor .echoes-rich {
+  font-family: var(--font-newsreader), 'Newsreader', Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  line-height: 1.85;
+  color: var(--ink);
+  padding-left: 0;
+  padding-right: 0;
+  min-height: 55dvh;
+}
+.mdxeditor .echoes-rich:focus {
+  outline: none;
+}
 
-  /* WYSIWYG body typography — Lexical emits bare h1/p/ul/a tags and
+/* WYSIWYG body typography — Lexical emits bare h1/p/ul/a tags and
      Tailwind preflight strips their defaults, so without this a heading
      looks exactly like body text. Mirrors MarkdownView (the reading mode)
      so writing shows the final page. */
-  .mdxeditor .echoes-rich h1,
-  .mdxeditor .echoes-rich h2,
-  .mdxeditor .echoes-rich h3 {
-    font-family: var(--font-serif);
-    font-weight: 500;
-    letter-spacing: -0.015em;
-    color: var(--ink);
-  }
-  .mdxeditor .echoes-rich h1 {
-    font-size: 1.875rem;
-    line-height: 1.25;
-    margin: 2rem 0 0.75rem;
-  }
-  .mdxeditor .echoes-rich h2 {
-    font-size: 1.5rem;
-    line-height: 1.25;
-    margin: 1.75rem 0 0.625rem;
-  }
-  .mdxeditor .echoes-rich h3 {
-    font-size: 1.25rem;
-    line-height: 1.375;
-    margin: 1.5rem 0 0.5rem;
-  }
-  .mdxeditor .echoes-rich p {
-    margin-bottom: 1rem;
-    line-height: 1.75;
-    color: var(--ink-soft);
-  }
-  .mdxeditor .echoes-rich a {
-    color: var(--clay-ink);
-    text-decoration: underline;
-    text-decoration-color: var(--clay-soft);
-    text-underline-offset: 3px;
-  }
-  .mdxeditor .echoes-rich ul {
-    list-style: disc;
-    padding-left: 1.25rem;
-    margin-bottom: 1rem;
-    line-height: 1.7;
-    color: var(--ink-soft);
-  }
-  .mdxeditor .echoes-rich ol {
-    list-style: decimal;
-    padding-left: 1.25rem;
-    margin-bottom: 1rem;
-    line-height: 1.7;
-    color: var(--ink-soft);
-  }
-  .mdxeditor .echoes-rich blockquote {
-    border-inline-start: 2px solid var(--clay);
-    padding-inline-start: 1rem;
-    margin: 1.25rem 0;
-    font-style: italic;
-    color: var(--ink-soft);
-  }
-  .mdxeditor .echoes-rich hr {
-    border: 0;
-    border-top: 1px solid var(--line);
-    margin: 1.75rem 0;
-  }
-  .mdxeditor .echoes-rich code {
-    background-color: var(--paper-deep);
-    color: var(--clay-ink);
-  }
-  .mdxeditor .echoes-rich pre {
-    background-color: var(--paper-deep);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 0.875rem;
-    overflow-x: auto;
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    line-height: 1.625;
-    margin-bottom: 1rem;
-  }
-  .mdxeditor .echoes-rich pre code {
-    background-color: transparent;
-    color: var(--ink);
-    padding: 0;
-  }
+.mdxeditor .echoes-rich h1,
+.mdxeditor .echoes-rich h2,
+.mdxeditor .echoes-rich h3 {
+  font-family: var(--font-newsreader), 'Newsreader', Georgia, 'Times New Roman', serif;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.mdxeditor .echoes-rich h1 {
+  font-size: 1.875rem;
+  line-height: 1.25;
+  margin: 2rem 0 0.75rem;
+}
+.mdxeditor .echoes-rich h2 {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  margin: 1.75rem 0 0.625rem;
+}
+.mdxeditor .echoes-rich h3 {
+  font-size: 1.25rem;
+  line-height: 1.375;
+  margin: 1.5rem 0 0.5rem;
+}
+.mdxeditor .echoes-rich p {
+  margin-bottom: 1rem;
+  line-height: 1.75;
+  color: var(--ink-soft);
+}
+.mdxeditor .echoes-rich a {
+  color: var(--clay-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--clay-soft);
+  text-underline-offset: 3px;
+}
+.mdxeditor .echoes-rich ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin-bottom: 1rem;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+.mdxeditor .echoes-rich ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+  margin-bottom: 1rem;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+.mdxeditor .echoes-rich blockquote {
+  border-inline-start: 2px solid var(--clay);
+  padding-inline-start: 1rem;
+  margin: 1.25rem 0;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+.mdxeditor .echoes-rich hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.75rem 0;
+}
+.mdxeditor .echoes-rich code {
+  background-color: var(--paper-deep);
+  color: var(--clay-ink);
+}
+.mdxeditor .echoes-rich pre {
+  background-color: var(--paper-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.875rem;
+  overflow-x: auto;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.625;
+  margin-bottom: 1rem;
+}
+.mdxeditor .echoes-rich pre code {
+  background-color: transparent;
+  color: var(--ink);
+  padding: 0;
 }
