@@ -1,9 +1,10 @@
 'use client'
 
 /**
- * The typeset reading view for markdown entries — used by the editor's live
- * preview, the shared-notebook reading mode, and landing-page artifacts.
- * Serif body, mono code, clay blockquote rules, hairline dividers.
+ * The typeset reading view for markdown entries — used by the
+ * shared-notebook reading mode and landing-page artifacts. Serif body,
+ * mono code, clay blockquote rules, hairline dividers. The editor is
+ * WYSIWYG now (no live preview); its content CSS mirrors this file.
  */
 
 import ReactMarkdown, { type Components } from 'react-markdown'
