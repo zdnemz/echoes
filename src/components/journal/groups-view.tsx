@@ -75,6 +75,7 @@ import {
   useUpdateNotebook,
 } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
+import { useDebouncedValue, useMinuteTick } from '@/hooks/use-debounced-value'
 import { avatarTone, formatDay, initials } from '@/lib/format'
 import type { Group, GroupDetail } from '@/lib/api/types'
 import type { View } from './workspace'
@@ -376,7 +377,10 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
   const [customSince, setCustomSince] = useState('')
   const [customUntil, setCustomUntil] = useState('')
   const [mood, setMood] = useState<Mood | undefined>(undefined)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  // The input stays instant; the query only sees the settled term so typing
+  // does not fire one request per keystroke.
+  const searchQuery = useDebouncedValue(searchInput, 300)
 
   // Link/compose dialog state
   const [linkModalOpen, setLinkModalOpen] = useState(false)
@@ -385,10 +389,16 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
   const [modalMode, setModalMode] = useState<'create' | 'link'>('create')
   const [busyModal, setBusyModal] = useState(false)
 
+  // Relative presets ("today", "past 7 days"…) are computed from `Date.now()`,
+  // so they must be re-derived as time passes — otherwise a tab left open
+  // across midnight keeps filtering on yesterday's window.
+  const minuteTick = useMinuteTick(timePreset === 'today' || timePreset === 'week' || timePreset === 'month')
+
   // Memoized time bounds
   const { since, until } = useMemo(
     () => getTimeBounds(timePreset, customSince, customUntil),
-    [timePreset, customSince, customUntil],
+    // `minuteTick` is what makes the relative presets re-derive as time passes.
+    [timePreset, customSince, customUntil, minuteTick],
   )
 
   const filters = useMemo(
@@ -405,6 +415,12 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
   const entriesQuery = useGroupEntries(group.id, filters)
   const entries = useMemo(() => entriesQuery.data?.pages.flatMap((p) => p.data) ?? [], [entriesQuery.data])
   const total = entriesQuery.data?.pages[0]?.pagination.total ?? 0
+
+  // `placeholderData: (prev) => prev` keeps the previous filter's rows on
+  // screen while a new filter loads, which also flips isPending to false.
+  // Treat "stale rows still on screen + fetching" as loading so the skeleton
+  // shows instead of a result set that is about to be replaced.
+  const showEntriesSkeleton = entriesQuery.isLoading || (entriesQuery.isPlaceholderData && entriesQuery.isFetching)
 
   // Map notebook IDs to their titles for display in EntryRow
   const notebookTitleMap = useMemo(() => {
@@ -480,7 +496,7 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
     Boolean(customSince) ||
     Boolean(customUntil) ||
     mood !== undefined ||
-    Boolean(searchQuery.trim())
+    Boolean(searchInput.trim())
 
   const clearFilters = () => {
     setAuthorId('all')
@@ -488,7 +504,7 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
     setCustomSince('')
     setCustomUntil('')
     setMood(undefined)
-    setSearchQuery('')
+    setSearchInput('')
   }
 
   return (
@@ -560,15 +576,15 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
             <MagnifyingGlass className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
             <input
               type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search in this circle…"
               className="h-8.5 w-full rounded-md border border-line bg-paper pl-8 pr-7 text-[12px] text-ink placeholder:text-ink-ghost focus:border-clay-soft focus:outline-none"
             />
-            {searchQuery && (
+            {searchInput && (
               <button
                 type="button"
-                onClick={() => setSearchQuery('')}
+                onClick={() => setSearchInput('')}
                 className="press absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
                 aria-label="Clear search query"
               >
@@ -656,7 +672,7 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
 
       {/* Entries stream */}
       <div>
-        {entriesQuery.isLoading ? (
+        {showEntriesSkeleton ? (
           <div className="divide-y divide-line border-y border-line">
             <EntryRowSkeleton />
             <EntryRowSkeleton />
@@ -718,7 +734,7 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
           </div>
         ) : (
           <>
-            <ul className="divide-y divide-line border-y border-line">
+            <ul className="divide-y divide-line border-y border-line" aria-busy={entriesQuery.isFetching}>
               {entries.map((entry) => (
                 <EntryRow
                   key={entry.id}
