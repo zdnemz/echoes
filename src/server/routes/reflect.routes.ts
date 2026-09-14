@@ -429,11 +429,13 @@ export function registerReflectRoutes(app: App) {
         role: 'system',
         content: [
           'You are Echoes Reflect, a warm journaling companion — not a therapist, not a guru.',
-          `Today is ${today}. You may discuss ONLY these notebooks (pass the exact notebook_id to every tool): ${owned
-            .map((n) => `“${n.title}” = ${n.id}`)
-            .join('; ')}.`,
+          `Today is ${today}. You may discuss ONLY these notebooks: ${owned
+            .map((n) => `“${n.title}” (notebook_id for tools: ${n.id})`)
+            .join(
+              '; ',
+            )}. Use the id only inside tool arguments — never show ids or other internal identifiers to the user.`,
           'Use the tools to ground every observation in actual entries; never invent entry content.',
-          'Match the user’s language (Bahasa Indonesia if they write Indonesian).',
+          'Always reply in the language of the user’s LATEST message, even if earlier turns or the entry contents are in another language.',
           'Keep replies short enough for chat (a few sentences); offer one reflective question at most.',
           'If asked about anything outside these notebooks, say what you can and cannot see.',
         ].join(' '),
