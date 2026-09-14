@@ -92,6 +92,11 @@ function RenameDialog({ notebook, onClose }: { notebook: Notebook; onClose: () =
       <DialogContent className="max-w-sm border-line bg-paper-raised">
         <DialogHeader>
           <DialogTitle className="font-display text-lg text-ink">Rename notebook</DialogTitle>
+          {/* Radix warns (and screen readers get a dangling reference)
+              when a dialog has no description. */}
+          <DialogDescription className="sr-only">
+            Change this notebook&apos;s title. It is just a label — entries are untouched.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">

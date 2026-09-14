@@ -52,6 +52,7 @@ import { MOODS, MOOD_META, MoodGlyph } from '@/components/mood/glyphs'
 import { useSession } from '@/lib/auth/session'
 import { useCreateEntry, useDeleteEntry, useEntry, useNotebooks, useUpdateEntry } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
+import { useRovingSelection } from '@/hooks/use-roving-selection'
 import { getDefaultMood } from '@/lib/prefs'
 import { wordCount } from '@/lib/format'
 import type { Mood } from '@/components/mood/glyphs'
@@ -62,6 +63,10 @@ type Mode =
 
 // --------------------------------------------------------------- mood picker
 
+// Index 0 is the explicit "no mood" choice: a radiogroup must always have a
+// checked member, and it keeps this picker consistent with the one in settings.
+const MOOD_OPTIONS: Array<Mood | null> = [null, ...MOODS]
+
 function MoodPicker({
   value,
   onChange,
@@ -71,29 +76,41 @@ function MoodPicker({
   onChange: (m: Mood | null) => void
   disabled?: boolean
 }) {
+  const group = useRovingSelection({ values: MOOD_OPTIONS, selected: value, onSelect: onChange, disabled })
+
   return (
-    <div role="radiogroup" aria-label="Mood" className="flex flex-wrap items-center gap-1.5">
-      {MOODS.map((m) => {
+    <div
+      role="radiogroup"
+      aria-label="Mood"
+      onKeyDown={group.onKeyDown}
+      className="flex flex-wrap items-center gap-1.5"
+    >
+      {MOOD_OPTIONS.map((m, i) => {
         const active = value === m
-        const meta = MOOD_META[m]
+        const meta = m ? MOOD_META[m] : null
         return (
           <button
-            key={m}
+            key={m ?? 'none'}
+            ref={group.registerItem(m)}
             type="button"
             role="radio"
             aria-checked={active}
-            title={meta.note}
+            aria-label={m ? meta!.label : 'No mood'}
+            title={m ? meta!.note : 'No mood'}
+            tabIndex={group.tabIndexFor(m)}
             disabled={disabled}
-            onClick={() => onChange(active ? null : m)}
-            className="press inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors"
-            style={active ? { background: meta.tint, color: meta.color } : { color: 'var(--ink-faint)' }}
+            onClick={() => onChange(m)}
+            className={`press inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+              active && !m ? 'text-ink-soft' : ''
+            }`}
+            style={active && meta ? { background: meta.tint, color: meta.color } : { color: 'var(--ink-faint)' }}
           >
-            <MoodGlyph mood={m} className="h-3.5 w-3.5" />
-            <span className={active ? 'inline' : 'hidden sm:inline'}>{meta.label}</span>
+            {m ? <MoodGlyph mood={m} className="h-3.5 w-3.5" /> : null}
+            {/* Always reserve an accessible name; the label may be visually hidden. */}
+            <span className={active || !m ? 'inline' : 'hidden sm:inline'}>{m ? meta!.label : 'none'}</span>
           </button>
         )
       })}
-      {value === null && <span className="ml-1 font-mono text-[10px] text-ink-faint">no mood set</span>}
     </div>
   )
 }
@@ -337,6 +354,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [pane, setPane] = useState<'write' | 'read'>('write')
+  const paneKeys = useRovingSelection({ values: ['write', 'read'] as const, selected: pane, onSelect: setPane })
   const [deleteOpen, setDeleteOpen] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -654,13 +672,17 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
       </div>
 
       {/* write/read switch — mobile only */}
-      <div className="mt-5 flex gap-1 lg:hidden" role="tablist" aria-label="Editor pane">
+      <div className="mt-5 flex gap-1 lg:hidden" role="tablist" aria-label="Editor pane" onKeyDown={paneKeys.onKeyDown}>
         {(['write', 'read'] as const).map((p) => (
           <button
             key={p}
+            ref={paneKeys.registerItem(p)}
             type="button"
             role="tab"
+            id={`editor-tab-${p}`}
+            aria-controls={`editor-pane-${p}`}
             aria-selected={pane === p}
+            tabIndex={paneKeys.tabIndexFor(p)}
             onClick={() => setPane(p)}
             className={`press rounded-full px-4 py-1.5 text-[11.5px] font-medium ${
               pane === p ? 'bg-ink text-paper' : 'text-ink-faint hover:bg-paper-deep'
@@ -673,7 +695,12 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
 
       {/* split panes */}
       <div className="mt-2 grid lg:mt-5 lg:grid-cols-2">
-        <div className={`${pane === 'write' ? 'block' : 'hidden'} lg:block lg:border-r lg:border-line lg:pr-6`}>
+        <div
+          role="tabpanel"
+          id="editor-pane-write"
+          aria-labelledby="editor-tab-write"
+          className={`${pane === 'write' ? 'block' : 'hidden'} lg:block lg:border-r lg:border-line lg:pr-6`}
+        >
           <FormatBar tools={tools} />
           <textarea
             ref={bodyRef}
@@ -706,6 +733,9 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           />
         </div>
         <div
+          role="tabpanel"
+          id="editor-pane-read"
+          aria-labelledby="editor-tab-read"
           className={`${pane === 'read' ? 'block' : 'hidden'} lg:block lg:pl-6 lg:pt-1`}
           aria-label="Typeset preview"
         >

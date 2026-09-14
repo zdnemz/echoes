@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { UnconfiguredNotice } from '@/components/unconfigured'
 import { useCopy } from '@/hooks/use-copy'
+import { useRovingSelection } from '@/hooks/use-roving-selection'
 import { useSession } from '@/lib/auth/session'
 import { isUnconfigured } from '@/lib/api/client'
 import { startGoogleOAuth } from '@/lib/auth/oauth'
@@ -83,11 +84,14 @@ function GoogleMark({ className }: { className?: string }) {
 
 // ---------------------------------------------------------------- panel
 
+const AUTH_TABS = ['signin', 'signup', 'magic'] as const
+
 export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | 'signup' | 'magic' }) {
   const router = useRouter()
   const { login, signup, status: sessionStatus } = useSession()
 
-  const [tab, setTab] = useState<string>(initialTab)
+  const [tab, setTab] = useState<'signin' | 'signup' | 'magic'>(initialTab)
+  const tabKeys = useRovingSelection({ values: AUTH_TABS, selected: tab, onSelect: setTab })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [unconfigured, setUnconfigured] = useState(false)
@@ -273,6 +277,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
         <div
           role="tablist"
           aria-label="Sign-in methods"
+          onKeyDown={tabKeys.onKeyDown}
           className="grid h-9 w-full grid-cols-3 items-center justify-center rounded-lg bg-paper-deep p-1 text-ink-soft"
         >
           {(
@@ -284,9 +289,13 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
           ).map((t) => (
             <button
               key={t.value}
+              ref={tabKeys.registerItem(t.value)}
               type="button"
               role="tab"
+              id={`auth-tab-${t.value}`}
+              aria-controls={`auth-panel-${t.value}`}
               aria-selected={tab === t.value}
+              tabIndex={tabKeys.tabIndexFor(t.value)}
               onClick={() => setTab(t.value)}
               className={`inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-[12px] font-medium transition-colors ${
                 tab === t.value ? 'bg-paper-raised text-ink shadow-sm' : 'hover:text-ink'
@@ -299,7 +308,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
 
         {/* ---------------------------------------------- sign in */}
         {tab === 'signin' && (
-          <div role="tabpanel" className="mt-5">
+          <div role="tabpanel" id="auth-panel-signin" aria-labelledby="auth-tab-signin" className="mt-5">
             <form onSubmit={handleSignIn} noValidate className="flex flex-col gap-4">
               <Field id="signin-email" label="Email">
                 <Input
@@ -341,7 +350,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
 
         {/* ---------------------------------------------- sign up */}
         {tab === 'signup' && (
-          <div role="tabpanel" className="mt-5">
+          <div role="tabpanel" id="auth-panel-signup" aria-labelledby="auth-tab-signup" className="mt-5">
             <form onSubmit={handleSignUp} noValidate className="flex flex-col gap-4">
               <Field id="signup-name" label="Display name" helper="Optional — what your shared notebooks call you.">
                 <Input
@@ -393,7 +402,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
 
         {/* ---------------------------------------------- magic link */}
         {tab === 'magic' && (
-          <div role="tabpanel" className="mt-5">
+          <div role="tabpanel" id="auth-panel-magic" aria-labelledby="auth-tab-magic" className="mt-5">
             <form onSubmit={handleMagicLink} noValidate className="flex flex-col gap-4">
               <Field id="magic-email" label="Email" helper="We send a one-time sign-in link. No password needed.">
                 <Input

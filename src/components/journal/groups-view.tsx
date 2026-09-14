@@ -78,6 +78,7 @@ import {
 import { isUnconfigured } from '@/lib/api/client'
 import { useCopy } from '@/hooks/use-copy'
 import { useDebouncedValue, useMinuteTick } from '@/hooks/use-debounced-value'
+import { useRovingSelection } from '@/hooks/use-roving-selection'
 import { avatarTone, formatDay, initials } from '@/lib/format'
 import type { Group, GroupDetail } from '@/lib/api/types'
 import type { View } from './workspace'
@@ -100,17 +101,19 @@ function SharingPanel({ group }: { group: Group }) {
   const decide = useDecideJoinRequest()
 
   const [expiry, setExpiry] = useState('168')
-  const { copied, copy } = useCopy({
-    onError: () => setError("Couldn't copy — select the link and copy it manually."),
-  })
   const [error, setError] = useState<string | null>(null)
   // Only a hash is stored server-side, so a freshly minted link is shown
   // exactly once. Hold the one we just created; it disappears on reload.
   const [freshUrl, setFreshUrl] = useState<string | null>(null)
+
   const fail = (err: unknown, fallback: string) => {
     if (isUnconfigured(err)) setError("The data layer isn't connected on this deployment.")
     else setError(err instanceof Error ? err.message : fallback)
   }
+
+  const { copied, copy } = useCopy({
+    onError: () => setError("Couldn't copy — select the link and copy it manually."),
+  })
 
   const createLink = async () => {
     setError(null)
@@ -125,6 +128,7 @@ function SharingPanel({ group }: { group: Group }) {
     }
   }
 
+  // The server returns a site-relative URL; make it pasteable.
   const absoluteUrl = (url: string) => (url.startsWith('http') ? url : window.location.origin + url)
 
   const flipAutoAccept = async () => {
@@ -374,18 +378,18 @@ function SharingPanel({ group }: { group: Group }) {
 
 type TimePreset = 'all' | 'today' | 'week' | 'month' | 'custom'
 
-function getTimeBounds(preset: TimePreset, customSince: string, customUntil: string) {
+function getTimeBounds(preset: TimePreset, customSince: string, customUntil: string, nowMs: number) {
   if (preset === 'today') {
-    const start = new Date()
+    const start = new Date(nowMs)
     start.setHours(0, 0, 0, 0)
     return { since: start.toISOString(), until: undefined }
   }
   if (preset === 'week') {
-    const start = new Date(Date.now() - 7 * 24 * 3600_000)
+    const start = new Date(nowMs - 7 * 24 * 3600_000)
     return { since: start.toISOString(), until: undefined }
   }
   if (preset === 'month') {
-    const start = new Date(Date.now() - 30 * 24 * 3600_000)
+    const start = new Date(nowMs - 30 * 24 * 3600_000)
     return { since: start.toISOString(), until: undefined }
   }
   if (preset === 'custom') {
@@ -419,17 +423,21 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
   const [selectedNotebookId, setSelectedNotebookId] = useState('')
   const [modalMode, setModalMode] = useState<'create' | 'link'>('create')
   const [busyModal, setBusyModal] = useState(false)
+  const modalTabs = useRovingSelection({
+    values: ['link', 'create'] as const,
+    selected: modalMode,
+    onSelect: setModalMode,
+  })
 
   // Relative presets ("today", "past 7 days"…) are computed from `Date.now()`,
   // so they must be re-derived as time passes — otherwise a tab left open
   // across midnight keeps filtering on yesterday's window.
-  const minuteTick = useMinuteTick(timePreset === 'today' || timePreset === 'week' || timePreset === 'month')
+  const nowMs = useMinuteTick(timePreset === 'today' || timePreset === 'week' || timePreset === 'month')
 
   // Memoized time bounds
   const { since, until } = useMemo(
-    () => getTimeBounds(timePreset, customSince, customUntil),
-    // `minuteTick` is what makes the relative presets re-derive as time passes.
-    [timePreset, customSince, customUntil, minuteTick],
+    () => getTimeBounds(timePreset, customSince, customUntil, nowMs),
+    [timePreset, customSince, customUntil, nowMs],
   )
 
   const filters = useMemo(
@@ -821,11 +829,15 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
 
           <form onSubmit={handleLinkOrCreate} className="flex flex-col gap-4">
             {myUnlinkedNotebooks.length > 0 && (
-              <div className="flex gap-2" role="tablist">
+              <div className="flex gap-2" role="tablist" aria-label="Notebook source" onKeyDown={modalTabs.onKeyDown}>
                 <button
+                  ref={modalTabs.registerItem('link')}
                   type="button"
                   role="tab"
+                  id="link-nb-tab-link"
+                  aria-controls="link-nb-panel"
                   aria-selected={modalMode === 'link'}
+                  tabIndex={modalTabs.tabIndexFor('link')}
                   onClick={() => setModalMode('link')}
                   className={`press rounded-full px-3 py-1 text-[11.5px] font-medium ${
                     modalMode === 'link' ? 'bg-ink text-paper' : 'text-ink-faint hover:bg-paper-deep'
@@ -834,9 +846,13 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
                   Link existing notebook
                 </button>
                 <button
+                  ref={modalTabs.registerItem('create')}
                   type="button"
                   role="tab"
+                  id="link-nb-tab-create"
+                  aria-controls="link-nb-panel"
                   aria-selected={modalMode === 'create'}
+                  tabIndex={modalTabs.tabIndexFor('create')}
                   onClick={() => setModalMode('create')}
                   className={`press rounded-full px-3 py-1 text-[11.5px] font-medium ${
                     modalMode === 'create' ? 'bg-ink text-paper' : 'text-ink-faint hover:bg-paper-deep'
@@ -848,7 +864,12 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
             )}
 
             {modalMode === 'create' ? (
-              <div className="flex flex-col gap-2">
+              <div
+                role="tabpanel"
+                id="link-nb-panel"
+                aria-labelledby="link-nb-tab-create"
+                className="flex flex-col gap-2"
+              >
                 <Label htmlFor="create-nb-title" className="text-[12.5px]">
                   Notebook name
                 </Label>
@@ -865,7 +886,12 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
                 </p>
               </div>
             ) : (
-              <div className="flex flex-col gap-2">
+              <div
+                role="tabpanel"
+                id="link-nb-panel"
+                aria-labelledby="link-nb-tab-link"
+                className="flex flex-col gap-2"
+              >
                 <Label htmlFor="select-unlinked-nb" className="text-[12.5px]">
                   Select notebook to link
                 </Label>
@@ -934,6 +960,11 @@ function RenameGroupDialog({ group, onClose }: { group: Group; onClose: () => vo
       <DialogContent className="max-w-sm border-line bg-paper-raised">
         <DialogHeader>
           <DialogTitle className="font-display text-lg text-ink">Rename group</DialogTitle>
+          {/* Radix warns (and screen readers get a dangling reference)
+              when a dialog has no description. */}
+          <DialogDescription className="sr-only">
+            Change this group&apos;s name. Members see the new name immediately.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
@@ -997,6 +1028,13 @@ export function GroupsView({
   const group = detail.data ?? null
   const isOwner = group?.my_role === 'owner'
   const list = groups.data ?? []
+
+  // Sharing is owner-only, so it must not be an arrow-key destination for
+  // members.
+  const sectionTabs = (isOwner ? ['journal', 'members', 'sharing'] : ['journal', 'members']) as Array<
+    'journal' | 'members' | 'sharing'
+  >
+  const tabKeys = useRovingSelection({ values: sectionTabs, selected: activeTab, onSelect: setActiveTab })
 
   return (
     <div className="mx-4 lg:mx-0">
@@ -1133,11 +1171,20 @@ export function GroupsView({
               </div>
 
               {/* Group Tabs Navigation */}
-              <div className="flex border-b border-line" role="tablist" aria-label="Group sections">
+              <div
+                className="flex border-b border-line"
+                role="tablist"
+                aria-label="Group sections"
+                onKeyDown={tabKeys.onKeyDown}
+              >
                 <button
+                  ref={tabKeys.registerItem('journal')}
                   type="button"
                   role="tab"
+                  id="group-tab-journal"
+                  aria-controls="group-panel-journal"
                   aria-selected={activeTab === 'journal'}
+                  tabIndex={tabKeys.tabIndexFor('journal')}
                   onClick={() => setActiveTab('journal')}
                   className={`press relative -mb-px flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium transition-colors ${
                     activeTab === 'journal' ? 'border-b-2 border-clay text-ink' : 'text-ink-faint hover:text-ink'
@@ -1147,9 +1194,13 @@ export function GroupsView({
                   <span>Journal</span>
                 </button>
                 <button
+                  ref={tabKeys.registerItem('members')}
                   type="button"
                   role="tab"
+                  id="group-tab-members"
+                  aria-controls="group-panel-members"
                   aria-selected={activeTab === 'members'}
+                  tabIndex={tabKeys.tabIndexFor('members')}
                   onClick={() => setActiveTab('members')}
                   className={`press relative -mb-px flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium transition-colors ${
                     activeTab === 'members' ? 'border-b-2 border-clay text-ink' : 'text-ink-faint hover:text-ink'
@@ -1163,9 +1214,13 @@ export function GroupsView({
                 </button>
                 {isOwner && (
                   <button
+                    ref={tabKeys.registerItem('sharing')}
                     type="button"
                     role="tab"
+                    id="group-tab-sharing"
+                    aria-controls="group-panel-sharing"
                     aria-selected={activeTab === 'sharing'}
+                    tabIndex={tabKeys.tabIndexFor('sharing')}
                     onClick={() => setActiveTab('sharing')}
                     className={`press relative -mb-px flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium transition-colors ${
                       activeTab === 'sharing' ? 'border-b-2 border-clay text-ink' : 'text-ink-faint hover:text-ink'
@@ -1178,7 +1233,13 @@ export function GroupsView({
               </div>
 
               {/* Tab Contents */}
-              <div className="pt-6">
+              <div
+                className="pt-6"
+                role="tabpanel"
+                id={`group-panel-${activeTab}`}
+                aria-labelledby={`group-tab-${activeTab}`}
+                tabIndex={0}
+              >
                 {activeTab === 'journal' && <GroupJournalTab group={group} onNavigate={onNavigate} />}
 
                 {activeTab === 'members' && (

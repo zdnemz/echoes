@@ -18,8 +18,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MOODS, MOOD_META, MoodGlyph, type Mood } from '@/components/mood/glyphs'
 import { useCopy } from '@/hooks/use-copy'
+import { useRovingSelection } from '@/hooks/use-roving-selection'
 import { useSession } from '@/lib/auth/session'
 import { getDefaultMood, setDefaultMood } from '@/lib/prefs'
+
+/** Explicit "none" first: a radiogroup must always have a checked member. */
+const MOOD_OPTIONS: Array<Mood | null> = [null, ...MOODS]
 import { useHealth } from '@/lib/api/hooks'
 import { updatePassword, updateProfile } from '@/lib/api/endpoints'
 
@@ -62,6 +66,13 @@ export function SettingsView() {
     onError: () => toast.error("Couldn't copy — select the text and copy it manually."),
   })
 
+  // Declared before the early return below: hooks must run on every render.
+  const pickMood = (m: Mood | null) => {
+    setDefaultMood(m)
+    setDefaultMoodState(m)
+  }
+  const moodGroup = useRovingSelection({ values: MOOD_OPTIONS, selected: defaultMood, onSelect: pickMood })
+
   if (!user) return null
   const draftName = name ?? user.display_name ?? ''
 
@@ -98,11 +109,6 @@ export function SettingsView() {
     } finally {
       setSavingPw(false)
     }
-  }
-
-  const pickMood = (m: Mood | null) => {
-    setDefaultMood(m)
-    setDefaultMoodState(m)
   }
 
   const backendOk = health.data?.status === 'ok'
@@ -232,11 +238,18 @@ export function SettingsView() {
         <Section title="Preferences">
           <p className="text-[13px] font-medium text-ink">Default mood for new entries</p>
           <p className="mt-1 text-[11.5px] text-ink-faint">Pre-selected when you compose. Kept on this device only.</p>
-          <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Default mood">
+          <div
+            className="mt-3 flex flex-wrap gap-2"
+            role="radiogroup"
+            aria-label="Default mood"
+            onKeyDown={moodGroup.onKeyDown}
+          >
             <button
+              ref={moodGroup.registerItem(null)}
               type="button"
               role="radio"
               aria-checked={defaultMood === null}
+              tabIndex={moodGroup.tabIndexFor(null)}
               onClick={() => pickMood(null)}
               className={`press rounded-full border px-3.5 py-1.5 font-mono text-[11px] ${
                 defaultMood === null
@@ -246,13 +259,15 @@ export function SettingsView() {
             >
               none
             </button>
-            {MOODS.map((m) => (
+            {MOODS.map((m, i) => (
               <button
                 key={m}
+                ref={moodGroup.registerItem(m)}
                 type="button"
                 role="radio"
                 aria-checked={defaultMood === m}
-                onClick={() => pickMood(defaultMood === m ? null : m)}
+                tabIndex={moodGroup.tabIndexFor(m)}
+                onClick={() => pickMood(m)}
                 title={MOOD_META[m].label}
                 className={`press inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] ${
                   defaultMood === m
