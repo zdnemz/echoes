@@ -186,6 +186,15 @@ export const sendTyping = (groupId: string, input: { typing: boolean; name?: str
 export const sendSeen = (groupId: string, entryId: string) =>
   api<{ ok: boolean }>(`/api/groups/${groupId}/seen`, { method: 'POST', ...json({ entry_id: entryId }) })
 
+export interface EntryViewRow {
+  entry_id: string
+  user_id: string
+  display_name: string | null
+  viewed_at: string
+}
+
+export const listGroupViews = (groupId: string) => api<EntryViewRow[]>(`/api/groups/${groupId}/views`)
+
 // ----------------------------------------------------------------- reflect (agentic companion)
 
 export interface ReflectMessage {

@@ -69,6 +69,7 @@ import {
   useGroup,
   useGroupEntries,
   useGroups,
+  useGroupViews,
   useInviteLink,
   useJoinRequests,
   useLeaveGroup,
@@ -562,24 +563,19 @@ function GroupJournalTab({
     return m?.display_name || m?.email || 'a member'
   }
 
-  const entryIndexMap = useMemo(() => {
-    const map = new Map<string, number>()
-    chatEntries.forEach((e, idx) => map.set(e.id, idx))
+  // Durable read receipts (entry_views): blue ticks mean someone OPENED the
+  // entry's detail view, not merely had the chat on screen.
+  const viewsQuery = useGroupViews(group.id)
+  const viewsByEntry = useMemo(() => {
+    const map = new Map<string, Array<{ user_id: string; display_name: string | null }>>()
+    for (const v of viewsQuery.data ?? []) {
+      const list = map.get(v.entry_id) ?? []
+      list.push({ user_id: v.user_id, display_name: v.display_name })
+      map.set(v.entry_id, list)
+    }
     return map
-  }, [chatEntries])
-
-  // Get members who have seen this entry (or any subsequent entry in the chat)
-  const getEntryReaders = (entryId: string) => {
-    const currentIdx = entryIndexMap.get(entryId)
-    if (currentIdx === undefined) return []
-    return group.members.filter((m) => {
-      if (m.user_id === user?.id) return false
-      const peerSeen = realtime.seen.find((s) => s.user_id === m.user_id)
-      if (!peerSeen) return false
-      const seenIdx = entryIndexMap.get(peerSeen.entry_id)
-      return seenIdx !== undefined && seenIdx >= currentIdx
-    })
-  }
+  }, [viewsQuery.data])
+  const entryReaders = (entryId: string) => (viewsByEntry.get(entryId) ?? []).filter((r) => r.user_id !== user?.id)
 
   // Notebooks linked to this group that the current user owns
   const myLinkedNotebooks = useMemo(
@@ -1070,8 +1066,8 @@ function GroupJournalTab({
                             <span>{formatStamp(entry.created_at)}</span>
                             {mine &&
                               (() => {
-                                const readers = getEntryReaders(entry.id)
-                                const names = readers.map((r) => r.display_name || r.email || 'Someone').join(', ')
+                                const readers = entryReaders(entry.id)
+                                const names = readers.map((r) => r.display_name || 'Someone').join(', ')
                                 return readers.length > 0 ? (
                                   <span
                                     className="inline-flex items-center gap-0.5 text-sky-300 font-sans text-[9.5px]"

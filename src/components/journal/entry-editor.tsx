@@ -401,6 +401,15 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
                 #{t}
               </span>
             ))}
+            {entry.readers && entry.readers.length > 0 && (
+              <span
+                className="ml-auto font-mono text-[10.5px] text-ink-faint"
+                title={`Dilihat oleh: ${entry.readers.map((r) => r.display_name || 'Someone').join(', ')}`}
+              >
+                <Eye weight="light" className="mr-1 inline h-3.5 w-3.5" />
+                dilihat oleh {entry.readers.map((r) => r.display_name || 'Someone').join(', ')}
+              </span>
+            )}
           </div>
         </header>
 
@@ -553,6 +562,15 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
               </>
             )}
           </button>
+        )}
+        {entry?.readers && entry.readers.length > 0 && (
+          <p
+            className="font-mono text-[10.5px] text-ink-faint"
+            title={`Dilihat oleh: ${entry.readers.map((r) => r.display_name || 'Someone').join(', ')}`}
+          >
+            <Eye weight="light" className="mr-1 inline h-3.5 w-3.5" />
+            dilihat oleh {entry.readers.map((r) => r.display_name || 'Someone').join(', ')}
+          </p>
         )}
       </div>
 

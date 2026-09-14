@@ -505,4 +505,62 @@ export function registerGroupRoutes(app: App) {
       pagination: { page, limit, total: count ?? 0 },
     })
   })
+
+  // --------------------------------------------------------------- read receipts
+  const views = createRoute({
+    method: 'get',
+    path: '/groups/{id}/views',
+    tags: ['Groups'],
+    summary: 'Read receipts for the group journal — who opened which entry',
+    description:
+      'Rows from entry_views for entries in notebooks linked to this group, with display names. RLS decides row by row what you may see. Powers the blue read ticks in the group chat.',
+    security: [bearerAuth],
+    middleware: [requireAuth],
+    request: { params: GroupIdParam },
+    responses: {
+      ...errorResponses(401, 404, 503),
+      200: {
+        description: 'View rows',
+        content: {
+          'application/json': {
+            schema: z.array(
+              z.object({
+                entry_id: UuidSchema,
+                user_id: UuidSchema,
+                display_name: z.string().nullable(),
+                viewed_at: TimestampSchema,
+              }),
+            ),
+          },
+        },
+      },
+    },
+  })
+  app.openapi(views, async (c) => {
+    const { id } = c.req.valid('param')
+    await requireGroupVisible(c.var.userClient, id, 'id')
+
+    const { data, error } = await c.var.userClient
+      .from('entry_views')
+      .select('entry_id, user_id, viewed_at, profiles(display_name), entries!inner(notebooks!inner(group_id))')
+      .eq('entries.notebooks.group_id', id)
+      .order('viewed_at', { ascending: false })
+      .limit(500)
+    if (error) throw fromPostgrestError(error)
+
+    const rows = (
+      (data ?? []) as Array<{
+        entry_id: string
+        user_id: string
+        viewed_at: string
+        profiles?: { display_name: string | null } | Array<{ display_name: string | null }> | null
+      }>
+    ).map((v) => ({
+      entry_id: v.entry_id,
+      user_id: v.user_id,
+      display_name: (Array.isArray(v.profiles) ? v.profiles[0] : v.profiles)?.display_name ?? null,
+      viewed_at: v.viewed_at,
+    }))
+    return c.json(rows)
+  })
 }

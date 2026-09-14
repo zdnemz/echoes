@@ -79,6 +79,8 @@ export interface Entry {
   is_shared: boolean
   created_at: string
   updated_at: string
+  /** Others who opened this entry — only present on GET /entries/:id */
+  readers?: Array<{ user_id: string; display_name: string | null; viewed_at: string }>
 }
 
 export interface CreateEntryInput {

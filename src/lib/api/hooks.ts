@@ -192,6 +192,18 @@ export function useGroupEntries(groupId: string | null, filters: GroupJournalFil
   })
 }
 
+export function useGroupViews(groupId: string | null) {
+  const enabled = useAuthed() && groupId !== null
+  return useQuery({
+    queryKey: ['group-views', groupId],
+    queryFn: () => api.listGroupViews(groupId as string),
+    enabled,
+    retry: retryPolicy,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
+  })
+}
+
 // ---------------------------------------------------------------- search
 
 export function useSearch(term: string, enabled = true) {

@@ -79,6 +79,9 @@ export function useGroupRealtime(groupId: string | null) {
             else if (event === 'entries') {
               setStatus('live')
               void qc.invalidateQueries({ queryKey: ['group-entries', groupId] })
+              // The journal version also covers read receipts (entry_views),
+              // so a new view re-ticks the stream — refresh the ticks too.
+              void qc.invalidateQueries({ queryKey: ['group-views', groupId] })
             } else if (event === 'members') {
               setStatus('live')
               void qc.invalidateQueries({ queryKey: ['group', groupId] })

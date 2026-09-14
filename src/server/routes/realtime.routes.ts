@@ -66,15 +66,27 @@ function presenceKey(snapshot: unknown): string {
 
 /** Count + latest update of the entries this caller may see in the group. */
 async function journalVersion(userClient: Parameters<typeof requireGroupVisible>[0], groupId: string) {
-  const { data, count, error } = await userClient
-    .from('entries')
-    .select('updated_at, notebooks!inner(group_id)', { count: 'exact' })
-    .eq('notebooks.group_id', groupId)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-  if (error) throw fromPostgrestError(error)
-  const rows = (data ?? []) as Array<{ updated_at: string }>
-  return `${count ?? 0}:${rows[0]?.updated_at ?? 'none'}`
+  const [entriesRes, viewsRes] = await Promise.all([
+    userClient
+      .from('entries')
+      .select('updated_at, notebooks!inner(group_id)', { count: 'exact' })
+      .eq('notebooks.group_id', groupId)
+      .order('updated_at', { ascending: false })
+      .limit(1),
+    // Read receipts belong to the journal's live layer: a new view should
+    // re-tick the stream exactly like a new message does. Best effort — if
+    // entry_views is missing (pre-0011 database) the version still works.
+    userClient
+      .from('entry_views')
+      .select('viewed_at', { count: 'exact', head: true })
+      .order('viewed_at', { ascending: false })
+      .limit(1)
+      .then(undefined, () => null),
+  ])
+  if (entriesRes.error) throw fromPostgrestError(entriesRes.error)
+  const rows = (entriesRes.data ?? []) as Array<{ updated_at: string }>
+  const lastView = (viewsRes?.data?.[0] as { viewed_at?: string } | undefined)?.viewed_at ?? 'none'
+  return `${entriesRes.count ?? 0}:${rows[0]?.updated_at ?? 'none'}:views=${viewsRes?.count ?? 0}@${lastView}`
 }
 
 /** Member count + latest joined timestamp + pending join requests count. */

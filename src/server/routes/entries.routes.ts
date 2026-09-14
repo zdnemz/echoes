@@ -5,6 +5,7 @@ import {
   MoodSchema,
   PageQuerySchema,
   PaginatedSchema,
+  TimestampSchema,
   UpdateEntrySchema,
   UuidSchema,
 } from '../schemas'
@@ -139,15 +140,32 @@ export function registerEntryRoutes(app: App) {
     method: 'get',
     path: '/entries/{id}',
     tags: ['Entries'],
-    summary: 'Get one entry',
+    summary: "Get one entry (records the reader's view)",
     description:
-      'Subject to the visibility rule: authors and notebook owners always see it; group members see it only when is_shared is true.',
+      'Subject to the visibility rule: authors and notebook owners always see it; group members see it only when is_shared is true. Opening it as a non-author records a read receipt in entry_views, and the response embeds who else has opened it.',
     security: [bearerAuth],
     middleware: [requireAuth],
     request: { params: EntryIdParam },
     responses: {
       ...errorResponses(401, 404, 503),
-      200: { description: 'Entry', content: { 'application/json': { schema: EntrySchema } } },
+      200: {
+        description: 'Entry with readers',
+        content: {
+          'application/json': {
+            schema: EntrySchema.extend({
+              readers: z
+                .array(
+                  z.object({
+                    user_id: UuidSchema,
+                    display_name: z.string().nullable(),
+                    viewed_at: TimestampSchema,
+                  }),
+                )
+                .openapi({ description: 'Others who opened this entry, oldest view first' }),
+            }),
+          },
+        },
+      },
     },
   })
   app.openapi(getOne, async (c) => {
@@ -157,7 +175,42 @@ export function registerEntryRoutes(app: App) {
     if (error) throw fromPostgrestError(error)
     if (!data) throw Errors.notFound('Entry not found (or not visible to you)')
 
-    return c.json(data as unknown as EntryRow)
+    const row = data as unknown as EntryRow
+
+    // Read receipt: the author re-reading their own entry is not a "view".
+    // Idempotent upsert — re-opens only bump viewed_at. Best effort: a failed
+    // receipt must not fail the read itself.
+    if (row.author_id !== c.var.user.id) {
+      const up = await c.var.userClient
+        .from('entry_views')
+        .upsert({ entry_id: id, user_id: c.var.user.id }, { onConflict: 'entry_id,user_id' })
+      void up.error
+    }
+
+    // Who has opened it (readable only while the entry is visible — RLS).
+    let readers: Array<{ user_id: string; display_name: string | null; viewed_at: string }> = []
+    const { data: viewRows, error: viewError } = await c.var.userClient
+      .from('entry_views')
+      .select('user_id, viewed_at, profiles(display_name)')
+      .eq('entry_id', id)
+      .neq('user_id', c.var.user.id)
+      .order('viewed_at', { ascending: true })
+      .limit(50)
+    if (!viewError) {
+      readers = (
+        (viewRows ?? []) as Array<{
+          user_id: string
+          viewed_at: string
+          profiles?: { display_name: string | null } | Array<{ display_name: string | null }> | null
+        }>
+      ).map((v) => ({
+        user_id: v.user_id,
+        display_name: (Array.isArray(v.profiles) ? v.profiles[0] : v.profiles)?.display_name ?? null,
+        viewed_at: v.viewed_at,
+      }))
+    }
+
+    return c.json({ ...row, readers })
   })
 
   // ----------------------------------------------------------------- update
