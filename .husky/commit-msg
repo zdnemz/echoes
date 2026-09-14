@@ -1,0 +1,11 @@
+# Husky commit-msg: enforce the atomic-commit message shape from AGENTS.md.
+# One logical change per commit, conventional prefix, imperative subject.
+MSG_FILE="$1"
+SUBJECT=$(head -n 1 "$MSG_FILE")
+
+if ! printf '%s' "$SUBJECT" | grep -qE '^(feat|fix|refactor|chore|docs|test|build)(\([a-z0-9-]+\))?: [a-z].{10,72}$'; then
+  echo "commit-msg rejected. Expected: <type>(<scope>): <imperative subject, 10-72 chars>" >&2
+  echo "  types: feat fix refactor chore docs test build" >&2
+  echo "  got:   $SUBJECT" >&2
+  exit 1
+fi
