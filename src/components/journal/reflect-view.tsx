@@ -22,6 +22,11 @@ interface Turn extends ReflectMessage {
   tools?: string[]
 }
 
+// Chat history survives reloads — keyed by the exact set of notebooks in
+// scope, so re-ticking changes the conversation, not the storage.
+const historyKey = (ids: string[]) => `reflect:chat:${[...ids].sort().join(',')}`
+const HISTORY_CAP = 60
+
 export function ReflectView() {
   const { user } = useSession()
   const notebooks = useNotebooks()
@@ -36,6 +41,26 @@ export function ReflectView() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' })
   }, [turns.length, busy])
+
+  // Swap the thread when the scope changes; persist each new state.
+  const scopeKey = historyKey(selected)
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(scopeKey)
+      setTurns(raw ? (JSON.parse(raw) as Turn[]) : [])
+    } catch {
+      setTurns([])
+    }
+  }, [scopeKey])
+
+  useEffect(() => {
+    if (selected.length === 0) return
+    try {
+      window.localStorage.setItem(scopeKey, JSON.stringify(turns.slice(-HISTORY_CAP)))
+    } catch {
+      // storage full/blocked — the in-memory thread still works
+    }
+  }, [turns, scopeKey, selected.length])
 
   const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
 
@@ -76,9 +101,27 @@ export function ReflectView() {
 
       {/* scope picker */}
       <div className="mt-5 rounded-xl border border-line bg-paper-raised p-3.5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">
-          May read · {selected.length}/{mine.length}
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">
+            May read · {selected.length}/{mine.length}
+          </p>
+          {turns.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setTurns([])
+                try {
+                  window.localStorage.removeItem(scopeKey)
+                } catch {
+                  // nothing stored
+                }
+              }}
+              className="press font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint hover:text-ink"
+            >
+              clear chat
+            </button>
+          )}
+        </div>
         {notebooks.isLoading ? (
           <div className="skeleton-line mt-2 h-9 w-full" />
         ) : mine.length === 0 ? (
