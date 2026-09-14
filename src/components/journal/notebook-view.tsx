@@ -51,6 +51,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MOODS, MOOD_META, MoodGlyph } from '@/components/mood/glyphs'
 import { EntryRow, EntryRowSkeleton } from './entry-row'
+import { QueryError } from '@/components/query-error'
 import { useSession } from '@/lib/auth/session'
 import {
   useCreateEntry,
@@ -470,11 +471,12 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
           <EntryRowSkeleton />
         </ul>
       ) : entries.isError ? (
-        <div className="mt-6">
-          <p className="text-[13px] text-ember">
-            {entries.error instanceof Error ? entries.error.message : "Couldn't load entries."}
-          </p>
-        </div>
+        <QueryError
+          error={entries.error}
+          fallback="Couldn't load entries."
+          onRetry={() => entries.refetch()}
+          className="mt-6"
+        />
       ) : list.length === 0 ? (
         <EmptyState
           isOwner={isOwner}

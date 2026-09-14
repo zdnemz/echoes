@@ -57,6 +57,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MOODS, MOOD_META, MoodGlyph, type Mood } from '@/components/mood/glyphs'
 import { EntryRow, EntryRowSkeleton } from './entry-row'
+import { QueryError } from '@/components/query-error'
 import { useSession } from '@/lib/auth/session'
 import {
   useCreateNotebook,
@@ -718,19 +719,11 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
             <EntryRowSkeleton />
           </div>
         ) : entriesQuery.isError ? (
-          <div className="rounded-lg border border-line bg-paper-raised p-6 text-center">
-            <p className="text-[13px] text-ember">
-              {entriesQuery.error instanceof Error ? entriesQuery.error.message : "Couldn't load group entries."}
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="press mt-3 border-line"
-              onClick={() => entriesQuery.refetch()}
-            >
-              Try again
-            </Button>
-          </div>
+          <QueryError
+            error={entriesQuery.error}
+            fallback="Couldn't load group entries."
+            onRetry={() => entriesQuery.refetch()}
+          />
         ) : entries.length === 0 ? (
           <div className="rounded-lg border border-dashed border-line-strong px-6 py-12 text-center">
             {hasActiveFilters ? (
@@ -1120,9 +1113,7 @@ export function GroupsView({
                 <div className="skeleton-line h-9 w-full" />
               </div>
             ) : (
-              <p className="text-[13px] text-ember">
-                {detail.error instanceof Error ? detail.error.message : "Couldn't load this group."}
-              </p>
+              <QueryError error={detail.error} fallback="Couldn't load this group." onRetry={() => detail.refetch()} />
             )
           ) : (
             <div>
