@@ -9,7 +9,7 @@
  *  - Sharing (owner only): invite link rotation, auto-accept switch, request queue.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   ArrowClockwise,
@@ -23,6 +23,7 @@ import {
   Funnel,
   LinkSimple,
   MagnifyingGlass,
+  PaperPlaneTilt,
   PencilSimple,
   PenNib,
   Plus,
@@ -56,11 +57,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MOODS, MOOD_META, MoodGlyph, type Mood } from '@/components/mood/glyphs'
-import { EntryRow, EntryRowSkeleton } from './entry-row'
+import { EntryRowSkeleton } from './entry-row'
 import { QueryError } from '@/components/query-error'
 import { useSession } from '@/lib/auth/session'
 import {
   useCreateNotebook,
+  useCreateEntry,
   useDecideJoinRequest,
   useDeleteGroup,
   useGroup,
@@ -80,7 +82,7 @@ import { isUnconfigured } from '@/lib/api/client'
 import { useCopy } from '@/hooks/use-copy'
 import { useDebouncedValue, useMinuteTick } from '@/hooks/use-debounced-value'
 import { useRovingSelection } from '@/hooks/use-roving-selection'
-import { avatarTone, formatDay, initials } from '@/lib/format'
+import { avatarTone, excerpt, formatDay, formatStamp, initials } from '@/lib/format'
 import type { Group, GroupDetail } from '@/lib/api/types'
 import type { View } from './workspace'
 
@@ -455,6 +457,17 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
   const entriesQuery = useGroupEntries(group.id, filters)
   const entries = useMemo(() => entriesQuery.data?.pages.flatMap((p) => p.data) ?? [], [entriesQuery.data])
   const total = entriesQuery.data?.pages[0]?.pagination.total ?? 0
+  // Chat shows oldest at top — the API returns newest first, so reverse once.
+  const chatEntries = useMemo(() => [...entries].reverse(), [entries])
+
+  // Quick composer — only when exactly one linked notebook exists, so the
+  // target is unambiguous. Otherwise fall back to the link/create dialog.
+  const createEntry = useCreateEntry()
+  const [quickText, setQuickText] = useState('')
+  const chatEndRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ block: 'end' })
+  }, [group.id, chatEntries.length])
 
   // `placeholderData: (prev) => prev` keeps the previous filter's rows on
   // screen while a new filter loads, which also flips isPending to false.
@@ -462,16 +475,7 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
   // shows instead of a result set that is about to be replaced.
   const showEntriesSkeleton = entriesQuery.isLoading || (entriesQuery.isPlaceholderData && entriesQuery.isFetching)
 
-  // Map notebook IDs to their titles for display in EntryRow
-  const notebookTitleMap = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const nb of notebooks.data?.data ?? []) {
-      map.set(nb.id, nb.title)
-    }
-    return map
-  }, [notebooks.data])
-
-  // Resolve author names for display in EntryRow
+  // Resolve author names for chat bubbles
   const authorName = (aId: string) => {
     if (aId === user?.id) return null
     const m = group.members.find((member) => member.user_id === aId)
@@ -495,6 +499,24 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
     () => (notebooks.data?.data ?? []).filter((nb) => nb.group_id === group.id).length,
     [notebooks.data, group.id],
   )
+  const quickTarget = myLinkedNotebooks.length === 1 ? myLinkedNotebooks[0] : null
+
+  const sendQuick = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const body = quickText.trim()
+    if (!body || !quickTarget || createEntry.isPending) return
+    try {
+      await createEntry.mutateAsync({
+        notebookId: quickTarget.id,
+        title: body.split('\n')[0].slice(0, 80) || 'Quick note',
+        body,
+        is_shared: true,
+      })
+      setQuickText('')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't send.")
+    }
+  }
 
   const handleComposeClick = () => {
     if (myLinkedNotebooks.length === 1) {
@@ -710,7 +732,7 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
         )}
       </div>
 
-      {/* Entries stream */}
+      {/* Roomchat stream — ringkasan bubble, klik untuk detail journal */}
       <div>
         {showEntriesSkeleton ? (
           <div className="divide-y divide-line border-y border-line">
@@ -765,48 +787,148 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
             )}
           </div>
         ) : (
-          <>
-            <ul className="divide-y divide-line border-y border-line" aria-busy={entriesQuery.isFetching}>
-              {entries.map((entry) => (
-                <EntryRow
-                  key={entry.id}
-                  entry={entry}
-                  authorName={authorName(entry.author_id)}
-                  notebookTitle={notebookTitleMap.get(entry.notebook_id) ?? null}
-                  showPrivate={false}
-                  onOpen={(e) =>
-                    onNavigate({
-                      kind: 'entry',
-                      entryId: e.id,
-                      notebookId: e.notebook_id,
-                      fromGroup: group.id,
-                    })
-                  }
-                />
-              ))}
-            </ul>
-
+          <div className="overflow-hidden rounded-xl border border-line bg-paper">
             {entriesQuery.hasNextPage && (
-              <div className="mt-6 flex justify-center">
+              <div className="flex justify-center border-b border-line bg-paper-raised/60 px-4 py-2.5">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   disabled={entriesQuery.isFetchingNextPage}
-                  className="press h-9 border-line bg-paper-raised"
+                  className="press h-8 text-[12px] text-ink-soft"
                   onClick={() => entriesQuery.fetchNextPage()}
                 >
                   {entriesQuery.isFetchingNextPage ? (
                     <>
                       <CircleNotch weight="bold" className="mr-1.5 h-3.5 w-3.5 animate-spin text-clay" />
-                      Loading more…
+                      Loading older…
                     </>
                   ) : (
-                    'Load more entries'
+                    'Load older messages'
                   )}
                 </Button>
               </div>
             )}
-          </>
+
+            <ul className="space-y-4 px-3 py-5 sm:px-5" aria-busy={entriesQuery.isFetching} aria-label="Group messages">
+              {chatEntries.map((entry, i) => {
+                const mine = entry.author_id === user?.id
+                const prev = chatEntries[i - 1]
+                const showDay = !prev || formatDay(prev.created_at) !== formatDay(entry.created_at)
+                const tone = avatarTone(entry.author_id)
+                const name = mine ? 'You' : (authorName(entry.author_id) ?? 'a member')
+                return (
+                  <li key={entry.id}>
+                    {showDay && (
+                      <p className="mb-3 mt-1 text-center font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint first:mt-0">
+                        {formatDay(entry.created_at)}
+                      </p>
+                    )}
+                    <div className={`flex items-end gap-2 ${mine ? 'flex-row-reverse' : ''}`}>
+                      {!mine && (
+                        <span
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[9px] font-semibold"
+                          style={{ background: tone.bg, color: tone.fg }}
+                          aria-hidden="true"
+                        >
+                          {initials(authorName(entry.author_id), '·')}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onNavigate({
+                            kind: 'entry',
+                            entryId: entry.id,
+                            notebookId: entry.notebook_id,
+                            fromGroup: group.id,
+                          })
+                        }
+                        title="Open full entry"
+                        className={`press block max-w-[85%] px-3.5 py-2.5 text-left shadow-sm transition-colors sm:max-w-[75%] ${
+                          mine
+                            ? 'rounded-2xl rounded-br-md bg-ink text-paper hover:bg-ink/90'
+                            : 'rounded-2xl rounded-bl-md border border-line bg-paper-raised text-ink hover:border-line-strong'
+                        }`}
+                      >
+                        {!mine && (
+                          <p className="truncate text-[11px] font-semibold" style={{ color: tone.fg }}>
+                            {name}
+                          </p>
+                        )}
+                        {entry.title && (
+                          <p className={`mt-0.5 text-[13.5px] font-semibold leading-snug ${mine ? '' : ''}`}>
+                            {entry.title}
+                          </p>
+                        )}
+                        {entry.body.trim().length > 0 && (
+                          <p
+                            className={`mt-0.5 line-clamp-4 whitespace-pre-wrap text-[13.5px] leading-relaxed ${
+                              mine ? 'text-paper/90' : 'text-ink-soft'
+                            }`}
+                          >
+                            {excerpt(entry.body, 280)}
+                          </p>
+                        )}
+                        <span
+                          className={`mt-1.5 flex items-center gap-2 text-[10.5px] ${
+                            mine ? 'justify-end text-paper/70' : 'text-ink-faint'
+                          }`}
+                        >
+                          {entry.mood && (
+                            <span className="inline-flex items-center gap-1">
+                              <MoodGlyph mood={entry.mood} className="h-3 w-3" />
+                            </span>
+                          )}
+                          {entry.tags.slice(0, 3).map((t) => (
+                            <span key={t} className="font-mono">
+                              #{t}
+                            </span>
+                          ))}
+                          <span className="ml-auto font-mono">{formatStamp(entry.created_at)}</span>
+                        </span>
+                      </button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+            <div ref={chatEndRef} />
+
+            {/* Quick composer */}
+            <div className="border-t border-line bg-paper-raised/60 px-3 py-3 sm:px-4">
+              {quickTarget ? (
+                <form onSubmit={sendQuick} className="flex items-end gap-2">
+                  <input
+                    value={quickText}
+                    onChange={(e) => setQuickText(e.target.value)}
+                    placeholder={`Message ${group.name}… (Enter to send)`}
+                    aria-label={`Message ${group.name}`}
+                    className="min-h-10 max-h-28 flex-1 rounded-xl border border-line bg-paper px-3.5 py-2.5 text-[13.5px] text-ink placeholder:text-ink-faint focus:border-clay-soft focus:outline-none focus:ring-2 focus:ring-clay-soft/40"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) void sendQuick(e as unknown as React.FormEvent)
+                    }}
+                  />
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={!quickText.trim() || createEntry.isPending}
+                    className="press h-10 w-10 shrink-0 rounded-xl shadow-ink"
+                    aria-label="Send message"
+                  >
+                    <PaperPlaneTilt weight="fill" className="h-4 w-4" />
+                  </Button>
+                </form>
+              ) : (
+                <Button size="sm" className="press h-9 w-full gap-1.5 shadow-ink" onClick={handleComposeClick}>
+                  <PenNib weight="bold" className="h-3.5 w-3.5" />
+                  Write entry
+                </Button>
+              )}
+              <p className="mt-1.5 text-center font-mono text-[10px] text-ink-faint">
+                {quickTarget ? `Posting to ${quickTarget.title}.` : 'Choose a notebook to post from.'}
+              </p>
+            </div>
+          </div>
         )}
       </div>
 
