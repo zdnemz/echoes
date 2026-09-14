@@ -1,6 +1,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { Scalar } from '@scalar/hono-api-reference'
-import { ApiError, zodFieldErrors } from './errors'
+import { HTTPException } from 'hono/http-exception'
+import { ApiError, fromPostgrestError, zodFieldErrors } from './errors'
 import type { AppEnv } from './types'
 import { registerAuthRoutes } from './routes/auth.routes'
 import { registerNotebookRoutes } from './routes/notebooks.routes'
@@ -107,10 +108,21 @@ export function createApp(): OpenAPIHono<AppEnv> {
       )
     }
 
+    // Hono's own errors (HTTPException). Without this branch a rejected
+    // content-type — @hono/zod-openapi throws HTTPException(415) from its
+    // media-type gate — falls through to a 500 INTERNAL.
+    if (err instanceof HTTPException) {
+      const code = err.status === 415 ? 'UNSUPPORTED_MEDIA_TYPE' : err.status === 404 ? 'NOT_FOUND' : 'HTTP_ERROR'
+      return c.json({ error: { code, message: err.message, details: null } }, err.status as 200)
+    }
+
     // PostgREST errors surfacing as thrown objects
     if (err && typeof err === 'object' && 'code' in err && 'message' in err) {
-      const mapped = fromPostgrest(err as { code?: string; message: string })
-      return c.json({ error: { code: mapped.code, message: mapped.message, details: null } }, mapped.status as 200)
+      const mapped = fromPostgrestError(err as { code?: string; message: string })
+      return c.json(
+        { error: { code: mapped.code, message: mapped.message, details: mapped.details ?? null } },
+        mapped.status as 200,
+      )
     }
 
     console.error('[api] unhandled error:', err)
@@ -122,27 +134,6 @@ export function createApp(): OpenAPIHono<AppEnv> {
   )
 
   return app
-}
-
-function fromPostgrest(err: { code?: string; message: string }): { code: string; message: string; status: number } {
-  switch (err.code) {
-    case 'PGRST205':
-      return {
-        code: 'SCHEMA_NOT_READY',
-        message:
-          'The data layer does not see the required tables yet — run the Supabase migrations, then reload the PostgREST schema cache',
-        status: 503,
-      }
-    case '23505':
-    case '23503':
-      return { code: 'CONFLICT', message: 'The request conflicts with existing data', status: 409 }
-    case '42501':
-      return { code: 'RLS_DENIED', message: 'Row level security denied this operation', status: 403 }
-    case '23514':
-      return { code: 'CHECK_VIOLATION', message: 'The request violates a data constraint', status: 400 }
-    default:
-      return { code: err.code ?? 'DB_ERROR', message: err.message, status: 400 }
-  }
 }
 
 // Singleton shared by the Next.js route handler.

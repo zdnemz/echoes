@@ -75,6 +75,11 @@ export function fromPostgrestError(postgrestError: {
         'SCHEMA_NOT_READY',
         'The data layer does not see the required tables yet — run the Supabase migrations, then reload the PostgREST schema cache',
       )
+    case 'PGRST116':
+      // supabase-js `.single()` yields this when the response contains zero
+      // rows — e.g. an UPDATE that matched nothing because RLS denied it or
+      // the row was deleted concurrently. 404, not a raw DB 400.
+      return new ApiError(404, 'NOT_FOUND', 'The resource was not found (or is not visible to you)')
     case '23505':
       return new ApiError(409, 'CONFLICT', 'The request conflicts with existing data')
     case '23503':
