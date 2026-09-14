@@ -8,6 +8,7 @@ import { registerNotebookRoutes } from './routes/notebooks.routes'
 import { registerEntryRoutes } from './routes/entries.routes'
 import { registerSearchRoutes } from './routes/search.routes'
 import { registerGroupRoutes } from './routes/groups.routes'
+import { registerReflectRoutes } from './routes/reflect.routes'
 import { registerRealtimeRoutes } from './routes/realtime.routes'
 import { registerInviteRoutes } from './routes/invites.routes'
 import { registerHealthRoutes } from './routes/health.routes'
@@ -68,6 +69,7 @@ export function createApp(): OpenAPIHono<AppEnv> {
   registerEntryRoutes(app)
   registerSearchRoutes(app)
   registerGroupRoutes(app)
+  registerReflectRoutes(app)
   registerRealtimeRoutes(app)
   registerInviteRoutes(app)
 
@@ -92,6 +94,7 @@ export function createApp(): OpenAPIHono<AppEnv> {
         { name: 'Entries', description: 'Markdown journal entries with mood and tags' },
         { name: 'Search', description: 'Search across your own entries' },
         { name: 'Groups', description: 'Small sharing groups with owner/member roles' },
+        { name: 'Reflect', description: 'Agentic journaling companion over notebooks you pick' },
         { name: 'Invites', description: 'Single-use, expiring email invites' },
         { name: 'System', description: 'Health and system status' },
       ],

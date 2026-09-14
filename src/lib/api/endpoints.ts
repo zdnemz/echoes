@@ -185,3 +185,16 @@ export const sendTyping = (groupId: string, input: { typing: boolean; name?: str
 
 export const sendSeen = (groupId: string, entryId: string) =>
   api<{ ok: boolean }>(`/api/groups/${groupId}/seen`, { method: 'POST', ...json({ entry_id: entryId }) })
+
+// ----------------------------------------------------------------- reflect (agentic companion)
+
+export interface ReflectMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export const reflectChat = (input: { notebook_ids: string[]; messages: ReflectMessage[] }) =>
+  api<{ reply: string; tools_used: string[]; model: string }>('/api/reflect/chat', {
+    method: 'POST',
+    ...json(input),
+  })
