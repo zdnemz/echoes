@@ -68,9 +68,12 @@ const components: Components = {
     // Same threat model as links above: author-supplied markdown must not
     // hand a reader an executable/blocked URL. Mirror the page CSP
     // (img-src 'self' data: https: blob:) — javascript:, data:text/html
-    // and other schemes render as a bare alt-text span instead.
+    // and other schemes render as a bare alt-text span instead. Restrict data
+    // URIs strictly to safe raster images (prevent SVG script injection).
     const safe =
-      typeof src === 'string' && src.length > 0 && /^(https?:|#|\/|[^:/?#]*([?#]|$)|data:image\/|blob:)/i.test(src)
+      typeof src === 'string' &&
+      src.length > 0 &&
+      /^(https?:|#|\/|[^:/?#]*([?#]|$)|data:image\/(png|jpeg|jpg|webp|gif|avif);base64,|blob:)/i.test(src)
         ? src
         : undefined
     if (!safe) return <span className="text-ink-soft">{alt ?? ''}</span>

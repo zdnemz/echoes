@@ -9,7 +9,7 @@ import {
 } from '../schemas'
 import { Errors, fromPostgrestError } from '../errors'
 import { requireAuth } from '../auth'
-import { bearerAuth, errorResponses, jsonBody, type App } from './helpers'
+import { bearerAuth, errorResponses, jsonBody, requireGroupVisible, type App } from './helpers'
 
 const NotebookIdParam = z.object({
   id: UuidSchema.openapi({ param: { name: 'id', in: 'path' } }),
@@ -143,7 +143,10 @@ export function registerNotebookRoutes(app: App) {
 
     const patch: Record<string, unknown> = {}
     if (title !== undefined) patch.title = title
-    if (group_id !== undefined) patch.group_id = group_id
+    if (group_id !== undefined) {
+      if (group_id !== null) await requireGroupVisible(c.var.userClient, group_id)
+      patch.group_id = group_id
+    }
 
     const { data, error } = await c.var.userClient.from('notebooks').update(patch).eq('id', id).select('*').single()
     if (error) throw fromPostgrestError(error)

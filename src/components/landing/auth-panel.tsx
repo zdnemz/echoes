@@ -118,6 +118,12 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
       router.push(`/invites/accept?token=${encodeURIComponent(stashed.token)}`)
       return
     }
+    const params = new URLSearchParams(window.location.search)
+    const returnTo = params.get('return_to')
+    if (returnTo && returnTo.startsWith('/journal') && !returnTo.startsWith('//') && !returnTo.includes('\\')) {
+      router.push(returnTo)
+      return
+    }
     router.push('/journal')
   }
 
@@ -146,9 +152,17 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
     }
   }
 
-  // Already signed in? Straight to the journal.
+  // Already signed in? Straight to the journal (or return target).
   useEffect(() => {
-    if (sessionStatus === 'authenticated') router.replace('/journal')
+    if (sessionStatus === 'authenticated') {
+      const params = new URLSearchParams(window.location.search)
+      const returnTo = params.get('return_to')
+      if (returnTo && returnTo.startsWith('/journal') && !returnTo.startsWith('//') && !returnTo.includes('\\')) {
+        router.replace(returnTo)
+        return
+      }
+      router.replace('/journal')
+    }
   }, [sessionStatus, router])
 
   const handleSignIn = async (e: React.FormEvent) => {
