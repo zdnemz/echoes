@@ -286,10 +286,19 @@ export function SettingsView() {
         <Section title="App">
           <Row label="Backend">
             <span
+              role="status"
+              aria-live="polite"
               className={`inline-flex items-center gap-1.5 font-mono text-[12px] ${backendOk ? 'text-sage' : 'text-ember'}`}
             >
               <span className={`h-1.5 w-1.5 rounded-full ${backendOk ? 'bg-sage' : 'bg-ember'}`} aria-hidden />
-              {health.data ? (backendOk ? `connected · v${health.data.version}` : 'unreachable') : 'checking…'}
+              {/* A failed request used to render 'checking...' forever. */}
+              {health.isError
+                ? 'unreachable'
+                : health.data
+                  ? backendOk
+                    ? `connected · v${health.data.version}`
+                    : 'unreachable'
+                  : 'checking...'}
             </span>
           </Row>
           <Row label="Legal">
