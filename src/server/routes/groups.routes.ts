@@ -236,10 +236,13 @@ export function registerGroupRoutes(app: App) {
     if (error) throw fromPostgrestError(error)
     if (!data) throw Errors.notFound('Group not found, or you are not its owner')
 
-    const { data: members } = await c.var.userClient
+    const { data: members, error: membersErr } = await c.var.userClient
       .from('group_members')
       .select('user_id, role, joined_at, profiles(display_name)')
       .eq('group_id', id)
+    // Swallowing this returned 200 with member_count 0, so the client believed
+    // a rename had emptied the group.
+    if (membersErr) throw fromPostgrestError(membersErr)
     const rows = (members ?? []) as unknown as MemberRow[]
 
     return c.json({

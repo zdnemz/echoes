@@ -267,12 +267,15 @@ export function registerInviteRoutes(app: App) {
     }
 
     // Already in? Report success (idempotent retries, double taps).
-    const { data: existing } = await service
+    const { data: existing, error: existingErr } = await service
       .from('group_members')
       .select('user_id')
       .eq('group_id', group.id)
       .eq('user_id', me.id)
       .maybeSingle()
+    // Must not be swallowed: a failed lookup reads as "not a member", so the
+    // handler would insert a duplicate membership and 409 on a first join.
+    if (existingErr) throw fromPostgrestError(existingErr)
     if (existing) {
       return c.json({
         status: 'member' as const,
@@ -283,13 +286,16 @@ export function registerInviteRoutes(app: App) {
     }
 
     // Open request already filed? Report it instead of stacking another.
-    const { data: openRequest } = await service
+    const { data: openRequest, error: openReqErr } = await service
       .from('group_join_requests')
       .select('id')
       .eq('group_id', group.id)
       .eq('user_id', me.id)
       .eq('status', 'pending')
       .maybeSingle()
+    // Same reasoning: a swallowed failure files a second request and hits the
+    // unique pending-request constraint.
+    if (openReqErr) throw fromPostgrestError(openReqErr)
     if (openRequest) {
       return c.json({
         status: 'pending' as const,
@@ -363,13 +369,14 @@ export function registerInviteRoutes(app: App) {
     const rows = (data ?? []) as JoinRequestRow[]
     // Requesters are not group members yet, so their profiles are invisible
     // under RLS — resolve names with the service role (owner-only route).
-    const { data: profiles } = await service
+    const { data: profiles, error: profilesErr } = await service
       .from('profiles')
       .select('id, display_name')
       .in(
         'id',
         rows.map((r) => r.user_id),
       )
+    if (profilesErr) throw fromPostgrestError(profilesErr)
     const names = new Map((profiles ?? []).map((p) => [p.id, p.display_name as string | null]))
 
     // Emails come from Auth (admin API); best-effort, never blocking.
