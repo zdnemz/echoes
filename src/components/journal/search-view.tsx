@@ -5,10 +5,11 @@
  * with the same editorial rows as the notebook list plus a notebook chip.
  */
 
-import { useEffect, useRef, useState } from 'react'
-import { MagnifyingGlass, X } from '@phosphor-icons/react/dist/ssr'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { CircleNotch, MagnifyingGlass, X } from '@phosphor-icons/react/dist/ssr'
 import { useSearch } from '@/lib/api/hooks'
 import { useNotebooks } from '@/lib/api/hooks'
+import { Button } from '@/components/ui/button'
 import { EntryRow, EntryRowSkeleton } from './entry-row'
 import type { View } from './workspace'
 
@@ -30,8 +31,8 @@ export function SearchView({ initialQuery, onNavigate }: { initialQuery: string;
     setSubmitted(term.trim())
   }
 
-  const list = results.data?.data ?? []
-  const total = results.data?.pagination.total ?? 0
+  const list = useMemo(() => results.data?.pages.flatMap((p) => p.data) ?? [], [results.data])
+  const total = results.data?.pages[0]?.pagination.total ?? 0
   const nbTitle = (id: string) => notebooks.data?.data.find((nb) => nb.id === id)?.title ?? null
 
   return (
@@ -72,7 +73,9 @@ export function SearchView({ initialQuery, onNavigate }: { initialQuery: string;
           <p className="border-b border-line pb-3 font-mono text-[10.5px] text-ink-faint">
             {total === 0
               ? `nothing matches “${submitted}”`
-              : `${total} ${total === 1 ? 'entry' : 'entries'} · your own words only`}
+              : results.hasNextPage
+                ? `showing ${list.length} of ${total} · your own words only`
+                : `${total} ${total === 1 ? 'entry' : 'entries'} · your own words only`}
           </p>
         )}
 
@@ -99,16 +102,39 @@ export function SearchView({ initialQuery, onNavigate }: { initialQuery: string;
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-line border-b border-line">
-            {list.map((entry) => (
-              <EntryRow
-                key={entry.id}
-                entry={entry}
-                notebookTitle={nbTitle(entry.notebook_id)}
-                onOpen={(e) => onNavigate({ kind: 'entry', entryId: e.id, notebookId: e.notebook_id })}
-              />
-            ))}
-          </ul>
+          <>
+            <ul className="divide-y divide-line border-b border-line" aria-busy={results.isFetching}>
+              {list.map((entry) => (
+                <EntryRow
+                  key={entry.id}
+                  entry={entry}
+                  notebookTitle={nbTitle(entry.notebook_id)}
+                  onOpen={(e) => onNavigate({ kind: 'entry', entryId: e.id, notebookId: e.notebook_id })}
+                />
+              ))}
+            </ul>
+
+            {results.hasNextPage && (
+              <div className="mt-6 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={results.isFetchingNextPage}
+                  className="press h-9 border-line bg-paper-raised"
+                  onClick={() => results.fetchNextPage()}
+                >
+                  {results.isFetchingNextPage ? (
+                    <>
+                      <CircleNotch weight="bold" className="mr-1.5 h-3.5 w-3.5 animate-spin text-clay" />
+                      Loading more…
+                    </>
+                  ) : (
+                    'Load more results'
+                  )}
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

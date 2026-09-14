@@ -191,11 +191,20 @@ export function useGroupEntries(groupId: string | null, filters: GroupJournalFil
 
 // ---------------------------------------------------------------- search
 
-export function useSearch(term: string, page = 1, enabled = true) {
-  const isEnabled = useAuthed() && enabled && term.trim().length > 0
-  return useQuery({
-    queryKey: ['search', term.trim().toLowerCase(), page],
-    queryFn: () => api.searchEntries(term.trim(), page),
+export function useSearch(term: string, enabled = true) {
+  const normalized = term.trim()
+  const isEnabled = useAuthed() && enabled && normalized.length > 0
+  return useInfiniteQuery({
+    // Keyed on the normalized term only: page is the cursor, and the previous
+    // key included it, which would have made each page a separate cache entry.
+    queryKey: ['search', normalized.toLowerCase()],
+    queryFn: ({ pageParam }) => api.searchEntries(normalized, pageParam as number),
+    initialPageParam: 1,
+    // Continue while a full page came back. Using the page length rather than
+    // the server's `total` keeps paging correct when entries are added or
+    // deleted mid-scroll (a shrinking total used to truncate the list).
+    getNextPageParam: (last: Paginated<Entry>) =>
+      last.data.length === last.pagination.limit ? last.pagination.page + 1 : undefined,
     enabled: isEnabled,
     retry: retryPolicy,
     placeholderData: (prev) => prev,
