@@ -55,9 +55,9 @@ export function ReflectView() {
       setTurns(next)
       setInput(text)
       if (err instanceof ApiError && err.code === 'AI_NOT_CONFIGURED') {
-        setNotice('The companion is not set up on this deployment yet — ask whoever runs it for an OpenRouter key.')
+        setNotice('The companion is not set up on this deployment yet — add AI_API_KEY to .env.')
       } else if (err instanceof ApiError && err.code === 'AI_RATE_LIMITED') {
-        toast.error('The free model is rate-limited — wait a minute and retry.')
+        toast.error('The model provider is rate-limited — wait a minute and retry.')
       } else {
         toast.error(err instanceof Error ? err.message : "Couldn't reach the companion.")
       }

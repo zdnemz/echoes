@@ -15,22 +15,51 @@ import { runAgentLoop, type AgentMessage, type ToolDef } from '../reflect/agent'
  * visible history, the agent may call read-only tools over the notebooks the
  * user explicitly selected — always their own, verified below — then answers.
  * Model + key come from the server environment so the key never reaches the
- * browser; default model is OpenRouter's free router.
+ * browser; supports any OpenAI-compatible or Anthropic-compatible endpoint.
  */
 
-const DEFAULT_MODEL = 'openai/gpt-4o-mini'
+export interface AIConfig {
+  apiKey: string
+  entrypoint: string
+  model: string
+  isAnthropic: boolean
+}
 
-function getAIConfig(): { apiKey: string; model: string } | null {
-  const apiKey = process.env.OPENROUTER_API_KEY
+export function getAIConfig(): AIConfig | null {
+  const apiKey =
+    process.env.AI_API_KEY ||
+    process.env.OPENAI_API_KEY ||
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.OPENROUTER_API_KEY
   if (!apiKey) return null
-  return { apiKey, model: process.env.OPENROUTER_MODEL || DEFAULT_MODEL }
+
+  const rawEntrypoint =
+    process.env.AI_ENTRYPOINT ||
+    process.env.AI_BASE_URL ||
+    process.env.OPENAI_BASE_URL ||
+    (process.env.ANTHROPIC_API_KEY ? 'https://api.anthropic.com/v1' : 'https://api.openai.com/v1')
+
+  const isAnthropic =
+    process.env.AI_PROVIDER === 'anthropic' ||
+    rawEntrypoint.includes('anthropic.com') ||
+    (!process.env.AI_API_KEY && !process.env.OPENAI_API_KEY && Boolean(process.env.ANTHROPIC_API_KEY))
+
+  const defaultModel = isAnthropic ? 'claude-3-5-haiku-20241022' : 'gpt-4o-mini'
+  const model =
+    process.env.AI_MODEL ||
+    process.env.OPENAI_MODEL ||
+    process.env.ANTHROPIC_MODEL ||
+    process.env.OPENROUTER_MODEL ||
+    defaultModel
+
+  return { apiKey, entrypoint: rawEntrypoint.trim(), model, isAnthropic }
 }
 
 function aiNotConfigured(): ApiError {
   return new ApiError(
     503,
     'AI_NOT_CONFIGURED',
-    'The AI companion is not set up on this deployment yet — add OPENROUTER_API_KEY to .env',
+    'The AI companion is not set up on this deployment yet — add AI_API_KEY to .env',
   )
 }
 
@@ -146,22 +175,36 @@ function buildTools(client: SupabaseClient, ownedIds: Set<string>): ToolDef[] {
   ]
 }
 
-async function openRouterChat(
-  apiKey: string,
-  model: string,
+export async function providerChat(
+  cfg: AIConfig,
   messages: AgentMessage[],
   tools: ToolDef[],
 ): Promise<{ content: string; toolCalls: Array<{ id: string; name: string; argsJson: string }> }> {
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  if (cfg.isAnthropic) {
+    return anthropicChat(cfg, messages, tools)
+  }
+  return openAIChat(cfg, messages, tools)
+}
+
+async function openAIChat(
+  cfg: AIConfig,
+  messages: AgentMessage[],
+  tools: ToolDef[],
+): Promise<{ content: string; toolCalls: Array<{ id: string; name: string; argsJson: string }> }> {
+  const url = cfg.entrypoint.endsWith('/chat/completions')
+    ? cfg.entrypoint
+    : `${cfg.entrypoint.replace(/\/+$/, '')}/chat/completions`
+
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${apiKey}`,
+      authorization: `Bearer ${cfg.apiKey}`,
       'content-type': 'application/json',
       'HTTP-Referer': getAppUrl(),
       'X-Title': 'Echoes Reflect',
     },
     body: JSON.stringify({
-      model,
+      model: cfg.model,
       messages: messages.map((m) => {
         if (m.role === 'tool') return { role: 'tool', tool_call_id: m.toolCallId, content: m.content }
         if (m.role === 'assistant' && m.toolCalls?.length) {
@@ -191,7 +234,11 @@ async function openRouterChat(
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) throw aiNotConfigured()
     if (res.status === 429) {
-      throw new ApiError(429, 'AI_RATE_LIMITED', 'The free model is rate-limited right now — wait a minute and retry.')
+      throw new ApiError(
+        429,
+        'AI_RATE_LIMITED',
+        'The model provider is rate-limited right now — wait a minute and retry.',
+      )
     }
     const text = await res.text().catch(() => '')
     throw new ApiError(502, 'AI_UPSTREAM', `The model provider failed (${res.status}): ${text.slice(0, 200)}`)
@@ -216,6 +263,112 @@ async function openRouterChat(
       argsJson: t.function?.arguments ?? '{}',
     })),
   }
+}
+
+async function anthropicChat(
+  cfg: AIConfig,
+  messages: AgentMessage[],
+  tools: ToolDef[],
+): Promise<{ content: string; toolCalls: Array<{ id: string; name: string; argsJson: string }> }> {
+  const url = cfg.entrypoint.endsWith('/messages') ? cfg.entrypoint : `${cfg.entrypoint.replace(/\/+$/, '')}/messages`
+
+  const system = messages.find((m) => m.role === 'system')?.content
+
+  const anthropicMessages: Array<{ role: 'user' | 'assistant'; content: unknown }> = []
+
+  for (const m of messages) {
+    if (m.role === 'system') continue
+    if (m.role === 'tool') {
+      anthropicMessages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: m.toolCallId,
+            content: m.content,
+          },
+        ],
+      })
+    } else if (m.role === 'assistant' && m.toolCalls?.length) {
+      const parts: unknown[] = []
+      if (m.content) parts.push({ type: 'text', text: m.content })
+      for (const t of m.toolCalls) {
+        let input: unknown = {}
+        try {
+          input = JSON.parse(t.argsJson || '{}')
+        } catch {
+          input = {}
+        }
+        parts.push({ type: 'tool_use', id: t.id, name: t.name, input })
+      }
+      anthropicMessages.push({ role: 'assistant', content: parts })
+    } else {
+      anthropicMessages.push({ role: m.role, content: m.content })
+    }
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'x-api-key': cfg.apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      max_tokens: 4096,
+      ...(system ? { system } : {}),
+      messages: anthropicMessages,
+      ...(tools.length > 0
+        ? {
+            tools: tools.map((t) => ({
+              name: t.name,
+              description: t.description,
+              input_schema: t.parameters,
+            })),
+          }
+        : {}),
+    }),
+    signal: AbortSignal.timeout(60_000),
+  })
+
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) throw aiNotConfigured()
+    if (res.status === 429) {
+      throw new ApiError(
+        429,
+        'AI_RATE_LIMITED',
+        'The model provider is rate-limited right now — wait a minute and retry.',
+      )
+    }
+    const text = await res.text().catch(() => '')
+    throw new ApiError(502, 'AI_UPSTREAM', `The model provider failed (${res.status}): ${text.slice(0, 200)}`)
+  }
+
+  const body = (await res.json()) as {
+    content?: Array<{
+      type: string
+      text?: string
+      id?: string
+      name?: string
+      input?: unknown
+    }>
+  }
+
+  let textContent = ''
+  const toolCalls: Array<{ id: string; name: string; argsJson: string }> = []
+  for (const block of body.content ?? []) {
+    if (block.type === 'text' && block.text) textContent += block.text
+    if (block.type === 'tool_use' && block.id && block.name) {
+      toolCalls.push({
+        id: block.id,
+        name: block.name,
+        argsJson: JSON.stringify(block.input ?? {}),
+      })
+    }
+  }
+
+  return { content: textContent, toolCalls }
 }
 
 const ChatBody = z
@@ -286,11 +439,7 @@ export function registerReflectRoutes(app: App) {
     ]
 
     const tools = buildTools(c.var.userClient, ownedIds)
-    const { reply, toolsUsed } = await runAgentLoop(
-      (msgs, ts) => openRouterChat(cfg.apiKey, cfg.model, msgs, ts),
-      tools,
-      thread,
-    )
+    const { reply, toolsUsed } = await runAgentLoop((msgs, ts) => providerChat(cfg, msgs, ts), tools, thread)
     return c.json({ reply, tools_used: [...new Set(toolsUsed)], model: cfg.model })
   })
 }

@@ -155,16 +155,17 @@ Echoes implements a **PKCE OAuth flow routed entirely through the Hono API**, en
 
 ## ⚙️ Environment Variables Reference
 
-| Variable                    | Required | Description                                                                                      | Example                   |
-| :-------------------------- | :------: | :----------------------------------------------------------------------------------------------- | :------------------------ |
-| `APP_URL`                   |   Yes    | Canonical origin of your frontend application. Used for building OAuth and invite redirect URLs. | `http://localhost:3000`   |
-| `SUPABASE_URL`              |   Yes    | Endpoint of the Supabase API (local gateway or cloud).                                           | `https://xyz.supabase.co` |
-| `SUPABASE_ANON_KEY`         |   Yes    | Public key for client/gateway communication.                                                     | `eyJhbGci...`             |
-| `SUPABASE_SERVICE_ROLE_KEY` | Dev/Seed | Elevated key for database seeding and maintenance scripts. Kept strictly server-side.            | `eyJhbGci...`             |
-| `OPENROUTER_API_KEY`        | Optional | API key from openrouter.ai to power the Reflect AI journaling companion.                         | `sk-or-v1-...`            |
-| `OPENROUTER_MODEL`          | Optional | Model identifier to use for the AI companion (defaults to `openai/gpt-4o-mini`).                 | `openai/gpt-4o-mini`      |
-| `PORT`                      | Optional | Port for the Next.js application server (default `3000`).                                        | `3000`                    |
-| `NODE_ENV`                  | Optional | Environment mode (`development` or `production`).                                                | `production`              |
+| Variable                    | Required | Description                                                                                      | Example                          |
+| :-------------------------- | :------: | :----------------------------------------------------------------------------------------------- | :------------------------------- |
+| `APP_URL`                   |   Yes    | Canonical origin of your frontend application. Used for building OAuth and invite redirect URLs. | `http://localhost:3000`          |
+| `SUPABASE_URL`              |   Yes    | Endpoint of the Supabase API (local gateway or cloud).                                           | `https://xyz.supabase.co`        |
+| `SUPABASE_ANON_KEY`         |   Yes    | Public key for client/gateway communication.                                                     | `eyJhbGci...`                    |
+| `SUPABASE_SERVICE_ROLE_KEY` | Dev/Seed | Elevated key for database seeding and maintenance scripts. Kept strictly server-side.            | `eyJhbGci...`                    |
+| `AI_API_KEY`                | Optional | API key for OpenAI, Anthropic, or any compatible provider (Groq, Together, DeepSeek, etc.).      | `sk-...`                         |
+| `AI_ENTRYPOINT`             | Optional | Base URL or endpoint for the AI provider (default `https://api.openai.com/v1`).                  | `https://api.groq.com/openai/v1` |
+| `AI_MODEL`                  | Optional | Model identifier to use for the AI companion (default `gpt-4o-mini`).                            | `gpt-4o-mini`                    |
+| `PORT`                      | Optional | Port for the Next.js application server (default `3000`).                                        | `3000`                           |
+| `NODE_ENV`                  | Optional | Environment mode (`development` or `production`).                                                | `production`                     |
 
 ---
 
