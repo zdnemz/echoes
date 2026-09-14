@@ -49,12 +49,15 @@ export function registerSearchRoutes(app: App) {
 
     const likePattern = escapePostgrestValue(`%${q}%`)
     const tagValue = escapePostgrestValue(q)
+    // Encrypted rows are opaque to the server — the client searches its
+    // decrypted corpus instead. Only legacy plaintext stays server-searchable.
     const orFilter = `title.ilike.${likePattern},body.ilike.${likePattern},tags.cs.{${tagValue}}`
 
     const { data, count, error } = await c.var.userClient
       .from('entries')
       .select('*', { count: 'exact' })
       .eq('author_id', user.id)
+      .eq('encrypted', false)
       .or(orFilter)
       .order('updated_at', { ascending: false })
       .range(from, from + limit - 1)

@@ -11,6 +11,7 @@ import { registerGroupRoutes } from './routes/groups.routes'
 import { registerReflectRoutes } from './routes/reflect.routes'
 import { registerRealtimeRoutes } from './routes/realtime.routes'
 import { registerInviteRoutes } from './routes/invites.routes'
+import { registerCryptoRoutes } from './routes/crypto.routes'
 import { registerHealthRoutes } from './routes/health.routes'
 
 /**
@@ -72,6 +73,7 @@ export function createApp(): OpenAPIHono<AppEnv> {
   registerReflectRoutes(app)
   registerRealtimeRoutes(app)
   registerInviteRoutes(app)
+  registerCryptoRoutes(app)
 
   // ---------------------------------------------------------------- OpenAPI docs (dev only)
   if (IS_DEV) {
@@ -96,6 +98,10 @@ export function createApp(): OpenAPIHono<AppEnv> {
         { name: 'Groups', description: 'Small sharing groups with owner/member roles' },
         { name: 'Reflect', description: 'Agentic journaling companion over notebooks you pick' },
         { name: 'Invites', description: 'Single-use, expiring email invites' },
+        {
+          name: 'Encryption',
+          description: 'End-to-end encryption key relay — opaque blobs only, the server cannot decrypt anything',
+        },
         { name: 'System', description: 'Health and system status' },
       ],
     })

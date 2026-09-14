@@ -39,6 +39,7 @@ interface EntryRow {
   mood: Mood | null
   tags: string[]
   is_shared: boolean
+  encrypted: boolean
   created_at: string
   updated_at: string
 }
@@ -99,7 +100,7 @@ export function registerEntryRoutes(app: App) {
   })
   app.openapi(create, async (c) => {
     const { notebookId } = c.req.valid('param')
-    const { title, body, mood, tags, is_shared } = c.req.valid('json')
+    const { title, body, mood, tags, is_shared, encrypted } = c.req.valid('json')
     const user = c.var.user
 
     // Friendly 404 when the notebook is not visible at all.
@@ -124,6 +125,7 @@ export function registerEntryRoutes(app: App) {
         mood: mood ?? null,
         tags: tags ?? [],
         is_shared: is_shared ?? true,
+        encrypted: encrypted ?? false,
       })
       .select('*')
       .single()
@@ -249,6 +251,7 @@ export function registerEntryRoutes(app: App) {
     if (patchInput.mood !== undefined) patch.mood = patchInput.mood
     if (patchInput.tags !== undefined) patch.tags = patchInput.tags
     if (patchInput.is_shared !== undefined) patch.is_shared = patchInput.is_shared
+    if (patchInput.encrypted !== undefined) patch.encrypted = patchInput.encrypted
 
     const { data, error } = await c.var.userClient.from('entries').update(patch).eq('id', id).select('*').single()
     if (error) throw fromPostgrestError(error)

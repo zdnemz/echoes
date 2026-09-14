@@ -466,7 +466,7 @@ export function registerGroupRoutes(app: App) {
     const query = c.var.userClient
       .from('entries')
       .select(
-        'id, notebook_id, author_id, title, mood, tags, is_shared, created_at, updated_at, body, notebooks!inner(group_id)',
+        'id, notebook_id, author_id, title, mood, tags, is_shared, encrypted, created_at, updated_at, body, notebooks!inner(group_id)',
         { count: 'exact' },
       )
       .eq('notebooks.group_id', id)
@@ -479,8 +479,9 @@ export function registerGroupRoutes(app: App) {
       .filter(Boolean)
     if (tagList.length > 0) filtered = filtered.overlaps('tags', tagList)
     if (q) {
+      // Encrypted titles/bodies are opaque here — match plaintext rows only.
       const likePattern = escapePostgrestValue(`%${q}%`)
-      filtered = filtered.or(`title.ilike.${likePattern},body.ilike.${likePattern}`)
+      filtered = filtered.eq('encrypted', false).or(`title.ilike.${likePattern},body.ilike.${likePattern}`)
     }
     if (since) filtered = filtered.gte('created_at', new Date(sinceMs).toISOString())
     if (until) filtered = filtered.lte('created_at', new Date(untilMs).toISOString())

@@ -114,6 +114,101 @@ export const UpdatePasswordSchema = z
   })
   .strict()
 
+// ---------------------------------------------------------------- encryption (E2EE)
+// The server relays opaque blobs only — it cannot decrypt any of them.
+
+export const PublishKeysSchema = z
+  .object({
+    salt: z.string().min(1).max(64).openapi({ description: 'PBKDF2 salt (base64, public by design)' }),
+    iterations: z.coerce.number().int().min(100_000).max(2_000_000).openapi({ description: 'PBKDF2 round count' }),
+    wrapped_dek: z.string().min(1).max(4096).openapi({ description: 'Data key sealed under the password-derived KEK' }),
+    public_key: z
+      .string()
+      .min(1)
+      .max(1024)
+      .openapi({ description: 'ECDH P-256 public key (SPKI base64) for sealed boxes' }),
+    wrapped_private_key: z
+      .string()
+      .min(1)
+      .max(8192)
+      .openapi({ description: 'Identity private key sealed under the DEK' }),
+  })
+  .strict()
+
+export const KeyMaterialSchema = z
+  .object({
+    salt: z.string().nullable(),
+    iterations: z.number().int().nullable(),
+    wrapped_dek: z.string().nullable(),
+    public_key: z.string().nullable(),
+    wrapped_private_key: z.string().nullable(),
+  })
+  .openapi('KeyMaterial')
+
+export const DistributeGroupKeysSchema = z
+  .object({
+    generation: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(1_000)
+      .openapi({ description: 'Key generation; bumped on rotation' }),
+    wraps: z
+      .array(
+        z
+          .object({
+            user_id: UuidSchema,
+            sealed_box: z.string().min(1).max(8192).openapi({ description: 'CEK sealed for this member only' }),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(50)
+      .openapi({ description: 'One sealed box per current member' }),
+  })
+  .strict()
+
+export const GroupKeyWrapView = z
+  .object({
+    group_id: UuidSchema,
+    generation: z.number().int(),
+    sealed_box: z.string(),
+    created_at: TimestampSchema,
+  })
+  .openapi('GroupKeyWrap')
+
+export const EncryptMigrationSchema = z
+  .object({
+    entries: z
+      .array(
+        z
+          .object({
+            id: UuidSchema,
+            title_cipher: z
+              .string()
+              .min(1)
+              .max(2048)
+              .openapi({ description: 'Sealed title (or legacy title when unencrypted)' }),
+            body_cipher: z
+              .string()
+              .max(140_000)
+              .openapi({ description: 'Sealed body (or legacy body when unencrypted)' }),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(100)
+      .openapi({ description: 'One batch of entries to flip to encrypted' }),
+  })
+  .strict()
+
+export const EncryptMigrationResultSchema = z
+  .object({
+    migrated: z.number().int().openapi({ description: 'Rows flipped to encrypted this batch' }),
+    remaining: z.number().int().openapi({ description: 'Unencrypted rows still to go' }),
+  })
+  .openapi('EncryptMigrationResult')
+
 export const OAuthStartResponseSchema = z
   .object({
     authorize_url: z.string().url().openapi({
@@ -188,6 +283,7 @@ export const EntrySchema = z
       description:
         'false opts this entry out of the notebook-level group sharing. Only meaningful once the notebook is linked to a group.',
     }),
+    encrypted: z.boolean().openapi({ description: 'true = title and body are client-sealed ciphertext' }),
     created_at: TimestampSchema,
     updated_at: TimestampSchema,
   })
@@ -195,21 +291,29 @@ export const EntrySchema = z
 
 export const CreateEntrySchema = z
   .object({
-    title: z.string().min(1).max(200).openapi({ example: 'A slow morning' }),
-    body: z.string().max(100000).openapi({ example: 'Woke up early, the coffee was **excellent**…' }),
+    title: z.string().min(1).max(2000).openapi({
+      example: 'A slow morning',
+      description: 'Plaintext title, or the sealed title envelope when encrypted=true',
+    }),
+    body: z.string().max(140000).openapi({
+      example: 'Woke up early, the coffee was **excellent**…',
+      description: 'Plaintext markdown, or the sealed body envelope when encrypted=true',
+    }),
     mood: MoodSchema.optional().openapi({ example: 'good' }),
     tags: TagsSchema.optional().openapi({ example: ['morning', 'gratitude'] }),
     is_shared: z.boolean().optional().openapi({ example: true, description: 'Defaults to true' }),
+    encrypted: z.boolean().optional().openapi({ example: true, description: 'Defaults to false (legacy plaintext)' }),
   })
   .strict()
 
 export const UpdateEntrySchema = z
   .object({
-    title: z.string().min(1).max(200).optional(),
-    body: z.string().max(100000).optional(),
+    title: z.string().min(1).max(2000).optional(),
+    body: z.string().max(140000).optional(),
     mood: MoodSchema.nullable().optional().openapi({ description: 'null clears the mood' }),
     tags: TagsSchema.optional(),
     is_shared: z.boolean().optional(),
+    encrypted: z.boolean().optional().openapi({ description: 'Flip ciphertext state alongside sealed title/body' }),
   })
   .strict()
 
