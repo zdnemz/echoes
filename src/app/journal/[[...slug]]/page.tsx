@@ -1,5 +1,9 @@
+import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import { Workspace } from '@/components/journal/workspace'
+import JournalLoading from '../loading'
+
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Your journal',
@@ -7,5 +11,9 @@ export const metadata: Metadata = {
 }
 
 export default function JournalPage() {
-  return <Workspace />
+  return (
+    <Suspense fallback={<JournalLoading />}>
+      <Workspace />
+    </Suspense>
+  )
 }

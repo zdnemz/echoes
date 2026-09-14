@@ -76,7 +76,11 @@ export function InviteAccept({ token }: { token: string | null }) {
         if (redirected.current) return
         redirected.current = true
         toast.success(result.message)
-        router.replace('/journal')
+        if (info.data?.group_id) {
+          router.replace(`/journal/groups/${info.data.group_id}`)
+        } else {
+          router.replace('/journal')
+        }
         return
       }
       setOutcome(result)

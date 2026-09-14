@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { List, MagnifyingGlass } from '@phosphor-icons/react/dist/ssr'
 import { Wordmark } from '@/components/brand'
 import { Grain } from '@/components/grain'
@@ -39,6 +39,77 @@ export type View =
   | { kind: 'group'; groupId: string }
   | { kind: 'reflect' }
   | { kind: 'settings' }
+
+export function viewFromSlugAndSearch(
+  slug?: string[] | null,
+  searchParams?: { get: (k: string) => string | null } | null,
+): View | null {
+  if (!slug || slug.length === 0) return null
+  const [section, id] = slug
+  if (section === 'notebooks' && id) {
+    return { kind: 'notebook', notebookId: id }
+  }
+  if (section === 'entries' && id) {
+    return {
+      kind: 'entry',
+      entryId: id,
+      notebookId: searchParams?.get('notebookId') || '',
+      fromGroup: searchParams?.get('fromGroup') || undefined,
+    }
+  }
+  if (section === 'groups') {
+    if (id) return { kind: 'group', groupId: id }
+    return { kind: 'groups' }
+  }
+  if (section === 'compose') {
+    return {
+      kind: 'compose',
+      notebookId: searchParams?.get('notebookId') || '',
+      fromGroup: searchParams?.get('fromGroup') || undefined,
+    }
+  }
+  if (section === 'search') {
+    return { kind: 'search', q: searchParams?.get('q') || '' }
+  }
+  if (section === 'reflect') {
+    return { kind: 'reflect' }
+  }
+  if (section === 'settings') {
+    return { kind: 'settings' }
+  }
+  return null
+}
+
+export function urlFromView(v: View): string {
+  switch (v.kind) {
+    case 'notebook':
+      return `/journal/notebooks/${v.notebookId}`
+    case 'entry': {
+      const q = new URLSearchParams()
+      if (v.notebookId) q.set('notebookId', v.notebookId)
+      if (v.fromGroup) q.set('fromGroup', v.fromGroup)
+      const qs = q.toString()
+      return `/journal/entries/${v.entryId}${qs ? `?${qs}` : ''}`
+    }
+    case 'compose': {
+      const q = new URLSearchParams()
+      if (v.notebookId) q.set('notebookId', v.notebookId)
+      if (v.fromGroup) q.set('fromGroup', v.fromGroup)
+      const qs = q.toString()
+      return `/journal/compose${qs ? `?${qs}` : ''}`
+    }
+    case 'groups':
+      return '/journal/groups'
+    case 'group':
+      return `/journal/groups/${v.groupId}`
+    case 'search':
+      return `/journal/search${v.q ? `?q=${encodeURIComponent(v.q)}` : ''}`
+    case 'reflect':
+      return '/journal/reflect'
+    case 'settings':
+      return '/journal/settings'
+  }
+}
 
 // --------------------------------------------------------------- restoring
 
@@ -85,38 +156,61 @@ function SignedOutGate() {
 
 export function Workspace() {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const params = useParams<{ slug?: string[] }>()
   const { status: sessionStatus } = useSession()
-  const [chosenView, setChosenView] = useState<View | null>(null)
   const [railOpen, setRailOpen] = useState(false)
 
   // ---- session gate
   useEffect(() => {
-    if (sessionStatus === 'anonymous') router.replace('/login')
-  }, [sessionStatus, router])
+    if (sessionStatus === 'anonymous') {
+      const qs = searchParams?.toString()
+      const fullPath = pathname + (qs ? `?${qs}` : '')
+      const safeReturnTo =
+        fullPath.startsWith('/journal') && !fullPath.startsWith('//') && !fullPath.includes('\\')
+          ? fullPath
+          : '/journal'
+      router.replace(`/login?return_to=${encodeURIComponent(safeReturnTo)}`)
+    }
+  }, [sessionStatus, pathname, searchParams, router])
 
   const notebooks = useNotebooks()
   // Memoized: a fresh [] each render would invalidate the memo below on every
   // render (and it is a dependency of the view-selection memo).
   const all = useMemo(() => notebooks.data?.data ?? [], [notebooks.data])
 
-  // ---- derived view: auto-select the first notebook once loaded, heal
-  // stale references (e.g. a deleted notebook). No effect needed.
+  const urlView = useMemo(() => viewFromSlugAndSearch(params?.slug, searchParams), [params?.slug, searchParams])
+
+  // Auto-redirect to first notebook when at bare /journal
+  useEffect(() => {
+    if (sessionStatus !== 'authenticated') return
+    if (!params?.slug || params.slug.length === 0) {
+      if (notebooks.isSuccess && all.length > 0) {
+        router.replace(urlFromView({ kind: 'notebook', notebookId: all[0].id }))
+      }
+    }
+  }, [sessionStatus, params?.slug, notebooks.isSuccess, all, router])
+
+  // ---- derived view from URL + notebooks loaded
   const view = useMemo<View | null>(() => {
-    if (chosenView) {
-      const needsNotebook =
-        chosenView.kind === 'notebook' || chosenView.kind === 'compose' || chosenView.kind === 'entry'
-      if (needsNotebook && all.length > 0 && !all.some((nb) => nb.id === chosenView.notebookId)) {
+    if (urlView) {
+      const needsNotebook = urlView.kind === 'notebook'
+      if (needsNotebook && all.length > 0 && !all.some((nb) => nb.id === urlView.notebookId)) {
         return { kind: 'notebook', notebookId: all[0].id }
       }
-      return chosenView
+      return urlView
     }
     return all.length > 0 ? { kind: 'notebook', notebookId: all[0].id } : null
-  }, [chosenView, all])
+  }, [urlView, all])
 
-  const navigate = useCallback((next: View) => {
-    setChosenView(next)
-    setRailOpen(false)
-  }, [])
+  const navigate = useCallback(
+    (next: View) => {
+      router.push(urlFromView(next))
+      setRailOpen(false)
+    },
+    [router],
+  )
 
   const unconfigured = notebooks.isError && isUnconfigured(notebooks.error) && sessionStatus === 'authenticated'
 
