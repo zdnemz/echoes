@@ -161,6 +161,8 @@ Echoes implements a **PKCE OAuth flow routed entirely through the Hono API**, en
 | `SUPABASE_URL`              |   Yes    | Endpoint of the Supabase API (local gateway or cloud).                                           | `https://xyz.supabase.co` |
 | `SUPABASE_ANON_KEY`         |   Yes    | Public key for client/gateway communication.                                                     | `eyJhbGci...`             |
 | `SUPABASE_SERVICE_ROLE_KEY` | Dev/Seed | Elevated key for database seeding and maintenance scripts. Kept strictly server-side.            | `eyJhbGci...`             |
+| `OPENROUTER_API_KEY`        | Optional | API key from openrouter.ai to power the Reflect AI journaling companion.                         | `sk-or-v1-...`            |
+| `OPENROUTER_MODEL`          | Optional | Model identifier to use for the AI companion (defaults to `openai/gpt-4o-mini`).                 | `openai/gpt-4o-mini`      |
 | `PORT`                      | Optional | Port for the Next.js application server (default `3000`).                                        | `3000`                    |
 | `NODE_ENV`                  | Optional | Environment mode (`development` or `production`).                                                | `production`              |
 

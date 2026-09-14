@@ -18,7 +18,7 @@ import { runAgentLoop, type AgentMessage, type ToolDef } from '../reflect/agent'
  * browser; default model is OpenRouter's free router.
  */
 
-const DEFAULT_MODEL = 'openrouter/free'
+const DEFAULT_MODEL = 'openai/gpt-4o-mini'
 
 function getAIConfig(): { apiKey: string; model: string } | null {
   const apiKey = process.env.OPENROUTER_API_KEY
