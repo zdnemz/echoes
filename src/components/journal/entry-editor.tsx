@@ -454,7 +454,25 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
     return () => window.removeEventListener('keydown', onKey)
   }, [canEdit, saving, save])
 
+  // Closing the tab / reloading with unsaved edits: let the browser ask first.
+  useEffect(() => {
+    if (!dirty || saving) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      // Legacy signal — some browsers still require a non-empty returnValue.
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [dirty, saving])
+
   const back = () => {
+    // Leaving with unsaved edits used to discard them silently while the
+    // footer still read "Unsaved changes" until the component unmounted.
+    if (dirty && !saving) {
+      const ok = window.confirm('This entry has unsaved changes. Leave without saving?')
+      if (!ok) return
+    }
     if (mode.fromGroup) {
       onNavigate({ kind: 'group', groupId: mode.fromGroup, tab: 'journal' })
       return
@@ -596,7 +614,14 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
             </>
           )}
 
-          <Button size="sm" className="press h-9 gap-1.5 shadow-ink" onClick={save} disabled={saving}>
+          <Button
+            size="sm"
+            className="press h-9 gap-1.5 shadow-ink"
+            onClick={save}
+            // Not before the entry has hydrated: the form fields still hold
+            // their empty defaults, and saving would blank the entry's mood.
+            disabled={saving || (!mode.compose && !hydrated)}
+          >
             {saving ? (
               <>
                 <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> Saving…
