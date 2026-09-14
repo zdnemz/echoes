@@ -1,4 +1,4 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { createRoute, z } from '@hono/zod-openapi'
 import {
   CreateInviteLinkSchema,
@@ -37,7 +37,8 @@ interface GroupLinkRow {
   owner_id: string
   name: string
   auto_accept: boolean
-  invite_token: string | null
+  /** sha256 of the live token — the plaintext is never stored. */
+  invite_token_hash: string | null
   invite_expires_at: string | null
 }
 
@@ -58,22 +59,47 @@ function newToken(): string {
   return randomBytes(32).toString('base64url')
 }
 
-/** Constant-time token comparison (tokens are unguessable, this blocks probing). */
-function tokensEqual(a: string, b: string): boolean {
+/**
+ * sha256 of a token, as stored.
+ *
+ * The live token is a capability that never expires on its own, so the
+ * database deliberately only ever holds this digest: a leaked backup, log
+ * line, or RLS gap then yields nothing usable.
+ */
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+/**
+ * Constant-time comparison of a stored hash against a candidate hash.
+ *
+ * Kept constant-time for consistency with the previous token comparison —
+ * the digests are not secret, but making the comparison depend on the
+ * attacker's input is never a habit worth dropping.
+ */
+function hashesEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a)
   const bb = Buffer.from(b)
   return ab.length === bb.length && timingSafeEqual(ab, bb)
 }
 
 function linkUsable(group: GroupLinkRow): boolean {
-  if (!group.invite_token) return false
+  if (!group.invite_token_hash) return false
   if (group.invite_expires_at && new Date(group.invite_expires_at).getTime() < Date.now()) return false
   return true
 }
 
-function toLinkPayload(group: GroupLinkRow) {
+/**
+ * Owner-facing link state.
+ *
+ * `url` is null whenever a link exists but its plaintext is not recoverable —
+ * which, after rotation, is always. Callers get `has_link` instead, so the UI
+ * can say "a link is active" without being able to show it.
+ */
+function toLinkPayload(group: GroupLinkRow, plaintextToken?: string) {
   return {
-    url: group.invite_token ? inviteAcceptUrl(group.invite_token) : null,
+    url: plaintextToken ? inviteAcceptUrl(plaintextToken) : null,
+    has_link: Boolean(group.invite_token_hash),
     expires_at: group.invite_expires_at,
     auto_accept: group.auto_accept,
   }
@@ -101,13 +127,15 @@ export function registerInviteRoutes(app: App) {
 
     const { data: group, error } = await c.var.userClient
       .from('groups')
-      .select('id, owner_id, name, auto_accept, invite_token, invite_expires_at')
+      .select('id, owner_id, name, auto_accept, invite_token_hash, invite_expires_at')
       .eq('id', id)
       .maybeSingle()
     if (error) throw fromPostgrestError(error)
     if (!group) throw Errors.notFound('Group not found (or not visible to you)')
     if ((group as GroupLinkRow).owner_id !== me) throw Errors.forbidden('Only the group owner manages the invite link')
 
+    // No url: only the hash is stored, so an existing link cannot be shown
+    // again. Rotate to issue a fresh one.
     return c.json(toLinkPayload(group as GroupLinkRow))
   })
 
@@ -143,15 +171,17 @@ export function registerInviteRoutes(app: App) {
 
     const { data: group, error } = await c.var.userClient
       .from('groups')
-      .update({ invite_token: token, invite_expires_at: expiresAt })
+      .update({ invite_token_hash: hashToken(token), invite_expires_at: expiresAt })
       .eq('id', id)
       .eq('owner_id', me)
-      .select('id, owner_id, name, auto_accept, invite_token, invite_expires_at')
+      .select('id, owner_id, name, auto_accept, invite_token_hash, invite_expires_at')
       .maybeSingle()
     if (error) throw fromPostgrestError(error)
     if (!group) throw Errors.notFound('Group not found, or you are not its owner')
 
-    return c.json(toLinkPayload(group as GroupLinkRow), 201)
+    // The only time the plaintext token exists on this server: hand it to the
+    // owner once. Any later read of this endpoint returns has_link only.
+    return c.json(toLinkPayload(group as GroupLinkRow, token), 201)
   })
 
   // ----------------------------------------------------------------- revoke link
@@ -175,7 +205,7 @@ export function registerInviteRoutes(app: App) {
 
     const { data: group, error } = await c.var.userClient
       .from('groups')
-      .update({ invite_token: null, invite_expires_at: null })
+      .update({ invite_token_hash: null, invite_expires_at: null })
       .eq('id', id)
       .eq('owner_id', me)
       .select('id')
@@ -210,8 +240,8 @@ export function registerInviteRoutes(app: App) {
 
     const { data, error } = await service
       .from('groups')
-      .select('id, name, auto_accept, invite_token, invite_expires_at')
-      .eq('invite_token', token)
+      .select('id, name, auto_accept, invite_token_hash, invite_expires_at')
+      .eq('invite_token_hash', hashToken(token))
       .maybeSingle()
     if (error) throw fromPostgrestError(error)
     if (!data) throw Errors.notFound('This invite link is invalid or was revoked')
@@ -251,14 +281,14 @@ export function registerInviteRoutes(app: App) {
 
     const { data, error } = await service
       .from('groups')
-      .select('id, name, auto_accept, invite_token, invite_expires_at')
-      .eq('invite_token', token)
+      .select('id, name, auto_accept, invite_token_hash, invite_expires_at')
+      .eq('invite_token_hash', hashToken(token))
       .maybeSingle()
     if (error) throw fromPostgrestError(error)
     if (!data) throw Errors.notFound('This invite link is invalid or was revoked')
     const group = data as GroupLinkRow
 
-    if (!tokensEqual(group.invite_token ?? '', token)) {
+    if (!hashesEqual(group.invite_token_hash ?? '', hashToken(token))) {
       // Unreachable via the indexed lookup above (defense in depth).
       throw Errors.notFound('This invite link is invalid or was revoked')
     }

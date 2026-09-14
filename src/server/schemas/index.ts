@@ -259,7 +259,11 @@ export const InviteLinkSchema = z
   .object({
     url: z.string().nullable().openapi({
       example: '/invites/accept?token=…',
-      description: 'The shareable invite link, or null when the group has no active link',
+      description:
+        'The shareable invite link. Only ever populated by the rotate response: only a hash is stored, so an existing link cannot be shown again.',
+    }),
+    has_link: z.boolean().openapi({
+      description: 'Whether an active link exists. True while url is null means "active, but not recoverable"',
     }),
     expires_at: TimestampSchema.nullable().openapi({
       description: 'When the link stops working, or null when it never expires',

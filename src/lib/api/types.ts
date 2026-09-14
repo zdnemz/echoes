@@ -126,7 +126,13 @@ export interface GroupDetail extends Group {
 // ----------------------------------------------------------------- invites (link-based)
 
 export interface InviteLink {
+  /**
+   * Only populated right after a rotation — the server stores a hash, so an
+   * existing link can never be displayed again.
+   */
   url: string | null
+  /** An active link exists, even when `url` is null (not recoverable). */
+  has_link: boolean
   expires_at: string | null
   auto_accept: boolean
 }

@@ -9,7 +9,7 @@
  *  - Sharing (owner only): invite link rotation, auto-accept switch, request queue.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   ArrowClockwise,
@@ -30,6 +30,7 @@ import {
   TrashSimple,
   User,
   UsersThree,
+  Warning,
   X,
 } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
@@ -100,6 +101,17 @@ function SharingPanel({ group }: { group: Group }) {
   const [expiry, setExpiry] = useState('168')
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Only a hash is stored server-side, so a freshly minted link is shown
+  // exactly once. Hold the one we just created; it disappears on reload.
+  const [freshUrl, setFreshUrl] = useState<string | null>(null)
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current)
+    },
+    [],
+  )
 
   const fail = (err: unknown, fallback: string) => {
     if (isUnconfigured(err)) setError("The data layer isn't connected on this deployment.")
@@ -109,24 +121,26 @@ function SharingPanel({ group }: { group: Group }) {
   const createLink = async () => {
     setError(null)
     try {
-      await rotate.mutateAsync({
+      const created = await rotate.mutateAsync({
         groupId: group.id,
         expires_in_hours: expiry === 'never' ? null : Number(expiry),
       })
+      setFreshUrl(created.url)
     } catch (err) {
       fail(err, "Couldn't create the link.")
     }
   }
 
-  const copyLink = async () => {
-    const url = link.data?.url
-    if (!url) return
+  const absoluteUrl = (url: string) => (url.startsWith('http') ? url : window.location.origin + url)
+
+  const copyLink = async (url: string) => {
     try {
-      await navigator.clipboard.writeText(url.startsWith('http') ? url : window.location.origin + url)
+      await navigator.clipboard.writeText(absoluteUrl(url))
       setCopied(true)
-      setTimeout(() => setCopied(false), 1600)
+      if (copyTimer.current) clearTimeout(copyTimer.current)
+      copyTimer.current = setTimeout(() => setCopied(false), 1600)
     } catch {
-      /* clipboard unavailable */
+      setError("Couldn't copy — select the link and copy it manually.")
     }
   }
 
@@ -179,18 +193,18 @@ function SharingPanel({ group }: { group: Group }) {
         <p className="text-[13.5px] font-medium text-ink">Invite link</p>
         {link.isLoading ? (
           <div className="skeleton-line mt-2 h-9 w-full" />
-        ) : link.data?.url ? (
+        ) : freshUrl ? (
           <div className="mt-2">
             <div className="flex items-center gap-2">
               <code className="min-w-0 flex-1 truncate rounded-md border border-line bg-paper px-2.5 py-2 font-mono text-[11px] text-ink-soft">
-                {link.data.url}
+                {freshUrl}
               </code>
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
                 className="press h-9 w-9 shrink-0 border-line"
-                onClick={copyLink}
+                onClick={() => copyLink(freshUrl)}
                 aria-label="Copy invite link"
               >
                 {copied ? <Check weight="bold" className="h-3.5 w-3.5 text-sage" /> : <Copy className="h-3.5 w-3.5" />}
@@ -199,37 +213,71 @@ function SharingPanel({ group }: { group: Group }) {
                 type="button"
                 variant="outline"
                 size="icon"
-                className="press h-9 w-9 shrink-0 border-line"
-                onClick={createLink}
-                disabled={rotate.isPending}
-                aria-label="Rotate the link (old one dies)"
-                title="New link — the old one stops working"
-              >
-                <ArrowClockwise className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
                 className="press h-9 w-9 shrink-0 border-line text-ember"
-                onClick={() =>
+                onClick={() => {
+                  setFreshUrl(null)
                   revoke.mutate(group.id, {
                     onSuccess: () => toast.success('Link revoked.'),
                     onError: (err) => fail(err, "Couldn't revoke."),
                   })
-                }
+                }}
                 aria-label="Revoke the link"
                 title="Revoke the link"
               >
                 <X weight="bold" className="h-3.5 w-3.5" />
               </Button>
             </div>
+            <p className="mt-1.5 flex items-start gap-1.5 font-mono text-[10.5px] leading-relaxed text-clay-ink">
+              <Warning className="mt-px h-3 w-3 shrink-0" />
+              <span>
+                Copy it now — this is the only time it appears.{' '}
+                {link.data?.expires_at ? <>Expires {formatDay(link.data.expires_at)}.</> : <>Never expires.</>}
+              </span>
+            </p>
+          </div>
+        ) : link.data?.has_link ? (
+          <div className="mt-2">
+            <div className="rounded-md border border-line bg-paper px-3 py-2.5">
+              <p className="text-[12px] text-ink-soft">
+                A link is active
+                {link.data.expires_at ? ` until ${formatDay(link.data.expires_at)}` : ' and never expires'}.
+              </p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-ink-faint">
+                For your circle&apos;s safety it can&apos;t be shown again — issue a new one to get a link you can
+                share.
+              </p>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="press h-9 gap-1.5 border-line"
+                onClick={createLink}
+                disabled={rotate.isPending}
+              >
+                <ArrowClockwise className="h-3.5 w-3.5" />
+                {rotate.isPending ? 'Creating…' : 'New link'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="press h-9 gap-1.5 border-line text-ember"
+                onClick={() =>
+                  revoke.mutate(group.id, {
+                    onSuccess: () => toast.success('Link revoked.'),
+                    onError: (err) => fail(err, "Couldn't revoke."),
+                  })
+                }
+              >
+                <X weight="bold" className="h-3.5 w-3.5" />
+                Revoke
+              </Button>
+            </div>
             <p className="mt-1.5 font-mono text-[10.5px] text-ink-faint">
-              {link.data.expires_at ? (
-                <>expires {formatDay(link.data.expires_at)} · rotating kills this one instantly</>
-              ) : (
-                <>never expires · rotating kills this one instantly</>
-              )}
+              A new link kills this one instantly. Link lasts{' '}
+              {LINK_EXPIRY_OPTIONS.find((o) => o.value === expiry)?.label.toLowerCase()}.
             </p>
           </div>
         ) : (
