@@ -12,7 +12,7 @@ import { ApiError, Errors, fromPostgrestError } from '../errors'
 import { requireAuth } from '../auth'
 import { getServiceClient } from '../supabase'
 import { getAppUrl, getSupabaseConfig } from '../env'
-import { bearerAuth, errorResponses, jsonBody, requireServiceRoleConfig, type App } from './helpers'
+import { bearerAuth, errorResponses, jsonBody, requireGroupOwner, requireServiceRoleConfig, type App } from './helpers'
 import { inviteLinkRateLimit } from '../rate-limit'
 
 const GroupIdParam = z.object({
@@ -125,18 +125,14 @@ export function registerInviteRoutes(app: App) {
     const { id } = c.req.valid('param')
     const me = c.var.user.id
 
-    const { data: group, error } = await c.var.userClient
-      .from('groups')
-      .select('id, owner_id, name, auto_accept, invite_token_hash, invite_expires_at')
-      .eq('id', id)
-      .maybeSingle()
-    if (error) throw fromPostgrestError(error)
-    if (!group) throw Errors.notFound('Group not found (or not visible to you)')
-    if ((group as GroupLinkRow).owner_id !== me) throw Errors.forbidden('Only the group owner manages the invite link')
+    const group = (await requireGroupOwner(c.var.userClient, id, me, {
+      select: 'id, owner_id, name, auto_accept, invite_token_hash, invite_expires_at',
+      message: 'Only the group owner manages the invite link',
+    })) as unknown as GroupLinkRow
 
     // No url: only the hash is stored, so an existing link cannot be shown
     // again. Rotate to issue a fresh one.
-    return c.json(toLinkPayload(group as GroupLinkRow))
+    return c.json(toLinkPayload(group))
   })
 
   // ----------------------------------------------------------------- rotate link
@@ -376,16 +372,9 @@ export function registerInviteRoutes(app: App) {
     const { id } = c.req.valid('param')
     const me = c.var.user.id
 
-    const { data: group, error: groupErr } = await c.var.userClient
-      .from('groups')
-      .select('owner_id')
-      .eq('id', id)
-      .maybeSingle()
-    if (groupErr) throw fromPostgrestError(groupErr)
-    if (!group) throw Errors.notFound('Group not found (or not visible to you)')
-    if ((group as { owner_id: string }).owner_id !== me) {
-      throw Errors.forbidden('Only the group owner reviews join requests')
-    }
+    await requireGroupOwner(c.var.userClient, id, me, {
+      message: 'Only the group owner reviews join requests',
+    })
 
     requireServiceRoleConfig()
     const service = getServiceClient()!
@@ -466,16 +455,10 @@ export function registerInviteRoutes(app: App) {
       const { id, requestId } = c.req.valid('param')
       const me = c.var.user.id
 
-      const { data: group, error: groupErr } = await c.var.userClient
-        .from('groups')
-        .select('owner_id, name')
-        .eq('id', id)
-        .maybeSingle()
-      if (groupErr) throw fromPostgrestError(groupErr)
-      if (!group) throw Errors.notFound('Group not found (or not visible to you)')
-      if ((group as { owner_id: string }).owner_id !== me) {
-        throw Errors.forbidden('Only the group owner reviews join requests')
-      }
+      await requireGroupOwner(c.var.userClient, id, me, {
+        select: 'id, owner_id, name',
+        message: 'Only the group owner reviews join requests',
+      })
 
       requireServiceRoleConfig()
       const service = getServiceClient()!

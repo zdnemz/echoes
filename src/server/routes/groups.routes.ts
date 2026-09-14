@@ -14,7 +14,7 @@ import {
 import { escapePostgrestValue } from './search.routes'
 import { Errors, fromPostgrestError } from '../errors'
 import { requireAuth } from '../auth'
-import { bearerAuth, errorResponses, jsonBody, type App } from './helpers'
+import { bearerAuth, errorResponses, jsonBody, requireGroupOwner, requireGroupVisible, type App } from './helpers'
 
 const GroupIdParam = z.object({
   id: UuidSchema.openapi({ param: { name: 'id', in: 'path' } }),
@@ -299,13 +299,7 @@ export function registerGroupRoutes(app: App) {
   app.openapi(listMembers, async (c) => {
     const { id } = c.req.valid('param')
 
-    const { data: group, error: groupErr } = await c.var.userClient
-      .from('groups')
-      .select('id, owner_id')
-      .eq('id', id)
-      .maybeSingle()
-    if (groupErr) throw fromPostgrestError(groupErr)
-    if (!group) throw Errors.notFound('Group not found (or not visible to you)')
+    const group = await requireGroupVisible(c.var.userClient, id)
 
     const { data: members, error } = await c.var.userClient
       .from('group_members')
@@ -344,14 +338,9 @@ export function registerGroupRoutes(app: App) {
 
     if (userId !== me) {
       // Must be the group owner to remove someone else.
-      const { data: group, error: groupErr } = await c.var.userClient
-        .from('groups')
-        .select('owner_id')
-        .eq('id', id)
-        .maybeSingle()
-      if (groupErr) throw fromPostgrestError(groupErr)
-      if (!group) throw Errors.notFound('Group not found (or not visible to you)')
-      if (group.owner_id !== me) throw Errors.forbidden('Only the group owner can remove other members')
+      const group = await requireGroupOwner(c.var.userClient, id, me, {
+        message: 'Only the group owner can remove other members',
+      })
 
       // The owner cannot be removed — delete the group instead.
       if (group.owner_id === userId) {
@@ -391,13 +380,7 @@ export function registerGroupRoutes(app: App) {
     const { id } = c.req.valid('param')
     const me = c.var.user.id
 
-    const { data: group, error: groupErr } = await c.var.userClient
-      .from('groups')
-      .select('owner_id')
-      .eq('id', id)
-      .maybeSingle()
-    if (groupErr) throw fromPostgrestError(groupErr)
-    if (!group) throw Errors.notFound('Group not found (or not visible to you)')
+    const group = await requireGroupVisible(c.var.userClient, id)
     if (group.owner_id === me) {
       throw Errors.badRequest('Owners cannot leave their own group; delete it instead')
     }
@@ -462,13 +445,7 @@ export function registerGroupRoutes(app: App) {
     if (until && Number.isNaN(untilMs)) throw Errors.badRequest('Invalid until timestamp')
 
     // Group visible at all? (RLS decides; missing row reads as 404.)
-    const { data: group, error: groupErr } = await c.var.userClient
-      .from('groups')
-      .select('id')
-      .eq('id', id)
-      .maybeSingle()
-    if (groupErr) throw fromPostgrestError(groupErr)
-    if (!group) throw Errors.notFound('Group not found (or not visible to you)')
+    await requireGroupVisible(c.var.userClient, id, 'id')
 
     // Notebooks linked here (RLS-filtered); empty link set → empty journal.
     const { data: notebooks, error: nbErr } = await c.var.userClient.from('notebooks').select('id').eq('group_id', id)
