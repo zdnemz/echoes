@@ -28,6 +28,7 @@ import {
   applyListType$,
   convertSelectionToNode$,
   currentBlockType$,
+  currentFormat$,
   currentListType$,
   insertCodeBlock$,
   insertThematicBreak$,
@@ -38,6 +39,7 @@ import {
 } from '@mdxeditor/editor'
 import { $createHeadingNode, $createQuoteNode } from '@lexical/rich-text'
 import { $createParagraphNode } from 'lexical'
+import { IS_BOLD, IS_CODE, IS_ITALIC, IS_STRIKETHROUGH } from '@mdxeditor/editor'
 import {
   Check,
   Code,
@@ -62,6 +64,7 @@ function JournalToolbar() {
   const applyFormat = usePublisher(applyFormat$)
   const convertBlock = usePublisher(convertSelectionToNode$)
   const currentBlock = useCellValue(currentBlockType$)
+  const format = useCellValue(currentFormat$)
   const applyList = usePublisher(applyListType$)
   const currentList = useCellValue(currentListType$)
   const insertBreak = usePublisher(insertThematicBreak$)
@@ -86,56 +89,106 @@ function JournalToolbar() {
     hint: string
     icon: React.ReactNode
     run: () => void
+    active: boolean
   }> = [
-    { label: 'Bold', hint: 'Bold (⌘B)', icon: <TextB className="h-4 w-4" />, run: () => applyFormat('bold') },
+    {
+      label: 'Bold',
+      hint: 'Bold (⌘B)',
+      icon: <TextB className="h-4 w-4" />,
+      run: () => applyFormat('bold'),
+      active: (format & IS_BOLD) !== 0,
+    },
     {
       label: 'Italic',
       hint: 'Italic (⌘I)',
       icon: <TextItalic className="h-4 w-4" />,
       run: () => applyFormat('italic'),
+      active: (format & IS_ITALIC) !== 0,
     },
     {
       label: 'Strikethrough',
       hint: 'Strikethrough',
       icon: <TextStrikethrough className="h-4 w-4" />,
       run: () => applyFormat('strikethrough'),
+      active: (format & IS_STRIKETHROUGH) !== 0,
     },
-    { label: 'Heading 1', hint: 'Heading 1', icon: <TextHOne className="h-4 w-4" />, run: () => toggleBlock('h1') },
-    { label: 'Heading 2', hint: 'Heading 2', icon: <TextHTwo className="h-4 w-4" />, run: () => toggleBlock('h2') },
+    {
+      label: 'Heading 1',
+      hint: 'Heading 1',
+      icon: <TextHOne className="h-4 w-4" />,
+      run: () => toggleBlock('h1'),
+      active: currentBlock === 'h1',
+    },
+    {
+      label: 'Heading 2',
+      hint: 'Heading 2',
+      icon: <TextHTwo className="h-4 w-4" />,
+      run: () => toggleBlock('h2'),
+      active: currentBlock === 'h2',
+    },
     {
       label: 'Heading 3',
       hint: 'Heading 3',
       icon: <TextHThree className="h-4 w-4" />,
       run: () => toggleBlock('h3'),
+      active: currentBlock === 'h3',
     },
-    { label: 'Quote', hint: 'Quote', icon: <Quotes className="h-4 w-4" />, run: () => toggleBlock('quote') },
-    { label: 'Code', hint: 'Inline code', icon: <Code className="h-4 w-4" />, run: () => applyFormat('code') },
+    {
+      label: 'Quote',
+      hint: 'Quote',
+      icon: <Quotes className="h-4 w-4" />,
+      run: () => toggleBlock('quote'),
+      active: currentBlock === 'quote',
+    },
+    {
+      label: 'Code',
+      hint: 'Inline code',
+      icon: <Code className="h-4 w-4" />,
+      run: () => applyFormat('code'),
+      active: (format & IS_CODE) !== 0,
+    },
     {
       label: 'Code block',
       hint: 'Code block',
       icon: <CodeBlock className="h-4 w-4" />,
       run: () => insertCode({}),
+      active: false,
     },
-    { label: 'Link', hint: 'Link (⌘K)', icon: <LinkSimple className="h-4 w-4" />, run: () => openLink() },
+    {
+      label: 'Link',
+      hint: 'Link (⌘K)',
+      icon: <LinkSimple className="h-4 w-4" />,
+      run: () => openLink(),
+      active: false,
+    },
     {
       label: 'Bulleted list',
       hint: 'Bulleted list',
       icon: <ListBullets className="h-4 w-4" />,
       run: () => toggleList('bullet'),
+      active: currentList === 'bullet',
     },
     {
       label: 'Numbered list',
       hint: 'Numbered list',
       icon: <ListNumbers className="h-4 w-4" />,
       run: () => toggleList('number'),
+      active: currentList === 'number',
     },
     {
       label: 'Checklist',
       hint: 'Checklist',
       icon: <ListChecks className="h-4 w-4" />,
       run: () => toggleList('check'),
+      active: currentList === 'check',
     },
-    { label: 'Divider', hint: 'Horizontal divider', icon: <Minus className="h-4 w-4" />, run: () => insertBreak() },
+    {
+      label: 'Divider',
+      hint: 'Horizontal divider',
+      icon: <Minus className="h-4 w-4" />,
+      run: () => insertBreak(),
+      active: false,
+    },
   ]
 
   return (
@@ -150,11 +203,14 @@ function JournalToolbar() {
           type="button"
           title={b.hint}
           aria-label={b.label}
+          aria-pressed={b.active}
           // Keep focus in the editor: without this the selection — and with
           // it the formatting target — is lost on mousedown.
           onMouseDown={(e) => e.preventDefault()}
           onClick={b.run}
-          className="press rounded-md p-2 text-ink-faint transition-colors hover:bg-paper-deep hover:text-ink"
+          className={`press rounded-md p-2 transition-colors ${
+            b.active ? 'bg-paper-deep text-ink shadow-sm' : 'text-ink-faint hover:bg-paper-deep hover:text-ink'
+          }`}
         >
           {b.icon}
         </button>
