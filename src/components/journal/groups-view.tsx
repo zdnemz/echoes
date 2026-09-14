@@ -417,6 +417,7 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
   const [customUntil, setCustomUntil] = useState('')
   const [mood, setMood] = useState<Mood | undefined>(undefined)
   const [searchInput, setSearchInput] = useState('')
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
   // The input stays instant; the query only sees the settled term so typing
   // does not fire one request per keystroke.
   const searchQuery = useDebouncedValue(searchInput, 300)
@@ -587,9 +588,9 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
   }
 
   return (
-    <div className="space-y-6">
-      {/* Action header bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex-1 flex flex-col min-h-0 h-full overflow-hidden lg:h-auto lg:overflow-visible lg:space-y-6">
+      {/* Action header bar — desktop only */}
+      <div className="hidden lg:flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="font-display flex items-center gap-2 text-lg text-ink">
             Group Journal
@@ -620,8 +621,50 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
         </Button>
       </div>
 
+      {/* Mobile quick control bar */}
+      <div className="flex shrink-0 items-center justify-between border-b border-line bg-paper-raised/80 px-3 py-2 text-[12px] lg:hidden">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setMobileFilterOpen((o) => !o)}
+            aria-label="Filter messages"
+            className={`press inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[11px] transition-colors ${
+              hasActiveFilters
+                ? 'bg-clay-tint text-clay-ink font-semibold'
+                : mobileFilterOpen
+                  ? 'bg-ink text-paper'
+                  : 'bg-paper-deep text-ink-soft hover:text-ink'
+            }`}
+          >
+            <Funnel className="h-3.5 w-3.5" />
+            <span>{hasActiveFilters ? `${total} filtered` : 'Filter'}</span>
+          </button>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="press font-mono text-[10.5px] text-clay underline underline-offset-2"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={handleComposeClick}
+          className="press inline-flex items-center gap-1 rounded-full bg-paper-deep px-2.5 py-1 font-mono text-[11px] text-ink-soft hover:text-ink"
+        >
+          <PenNib weight="bold" className="h-3 w-3" />
+          <span>Write</span>
+        </button>
+      </div>
+
       {/* Filter panel */}
-      <div className="space-y-3 rounded-lg border border-line bg-paper-raised p-3.5 sm:p-4">
+      <div
+        className={`${
+          mobileFilterOpen ? 'block' : 'hidden'
+        } lg:block shrink-0 space-y-3 rounded-none lg:rounded-lg border-b lg:border border-line bg-paper-raised p-3.5 sm:p-4`}
+      >
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Author filter */}
           <div className="w-full sm:w-44">
@@ -769,22 +812,24 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
         )}
       </div>
 
-      {/* Roomchat stream — ringkasan bubble, klik untuk detail journal */}
-      <div>
+      {/* Roomchat stream */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden lg:overflow-visible">
         {showEntriesSkeleton ? (
-          <div className="divide-y divide-line border-y border-line">
+          <div className="flex-1 p-4 divide-y divide-line border-y border-line">
             <EntryRowSkeleton />
             <EntryRowSkeleton />
             <EntryRowSkeleton />
           </div>
         ) : entriesQuery.isError ? (
-          <QueryError
-            error={entriesQuery.error}
-            fallback="Couldn't load group entries."
-            onRetry={() => entriesQuery.refetch()}
-          />
+          <div className="flex-1 p-4">
+            <QueryError
+              error={entriesQuery.error}
+              fallback="Couldn't load group entries."
+              onRetry={() => entriesQuery.refetch()}
+            />
+          </div>
         ) : entries.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-line-strong px-6 py-12 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center rounded-none lg:rounded-lg border-0 lg:border border-dashed border-line-strong px-6 py-12 text-center my-auto">
             {hasActiveFilters ? (
               <>
                 <Funnel weight="light" className="mx-auto h-7 w-7 text-ink-ghost" />
@@ -824,14 +869,14 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
             )}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-line bg-paper">
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden rounded-none lg:rounded-xl border-0 lg:border border-line bg-paper">
             {entriesQuery.hasNextPage && (
-              <div className="flex justify-center border-b border-line bg-paper-raised/60 px-4 py-2.5">
+              <div className="shrink-0 flex justify-center border-b border-line bg-paper-raised/60 px-4 py-2">
                 <Button
                   variant="ghost"
                   size="sm"
                   disabled={entriesQuery.isFetchingNextPage}
-                  className="press h-8 text-[12px] text-ink-soft"
+                  className="press h-7 text-[11.5px] text-ink-soft"
                   onClick={() => entriesQuery.fetchNextPage()}
                 >
                   {entriesQuery.isFetchingNextPage ? (
@@ -846,7 +891,11 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
               </div>
             )}
 
-            <ul className="space-y-4 px-3 py-5 sm:px-5" aria-busy={entriesQuery.isFetching} aria-label="Group messages">
+            <ul
+              className="flex-1 overflow-y-auto px-3 py-4 space-y-3.5 sm:px-5 overscroll-contain min-h-0"
+              aria-busy={entriesQuery.isFetching}
+              aria-label="Group messages"
+            >
               {chatEntries.map((entry, i) => {
                 const mine = entry.author_id === user?.id
                 const prev = chatEntries[i - 1]
@@ -928,13 +977,13 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
                   </li>
                 )
               })}
+              <div ref={chatEndRef} />
             </ul>
-            <div ref={chatEndRef} />
 
             {/* Quick composer */}
-            <div className="border-t border-line bg-paper-raised/60 px-3 py-3 sm:px-4">
+            <div className="shrink-0 border-t border-line bg-paper-raised/95 backdrop-blur-md px-3 py-2.5 sm:px-4 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
               {/* typing peers */}
-              <div aria-live="polite" className="min-h-5 px-1 pb-1.5">
+              <div aria-live="polite" className="min-h-5 px-1 pb-1">
                 {realtime.typing.length > 0 && (
                   <p className="flex items-center gap-1.5 text-[11.5px] text-ink-faint">
                     <span className="flex gap-0.5" aria-hidden="true">
@@ -957,7 +1006,7 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
                     }}
                     placeholder={`Message ${group.name}… (Enter to send)`}
                     aria-label={`Message ${group.name}`}
-                    className="min-h-10 max-h-28 flex-1 rounded-xl border border-line bg-paper px-3.5 py-2.5 text-[13.5px] text-ink placeholder:text-ink-faint focus:border-clay-soft focus:outline-none focus:ring-2 focus:ring-clay-soft/40"
+                    className="min-h-10 max-h-28 flex-1 rounded-xl border border-line bg-paper px-3.5 py-2 text-[13.5px] text-ink placeholder:text-ink-faint focus:border-clay-soft focus:outline-none focus:ring-2 focus:ring-clay-soft/40"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) void sendQuick(e as unknown as React.FormEvent)
                     }}
@@ -973,12 +1022,12 @@ function GroupJournalTab({ group, onNavigate }: { group: GroupDetail; onNavigate
                   </Button>
                 </form>
               ) : (
-                <Button size="sm" className="press h-9 w-full gap-1.5 shadow-ink" onClick={handleComposeClick}>
+                <Button size="sm" className="press h-10 w-full gap-1.5 shadow-ink" onClick={handleComposeClick}>
                   <PenNib weight="bold" className="h-3.5 w-3.5" />
-                  Write entry
+                  Link or create notebook to message
                 </Button>
               )}
-              <p className="mt-1.5 text-center font-mono text-[10px] text-ink-faint">
+              <p className="mt-1 text-center font-mono text-[9.5px] text-ink-faint">
                 {quickTarget
                   ? `Posting to ${quickTarget.title} · live${seenBy.length > 0 ? ` · seen by ${seenBy.join(', ')}` : ''}.`
                   : 'Choose a notebook to post from.'}
@@ -1206,8 +1255,8 @@ export function GroupsView({
   const tabKeys = useRovingSelection({ values: sectionTabs, selected: activeTab, onSelect: setActiveTab })
 
   return (
-    <div className="mx-4 lg:mx-0">
-      <div className="flex items-center gap-4">
+    <div className={selectedGroupId ? 'lg:mx-0' : 'mx-4 lg:mx-0'}>
+      <div className={`flex items-center gap-4 ${selectedGroupId ? 'hidden lg:flex' : 'flex'}`}>
         <div className="min-w-0 flex-1">
           <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-clay">groups</p>
           <h1 className="font-display mt-2 text-3xl leading-tight tracking-tight text-ink">Sharing circles</h1>
@@ -1226,7 +1275,7 @@ export function GroupsView({
         </Button>
       </div>
 
-      <div className="mt-8 grid gap-10 lg:grid-cols-[13rem_1fr] lg:gap-12">
+      <div className={`grid gap-10 lg:grid-cols-[13rem_1fr] lg:gap-12 ${selectedGroupId ? 'mt-0 lg:mt-8' : 'mt-8'}`}>
         {/* ------------------------------------------------ group list */}
         <aside className={selectedGroupId ? 'hidden lg:block' : ''}>
           <p className="pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">Your groups</p>
@@ -1271,7 +1320,13 @@ export function GroupsView({
         </aside>
 
         {/* ------------------------------------------------ open group */}
-        <div className="min-w-0">
+        <div
+          className={
+            selectedGroupId
+              ? 'fixed inset-0 z-40 flex flex-col bg-paper h-[100dvh] lg:static lg:inset-auto lg:z-auto lg:h-auto lg:min-w-0 lg:flex-none'
+              : 'min-w-0'
+          }
+        >
           {!selectedGroupId ? (
             <div className="rounded-lg border border-dashed border-line-strong px-6 py-14 text-center">
               <UsersThree weight="light" className="mx-auto h-7 w-7 text-ink-ghost" />
@@ -1283,125 +1338,208 @@ export function GroupsView({
             </div>
           ) : !group ? (
             detail.isLoading ? (
-              <div className="space-y-3">
+              <div className="flex-1 flex flex-col h-full p-4 lg:p-0 space-y-3">
+                <div className="flex items-center gap-3 border-b border-line pb-3 lg:hidden">
+                  <button
+                    type="button"
+                    onClick={() => onNavigate({ kind: 'groups' })}
+                    className="press rounded-md p-1.5 text-ink-soft"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
+                  <div className="skeleton-line h-5 w-32" />
+                </div>
                 <div className="skeleton-line h-8 w-44" />
                 <div className="skeleton-line h-9 w-full" />
                 <div className="skeleton-line h-9 w-full" />
               </div>
             ) : (
-              <QueryError error={detail.error} fallback="Couldn't load this group." onRetry={() => detail.refetch()} />
+              <div className="flex-1 p-4 lg:p-0">
+                <div className="flex items-center gap-3 border-b border-line pb-3 mb-4 lg:hidden">
+                  <button
+                    type="button"
+                    onClick={() => onNavigate({ kind: 'groups' })}
+                    className="press rounded-md p-1.5 text-ink-soft"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
+                  <span className="text-[14px] font-medium text-ink">Back to groups</span>
+                </div>
+                <QueryError
+                  error={detail.error}
+                  fallback="Couldn't load this group."
+                  onRetry={() => detail.refetch()}
+                />
+              </div>
             )
           ) : (
-            <div>
-              {/* header */}
-              <div className="flex flex-wrap items-start gap-x-4 gap-y-3 border-b border-line pb-4">
-                <div className="min-w-0 flex-1">
-                  <h2 className="font-display text-2xl leading-tight text-ink">{group.name}</h2>
-                  <p className="mt-1.5 font-mono text-[10.5px] text-ink-faint">
-                    since {formatDay(group.created_at)} · {group.member_count}{' '}
-                    {group.member_count === 1 ? 'member' : 'members'} · you are the {group.my_role}
-                  </p>
+            <div className="flex-1 flex flex-col min-h-0 h-full lg:h-auto">
+              {/* mobile topbar — fullscreen chatroom bar */}
+              <div className="flex h-14 shrink-0 items-center justify-between border-b border-line bg-paper/95 px-3 backdrop-blur-md pt-[env(safe-area-inset-top)] lg:hidden">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => onNavigate({ kind: 'groups' })}
+                    className="press -ml-1 rounded-md p-1.5 text-ink-soft hover:bg-paper-deep hover:text-ink"
+                    aria-label="Back to all groups"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </button>
+                  <div
+                    onClick={() => setActiveTab(activeTab === 'journal' ? 'members' : 'journal')}
+                    className="cursor-pointer min-w-0"
+                  >
+                    <h2 className="truncate text-[15px] font-semibold leading-tight text-ink">{group.name}</h2>
+                    <p className="flex items-center gap-1.5 font-mono text-[10px] text-ink-faint">
+                      <span>
+                        {group.member_count} {group.member_count === 1 ? 'member' : 'members'}
+                      </span>
+                      <span>·</span>
+                      <span className="capitalize">{group.my_role}</span>
+                    </p>
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {isOwner ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="press h-9 w-9 border-line bg-paper-raised"
-                        aria-label="Rename group"
-                        onClick={() => setRenameOpen(true)}
-                      >
-                        <PencilSimple className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="press h-9 w-9 border-line bg-paper-raised text-ember"
-                        aria-label="Delete group"
-                        onClick={() => setDeleteOpen(true)}
-                      >
-                        <TrashSimple className="h-4 w-4" />
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="press h-9 gap-1.5 border-line bg-paper-raised text-ember"
-                      onClick={() => setLeaveOpen(true)}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(activeTab === 'journal' ? 'members' : 'journal')}
+                    aria-label={activeTab === 'journal' ? 'View members' : 'Back to chat'}
+                    className={`press rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors ${
+                      activeTab === 'journal' ? 'bg-paper-deep text-ink-soft hover:text-ink' : 'bg-clay text-white'
+                    }`}
+                  >
+                    {activeTab === 'journal' ? 'Members' : 'Chat'}
+                  </button>
+                  {isOwner && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab(activeTab === 'sharing' ? 'journal' : 'sharing')}
+                      aria-label="Sharing settings"
+                      className={`press rounded-md p-1.5 transition-colors ${
+                        activeTab === 'sharing' ? 'bg-clay text-white' : 'text-ink-soft hover:bg-paper-deep'
+                      }`}
                     >
-                      <SignOut weight="regular" className="h-3.5 w-3.5" /> Leave group
-                    </Button>
+                      <LinkSimple className="h-4 w-4" />
+                    </button>
                   )}
                 </div>
               </div>
 
-              {/* Group Tabs Navigation */}
-              <div
-                className="flex border-b border-line"
-                role="tablist"
-                aria-label="Group sections"
-                onKeyDown={tabKeys.onKeyDown}
-              >
-                <button
-                  ref={tabKeys.registerItem('journal')}
-                  type="button"
-                  role="tab"
-                  id="group-tab-journal"
-                  aria-controls="group-panel-journal"
-                  aria-selected={activeTab === 'journal'}
-                  tabIndex={tabKeys.tabIndexFor('journal')}
-                  onClick={() => setActiveTab('journal')}
-                  className={`press relative -mb-px flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium transition-colors ${
-                    activeTab === 'journal' ? 'border-b-2 border-clay text-ink' : 'text-ink-faint hover:text-ink'
-                  }`}
+              {/* desktop header */}
+              <div className="hidden lg:block">
+                <div className="flex flex-wrap items-start gap-x-4 gap-y-3 border-b border-line pb-4">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="font-display text-2xl leading-tight text-ink">{group.name}</h2>
+                    <p className="mt-1.5 font-mono text-[10.5px] text-ink-faint">
+                      since {formatDay(group.created_at)} · {group.member_count}{' '}
+                      {group.member_count === 1 ? 'member' : 'members'} · you are the {group.my_role}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isOwner ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="press h-9 w-9 border-line bg-paper-raised"
+                          aria-label="Rename group"
+                          onClick={() => setRenameOpen(true)}
+                        >
+                          <PencilSimple className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="press h-9 w-9 border-line bg-paper-raised text-ember"
+                          aria-label="Delete group"
+                          onClick={() => setDeleteOpen(true)}
+                        >
+                          <TrashSimple className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="press h-9 gap-1.5 border-line bg-paper-raised text-ember"
+                        onClick={() => setLeaveOpen(true)}
+                      >
+                        <SignOut weight="regular" className="h-3.5 w-3.5" /> Leave group
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Group Tabs Navigation */}
+                <div
+                  className="flex border-b border-line"
+                  role="tablist"
+                  aria-label="Group sections"
+                  onKeyDown={tabKeys.onKeyDown}
                 >
-                  <BookOpen className="h-4 w-4" />
-                  <span>Journal</span>
-                </button>
-                <button
-                  ref={tabKeys.registerItem('members')}
-                  type="button"
-                  role="tab"
-                  id="group-tab-members"
-                  aria-controls="group-panel-members"
-                  aria-selected={activeTab === 'members'}
-                  tabIndex={tabKeys.tabIndexFor('members')}
-                  onClick={() => setActiveTab('members')}
-                  className={`press relative -mb-px flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium transition-colors ${
-                    activeTab === 'members' ? 'border-b-2 border-clay text-ink' : 'text-ink-faint hover:text-ink'
-                  }`}
-                >
-                  <UsersThree className="h-4 w-4" />
-                  <span>Members</span>
-                  <span className="rounded-full bg-paper-deep px-1.5 py-0.5 font-mono text-[10px] text-ink-soft">
-                    {group.member_count}
-                  </span>
-                </button>
-                {isOwner && (
                   <button
-                    ref={tabKeys.registerItem('sharing')}
+                    ref={tabKeys.registerItem('journal')}
                     type="button"
                     role="tab"
-                    id="group-tab-sharing"
-                    aria-controls="group-panel-sharing"
-                    aria-selected={activeTab === 'sharing'}
-                    tabIndex={tabKeys.tabIndexFor('sharing')}
-                    onClick={() => setActiveTab('sharing')}
+                    id="group-tab-journal"
+                    aria-controls="group-panel-journal"
+                    aria-selected={activeTab === 'journal'}
+                    tabIndex={tabKeys.tabIndexFor('journal')}
+                    onClick={() => setActiveTab('journal')}
                     className={`press relative -mb-px flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium transition-colors ${
-                      activeTab === 'sharing' ? 'border-b-2 border-clay text-ink' : 'text-ink-faint hover:text-ink'
+                      activeTab === 'journal' ? 'border-b-2 border-clay text-ink' : 'text-ink-faint hover:text-ink'
                     }`}
                   >
-                    <LinkSimple className="h-4 w-4" />
-                    <span>Sharing</span>
+                    <BookOpen className="h-4 w-4" />
+                    <span>Journal</span>
                   </button>
-                )}
+                  <button
+                    ref={tabKeys.registerItem('members')}
+                    type="button"
+                    role="tab"
+                    id="group-tab-members"
+                    aria-controls="group-panel-members"
+                    aria-selected={activeTab === 'members'}
+                    tabIndex={tabKeys.tabIndexFor('members')}
+                    onClick={() => setActiveTab('members')}
+                    className={`press relative -mb-px flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium transition-colors ${
+                      activeTab === 'members' ? 'border-b-2 border-clay text-ink' : 'text-ink-faint hover:text-ink'
+                    }`}
+                  >
+                    <UsersThree className="h-4 w-4" />
+                    <span>Members</span>
+                    <span className="rounded-full bg-paper-deep px-1.5 py-0.5 font-mono text-[10px] text-ink-soft">
+                      {group.member_count}
+                    </span>
+                  </button>
+                  {isOwner && (
+                    <button
+                      ref={tabKeys.registerItem('sharing')}
+                      type="button"
+                      role="tab"
+                      id="group-tab-sharing"
+                      aria-controls="group-panel-sharing"
+                      aria-selected={activeTab === 'sharing'}
+                      tabIndex={tabKeys.tabIndexFor('sharing')}
+                      onClick={() => setActiveTab('sharing')}
+                      className={`press relative -mb-px flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium transition-colors ${
+                        activeTab === 'sharing' ? 'border-b-2 border-clay text-ink' : 'text-ink-faint hover:text-ink'
+                      }`}
+                    >
+                      <LinkSimple className="h-4 w-4" />
+                      <span>Sharing</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Tab Contents */}
               <div
-                className="pt-6"
+                className={
+                  activeTab === 'journal'
+                    ? 'flex-1 flex flex-col min-h-0 overflow-hidden lg:pt-6 lg:overflow-visible'
+                    : 'flex-1 overflow-y-auto p-4 lg:p-0 lg:pt-6'
+                }
                 role="tabpanel"
                 id={`group-panel-${activeTab}`}
                 aria-labelledby={`group-tab-${activeTab}`}
