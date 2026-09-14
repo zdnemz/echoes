@@ -60,6 +60,10 @@ export function useUpdateNotebook() {
     onSuccess: (nb) => {
       qc.invalidateQueries({ queryKey: ['notebooks'] })
       qc.invalidateQueries({ queryKey: ['entries', nb.id] })
+      // A notebook can be linked to / unlinked from a group here, and group
+      // journals are queried per group — scoping is impossible without the
+      // group id, so refresh every group journal.
+      qc.invalidateQueries({ queryKey: ['group-entries'] })
       qc.invalidateQueries({ queryKey: ['groups'] })
     },
   })
@@ -69,7 +73,14 @@ export function useDeleteNotebook() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: api.deleteNotebook,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notebooks'] }),
+    onSuccess: () => {
+      // Deleting a notebook deletes its entries, so every list that could
+      // have contained them is now stale.
+      qc.invalidateQueries({ queryKey: ['notebooks'] })
+      qc.invalidateQueries({ queryKey: ['entries'] })
+      qc.invalidateQueries({ queryKey: ['group-entries'] })
+      qc.invalidateQueries({ queryKey: ['search'] })
+    },
   })
 }
 
@@ -231,10 +242,16 @@ export function useDeleteGroup() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: api.deleteGroup,
-    onSuccess: () => {
+    onSuccess: (_data, groupId) => {
       qc.invalidateQueries({ queryKey: ['groups'] })
       qc.invalidateQueries({ queryKey: ['notebooks'] })
-      qc.removeQueries({ queryKey: ['group'] })
+      // Scoped: query keys are prefix-matched, so ['group'] alone would evict
+      // the detail cache of every other group too.
+      qc.removeQueries({ queryKey: ['group', groupId] })
+      qc.removeQueries({ queryKey: ['group-entries', groupId] })
+      qc.removeQueries({ queryKey: ['group-members', groupId] })
+      qc.removeQueries({ queryKey: ['invite-link', groupId] })
+      qc.removeQueries({ queryKey: ['join-requests', groupId] })
     },
   })
 }
@@ -243,9 +260,10 @@ export function useRemoveMember() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) => api.removeMember(groupId, userId),
-    onSuccess: () => {
+    onSuccess: (_data, { groupId }) => {
       qc.invalidateQueries({ queryKey: ['groups'] })
-      qc.invalidateQueries({ queryKey: ['group'] })
+      qc.invalidateQueries({ queryKey: ['group', groupId] })
+      qc.invalidateQueries({ queryKey: ['group-members', groupId] })
       qc.invalidateQueries({ queryKey: ['notebooks'] })
     },
   })
@@ -255,10 +273,13 @@ export function useLeaveGroup() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: api.leaveGroup,
-    onSuccess: () => {
+    onSuccess: (_data, groupId) => {
       qc.invalidateQueries({ queryKey: ['groups'] })
       qc.invalidateQueries({ queryKey: ['notebooks'] })
-      qc.removeQueries({ queryKey: ['group'] })
+      // Same prefix-match caveat as useDeleteGroup.
+      qc.removeQueries({ queryKey: ['group', groupId] })
+      qc.removeQueries({ queryKey: ['group-entries', groupId] })
+      qc.removeQueries({ queryKey: ['group-members', groupId] })
     },
   })
 }
@@ -340,6 +361,8 @@ export function useDecideJoinRequest() {
     onSuccess: (_r, { groupId }) => {
       qc.invalidateQueries({ queryKey: ['join-requests', groupId] })
       qc.invalidateQueries({ queryKey: ['group', groupId] })
+      // Approving adds a member, and member names label entry rows.
+      qc.invalidateQueries({ queryKey: ['group-members', groupId] })
       qc.invalidateQueries({ queryKey: ['groups'] })
     },
   })
