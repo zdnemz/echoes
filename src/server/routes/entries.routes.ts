@@ -68,7 +68,7 @@ export function registerEntryRoutes(app: App) {
 
     let query = c.var.userClient
       .from('entries')
-      .select('*', { count: 'exact' })
+      .select('*, entry_key_wraps(scope, wrapped_key)', { count: 'exact' })
       .eq('notebook_id', notebookId)
       .order('created_at', { ascending: false })
     if (mood) query = query.eq('mood', mood)
@@ -76,8 +76,17 @@ export function registerEntryRoutes(app: App) {
     const { data, count, error } = await query.range(from, from + limit - 1)
     if (error) throw fromPostgrestError(error)
 
+    // RLS filters embedded wraps per scope already (author rows only for the
+    // author, group rows only for group members) — relay what came back.
+    const rows = (
+      (data ?? []) as Array<EntryRow & { entry_key_wraps?: Array<{ scope: 'author' | 'group'; wrapped_key: string }> }>
+    ).map((r) => {
+      const { entry_key_wraps, ...rest } = r
+      return { ...rest, key_wraps: entry_key_wraps ?? [] }
+    })
+
     return c.json({
-      data: data ?? [],
+      data: rows,
       pagination: { page, limit, total: count ?? 0 },
     })
   })
@@ -100,7 +109,7 @@ export function registerEntryRoutes(app: App) {
   })
   app.openapi(create, async (c) => {
     const { notebookId } = c.req.valid('param')
-    const { title, body, mood, tags, is_shared, encrypted } = c.req.valid('json')
+    const { title, body, mood, tags, is_shared, encrypted, key_wraps } = c.req.valid('json')
     const user = c.var.user
 
     // Friendly 404 when the notebook is not visible at all.
@@ -134,6 +143,17 @@ export function registerEntryRoutes(app: App) {
 
     const row = data as unknown as EntryRow
 
+    // Content-key wraps ride along with the sealed payload (author scope
+    // always; group scope when the notebook is group-linked and shared).
+    if (key_wraps?.length) {
+      const { error: wrapErr } = await c.var.userClient
+        .from('entry_key_wraps')
+        .insert(key_wraps.map((w) => ({ entry_id: row.id, scope: w.scope, wrapped_key: w.wrapped_key })))
+      // A wrap write failure must not strand the entry: the body is sealed
+      // but its key exists only client-side — surface it loudly.
+      if (wrapErr) throw fromPostgrestError(wrapErr)
+    }
+
     return c.json(row, 201)
   })
 
@@ -144,7 +164,7 @@ export function registerEntryRoutes(app: App) {
     tags: ['Entries'],
     summary: "Get one entry (records the reader's view)",
     description:
-      'Subject to the visibility rule: authors and notebook owners always see it; group members see it only when is_shared is true. Opening it as a non-author records a read receipt in entry_views, and the response embeds who else has opened it.',
+      'Subject to the visibility rule: authors and notebook owners always see it; group members see it only when is_shared is true. Opening it as a non-author records a read receipt in entry_views, and the response embeds who else has opened it. For encrypted entries the response embeds the entry\u2019s key wraps (author scope for the author; group scope for group-linked notebooks).',
     security: [bearerAuth],
     middleware: [requireAuth],
     request: { params: EntryIdParam },
@@ -164,6 +184,17 @@ export function registerEntryRoutes(app: App) {
                   }),
                 )
                 .openapi({ description: 'Others who opened this entry, oldest view first' }),
+              key_wraps: z
+                .array(
+                  z.object({
+                    scope: z.enum(['author', 'group']),
+                    wrapped_key: z.string(),
+                  }),
+                )
+                .openapi({
+                  description:
+                    'Content-key wraps visible to you: author scope for the author, group scope for group members',
+                }),
             }),
           },
         },
@@ -212,7 +243,20 @@ export function registerEntryRoutes(app: App) {
       }))
     }
 
-    return c.json({ ...row, readers })
+    // Key wraps for encrypted entries: the author path reads the author
+    // scope, group members read the group scope — RLS enforces per scope.
+    let keyWraps: Array<{ scope: 'author' | 'group'; wrapped_key: string }> = []
+    const { data: wrapRows, error: wrapErr } = await c.var.userClient
+      .from('entry_key_wraps')
+      .select('scope, wrapped_key')
+      .eq('entry_id', id)
+    if (!wrapErr) {
+      keyWraps = ((wrapRows ?? []) as Array<{ scope: 'author' | 'group'; wrapped_key: string }>).filter(
+        (w) => row.author_id === c.var.user.id || w.scope === 'group',
+      )
+    }
+
+    return c.json({ ...row, readers, key_wraps: keyWraps })
   })
 
   // ----------------------------------------------------------------- update
@@ -258,6 +302,19 @@ export function registerEntryRoutes(app: App) {
     if (!data) throw Errors.notFound('Entry not found')
 
     const row = data as unknown as EntryRow
+
+    // Toggling sharing replaces the key wraps wholesale: un-sharing drops
+    // the group scope; re-sharing re-adds it. RLS gates each write.
+    if (patchInput.key_wraps !== undefined) {
+      const { error: delErr } = await c.var.userClient.from('entry_key_wraps').delete().eq('entry_id', id)
+      if (delErr) throw fromPostgrestError(delErr)
+      if (patchInput.key_wraps.length > 0) {
+        const { error: insErr } = await c.var.userClient
+          .from('entry_key_wraps')
+          .insert(patchInput.key_wraps.map((w) => ({ entry_id: id, scope: w.scope, wrapped_key: w.wrapped_key })))
+        if (insErr) throw fromPostgrestError(insErr)
+      }
+    }
 
     return c.json(row)
   })

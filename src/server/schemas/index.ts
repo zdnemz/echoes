@@ -303,6 +303,22 @@ export const CreateEntrySchema = z
     tags: TagsSchema.optional().openapi({ example: ['morning', 'gratitude'] }),
     is_shared: z.boolean().optional().openapi({ example: true, description: 'Defaults to true' }),
     encrypted: z.boolean().optional().openapi({ example: true, description: 'Defaults to false (legacy plaintext)' }),
+    key_wraps: z
+      .array(
+        z
+          .object({
+            scope: z.enum(['author', 'group']),
+            wrapped_key: z
+              .string()
+              .min(1)
+              .max(8192)
+              .openapi({ description: 'Entry content key, sealed for the scope' }),
+          })
+          .strict(),
+      )
+      .max(2)
+      .optional()
+      .openapi({ description: 'Content-key wraps written alongside an encrypted entry' }),
   })
   .strict()
 
@@ -314,6 +330,18 @@ export const UpdateEntrySchema = z
     tags: TagsSchema.optional(),
     is_shared: z.boolean().optional(),
     encrypted: z.boolean().optional().openapi({ description: 'Flip ciphertext state alongside sealed title/body' }),
+    key_wraps: z
+      .array(
+        z
+          .object({
+            scope: z.enum(['author', 'group']),
+            wrapped_key: z.string().min(1).max(8192),
+          })
+          .strict(),
+      )
+      .max(2)
+      .optional()
+      .openapi({ description: 'Replace the entry\u2019s content-key wraps (used when toggling sharing)' }),
   })
   .strict()
 

@@ -207,3 +207,26 @@ export const reflectChat = (input: { notebook_ids: string[]; messages: ReflectMe
     method: 'POST',
     ...json(input),
   })
+
+export interface ReflectContextEntry {
+  title: string
+  body: string
+  mood: string | null
+  tags: string[]
+  created_at: string
+}
+
+/**
+ * Reflect with a client-decrypted context bundle: entries the caller
+ * decrypted locally are re-sealed for the AI provider only — the server
+ * passes them through its tool loop without storing or re-reading them.
+ */
+export const reflectChatWithContext = (input: {
+  notebook_ids: string[]
+  messages: ReflectMessage[]
+  context?: ReflectContextEntry[]
+}) =>
+  api<{ reply: string; tools_used: string[]; model: string }>('/api/reflect/chat', {
+    method: 'POST',
+    ...json(input),
+  })

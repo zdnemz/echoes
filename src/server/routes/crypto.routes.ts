@@ -206,6 +206,66 @@ export function registerCryptoRoutes(app: App) {
     return c.json({ group_id: id, generation, sealed_box: '', created_at: new Date().toISOString() })
   })
 
+  // ----------------------------------------------------------------- entry key wraps
+  // Creation-time wraps ride along with POST /notebooks/:id/entries and
+  // PATCH /entries/:id (the client batches them) — see entries.routes.ts.
+  // Rotation after member removal is the one dedicated write path:
+
+  const rotateGroupKeys = createRoute({
+    method: 'post',
+    path: '/groups/{id}/rotate',
+    tags: ['Encryption'],
+    summary: 'Re-wrap group-scope entry keys under a new CEK (owner only)',
+    description:
+      'After removing a member the owner generates a fresh CEK, distributes new sealed boxes (PUT /groups/:id/key) and calls this to re-wrap the group-scope content keys of every shared entry in the group\u2019s notebooks. The rewraps array carries { entry_id, wrapped_key } blobs the owner produced client-side by opening each old group wrap (with the previous CEK they still hold) and re-sealing under the new one. Bodies never move.',
+    security: [bearerAuth],
+    middleware: [requireAuth],
+    request: {
+      params: GroupIdParam,
+      body: jsonBody(
+        z
+          .object({
+            rewraps: z
+              .array(
+                z
+                  .object({
+                    entry_id: UuidSchema,
+                    wrapped_key: z.string().min(1).max(8192),
+                  })
+                  .strict(),
+              )
+              .min(1)
+              .max(1000),
+          })
+          .strict(),
+      ),
+    },
+    responses: {
+      ...errorResponses(400, 401, 403, 422, 503),
+      200: {
+        description: 'Rotation applied',
+        content: { 'application/json': { schema: z.object({ rewrapped: z.number().int() }) } },
+      },
+    },
+  })
+  app.openapi(rotateGroupKeys, async (c) => {
+    const { id } = c.req.valid('param')
+    const { rewraps } = c.req.valid('json')
+
+    await requireGroupOwner(c.var.userClient, id, c.var.user.id)
+
+    const { data, error } = await c.var.userClient
+      .from('entry_key_wraps')
+      .upsert(
+        rewraps.map((r) => ({ entry_id: r.entry_id, scope: 'group', wrapped_key: r.wrapped_key })),
+        { onConflict: 'entry_id,scope' },
+      )
+      .select('entry_id')
+    if (error) throw fromPostgrestError(error)
+
+    return c.json({ rewrapped: data?.length ?? 0 })
+  })
+
   // ----------------------------------------------------------------- encrypt migration
   const migrateEntries = createRoute({
     method: 'post',

@@ -466,7 +466,7 @@ export function registerGroupRoutes(app: App) {
     const query = c.var.userClient
       .from('entries')
       .select(
-        'id, notebook_id, author_id, title, mood, tags, is_shared, encrypted, created_at, updated_at, body, notebooks!inner(group_id)',
+        'id, notebook_id, author_id, title, mood, tags, is_shared, encrypted, created_at, updated_at, body, entry_key_wraps(scope, wrapped_key), notebooks!inner(group_id)',
         { count: 'exact' },
       )
       .eq('notebooks.group_id', id)
@@ -491,14 +491,24 @@ export function registerGroupRoutes(app: App) {
       .range(from, from + limit - 1)
     if (error) throw fromPostgrestError(error)
 
-    // The list view renders a 150-char excerpt; body allows 100_000 chars, so
+    // The list view renders a 150-char excerpt; body allows 140_000 chars, so
     // a full page could approach 10 MB. Send a preview — the editor fetches
-    // the whole entry by id on open. Also strip the join artifact.
+    // the whole entry by id on open. Encrypted bodies stay whole (ciphertext
+    // must not be sliced); the client decrypts then takes its own preview.
+    // Also strip the join artifact and re-expose the embedded key wraps.
     type ListEntry = z.infer<typeof EntrySchema>
-    const rows = ((data ?? []) as Array<ListEntry & { notebooks?: unknown }>).map((row) => {
-      const { notebooks: _joined, ...rest } = row
+    const rows = (
+      (data ?? []) as Array<
+        ListEntry & { notebooks?: unknown; entry_key_wraps?: Array<{ scope: 'author' | 'group'; wrapped_key: string }> }
+      >
+    ).map((row) => {
+      const { notebooks: _joined, entry_key_wraps, ...rest } = row
       void _joined
-      return { ...rest, body: rest.body.slice(0, 400) }
+      return {
+        ...rest,
+        body: rest.encrypted ? rest.body : rest.body.slice(0, 400),
+        key_wraps: entry_key_wraps ?? [],
+      }
     })
 
     return c.json({
