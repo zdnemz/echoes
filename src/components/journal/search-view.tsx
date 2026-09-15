@@ -1,16 +1,17 @@
 'use client'
 
 /**
- * Search — your own entries, full-text-ish (title, body, tags), rendered
- * with the same editorial rows as the notebook list plus a notebook chip.
+ * Search — over the locally-decrypted corpus (E2EE) with the server search
+ * as fallback for pre-encryption rows on locked vaults.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CircleNotch, MagnifyingGlass, X } from '@phosphor-icons/react/dist/ssr'
-import { useSearch } from '@/lib/api/hooks'
-import { useNotebooks } from '@/lib/api/hooks'
-import { Button } from '@/components/ui/button'
+import { MagnifyingGlass, X } from '@phosphor-icons/react/dist/ssr'
+import { useNotebooks, useSearch } from '@/lib/api/hooks'
+import { useVaultStatus } from '@/lib/crypto/use-vault'
+import { searchCorpus, useSearchCorpus, type SearchHit } from '@/lib/crypto/local-search'
 import { EntryRow, EntryRowSkeleton } from './entry-row'
+import type { Entry } from '@/lib/api/types'
 import type { View } from './workspace'
 
 export function SearchView({ initialQuery, onNavigate }: { initialQuery: string; onNavigate: (v: View) => void }) {
@@ -19,21 +20,39 @@ export function SearchView({ initialQuery, onNavigate }: { initialQuery: string;
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const notebooks = useNotebooks()
-  const results = useSearch(submitted)
+  const vaultOpen = useVaultStatus()
+  const corpus = useSearchCorpus()
+  // Server search only covers plaintext-era rows now; with the vault open
+  // the local corpus is the source of truth.
+  const serverResults = useSearch(submitted, !vaultOpen)
 
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
 
-  // A trailing "x" clears back to the notebook? No — just clears the field.
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitted(term.trim())
   }
 
-  const list = useMemo(() => results.data?.pages.flatMap((p) => p.data) ?? [], [results.data])
-  const total = results.data?.pages[0]?.pagination.total ?? 0
+  // Local hits: decrypted rows straight from the corpus.
+  const localHits: SearchHit[] = useMemo(
+    () => (vaultOpen && corpus.items ? searchCorpus(corpus.items, submitted) : []),
+    [vaultOpen, corpus.items, submitted],
+  )
+  const serverList = useMemo(() => serverResults.data?.pages.flatMap((p) => p.data) ?? [], [serverResults.data])
+
+  // Unified result rows for rendering — entries with previews.
+  const rows: Array<{ entry: Entry; preview?: { title: string; bodyPreview: string } }> = vaultOpen
+    ? localHits.map((h) => ({
+        entry: h.entry,
+        preview: { title: h.title, bodyPreview: h.body.slice(0, 150) },
+      }))
+    : serverList.map((e) => ({ entry: e }))
+  const total = vaultOpen ? localHits.length : (serverResults.data?.pages[0]?.pagination.total ?? 0)
+
   const nbTitle = (id: string) => notebooks.data?.data.find((nb) => nb.id === id)?.title ?? null
+  const loading = vaultOpen ? !corpus.ready && submitted.length > 0 : serverResults.isLoading
 
   return (
     <div className="mx-4 lg:mx-0">
@@ -69,17 +88,15 @@ export function SearchView({ initialQuery, onNavigate }: { initialQuery: string;
 
       {/* results */}
       <div className="mt-6">
-        {submitted && !results.isLoading && (
+        {submitted && !loading && (
           <p className="border-b border-line pb-3 font-mono text-[10.5px] text-ink-faint">
             {total === 0
               ? `nothing matches “${submitted}”`
-              : results.hasNextPage
-                ? `showing ${list.length} of ${total} · your own words only`
-                : `${total} ${total === 1 ? 'entry' : 'entries'} · your own words only`}
+              : `${total} ${total === 1 ? 'entry' : 'entries'} · your own words only${vaultOpen ? ' · decrypted on this device' : ''}`}
           </p>
         )}
 
-        {results.isLoading ? (
+        {loading ? (
           <ul className="divide-y divide-line border-b border-line">
             <EntryRowSkeleton />
             <EntryRowSkeleton />
@@ -91,10 +108,10 @@ export function SearchView({ initialQuery, onNavigate }: { initialQuery: string;
             <p className="font-display mt-5 text-xl text-ink">Search everything you wrote</p>
             <p className="mx-auto mt-2 max-w-[44ch] text-[12.5px] leading-relaxed text-ink-faint">
               Titles, bodies and tags across every notebook you own — the phrase, the person, the day you can&apos;t
-              quite place.
+              quite place. Encrypted entries are searched right here, after decryption; the server never sees the words.
             </p>
           </div>
-        ) : list.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="py-16 text-center">
             <p className="font-display text-xl text-ink">Nothing in your notebooks matches.</p>
             <p className="mx-auto mt-2 max-w-[44ch] text-[12.5px] leading-relaxed text-ink-faint">
@@ -102,39 +119,17 @@ export function SearchView({ initialQuery, onNavigate }: { initialQuery: string;
             </p>
           </div>
         ) : (
-          <>
-            <ul className="divide-y divide-line border-b border-line" aria-busy={results.isFetching}>
-              {list.map((entry) => (
-                <EntryRow
-                  key={entry.id}
-                  entry={entry}
-                  notebookTitle={nbTitle(entry.notebook_id)}
-                  onOpen={(e) => onNavigate({ kind: 'entry', entryId: e.id, notebookId: e.notebook_id })}
-                />
-              ))}
-            </ul>
-
-            {results.hasNextPage && (
-              <div className="mt-6 flex justify-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={results.isFetchingNextPage}
-                  className="press h-9 border-line bg-paper-raised"
-                  onClick={() => results.fetchNextPage()}
-                >
-                  {results.isFetchingNextPage ? (
-                    <>
-                      <CircleNotch weight="bold" className="mr-1.5 h-3.5 w-3.5 animate-spin text-clay" />
-                      Loading more…
-                    </>
-                  ) : (
-                    'Load more results'
-                  )}
-                </Button>
-              </div>
-            )}
-          </>
+          <ul className="divide-y divide-line border-b border-line">
+            {rows.map(({ entry, preview }) => (
+              <EntryRow
+                key={entry.id}
+                entry={entry}
+                preview={preview}
+                notebookTitle={nbTitle(entry.notebook_id)}
+                onOpen={(e) => onNavigate({ kind: 'entry', entryId: e.id, notebookId: e.notebook_id })}
+              />
+            ))}
+          </ul>
         )}
       </div>
     </div>

@@ -17,6 +17,8 @@ import { useNotebooks } from '@/lib/api/hooks'
 import { useSession } from '@/lib/auth/session'
 import { reflectChat, type ReflectMessage } from '@/lib/api/endpoints'
 import { ApiError } from '@/lib/api/client'
+import { useVaultStatus } from '@/lib/crypto/use-vault'
+import { useSearchCorpus } from '@/lib/crypto/local-search'
 
 interface Turn extends ReflectMessage {
   tools?: string[]
@@ -30,6 +32,8 @@ const HISTORY_CAP = 60
 export function ReflectView() {
   const { user } = useSession()
   const notebooks = useNotebooks()
+  const vaultOpen = useVaultStatus()
+  const corpus = useSearchCorpus()
   const mine = (notebooks.data?.data ?? []).filter((nb) => nb.owner_id === user?.id)
   const [selected, setSelected] = useState<string[]>([])
   const [turns, setTurns] = useState<Turn[]>([])
@@ -74,7 +78,26 @@ export function ReflectView() {
     setTurns(next)
     setInput('')
     try {
-      const res = await reflectChat({ notebook_ids: selected, messages: next.slice(-20) })
+      // E2EE: with the vault open, decrypt the ticked notebooks' entries
+      // here and ship them as the agent's readable context — the server
+      // holds only ciphertext and can no longer read bodies itself.
+      let context:
+        | Array<{ id: string; title: string; body: string; mood: string | null; tags: string[]; created_at: string }>
+        | undefined
+      if (vaultOpen && corpus.items) {
+        context = corpus.items
+          .filter((i) => selected.includes(i.entry.notebook_id))
+          .slice(0, 40)
+          .map((i) => ({
+            id: i.entry.id,
+            title: i.title.slice(0, 200),
+            body: i.body.slice(0, 20_000),
+            mood: i.entry.mood ?? null,
+            tags: i.entry.tags ?? [],
+            created_at: i.entry.created_at,
+          }))
+      }
+      const res = await reflectChat({ notebook_ids: selected, messages: next.slice(-20), context })
       setTurns([...next, { role: 'assistant', content: res.reply, tools: res.tools_used }])
     } catch (err) {
       setTurns(next)

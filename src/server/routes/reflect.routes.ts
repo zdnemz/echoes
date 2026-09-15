@@ -66,11 +66,22 @@ function aiNotConfigured(): ApiError {
 
 const preview = (body: string, max = 160) => body.replace(/\s+/g, ' ').trim().slice(0, max)
 
-function buildTools(client: SupabaseClient, ownedIds: Set<string>): ToolDef[] {
+/** Client-decrypted entry the agent may read (E2EE mode). */
+export interface ContextEntry {
+  id: string
+  title: string
+  body: string
+  mood?: string | null
+  tags?: string[]
+  created_at?: string
+}
+
+function buildTools(client: SupabaseClient, ownedIds: Set<string>, ctxByEntry?: Map<string, ContextEntry>): ToolDef[] {
   const guardNotebook = (id: unknown) => {
     if (typeof id !== 'string' || !ownedIds.has(id)) throw new Error('notebook not in scope')
     return id
   }
+  const ctx = ctxByEntry ?? new Map<string, ContextEntry>()
   return [
     {
       name: 'list_entries',
@@ -86,6 +97,18 @@ function buildTools(client: SupabaseClient, ownedIds: Set<string>): ToolDef[] {
       run: async (args) => {
         const notebook_id = guardNotebook(args.notebook_id)
         const limit = Math.min(20, Math.max(1, (args.limit as number) || 8))
+        // E2EE: context entries are the only readable bodies — answer from
+        // the bundle (the DB holds ciphertext that would mislead the agent).
+        if (ctx.size > 0) {
+          return [...ctx.values()].slice(0, limit).map((e) => ({
+            id: e.id,
+            title: e.title,
+            mood: e.mood ?? null,
+            tags: e.tags ?? [],
+            created_at: e.created_at ?? null,
+            preview: preview(e.body),
+          }))
+        }
         const { data, error } = await client
           .from('entries')
           .select('id, title, mood, tags, created_at, body')
@@ -110,6 +133,12 @@ function buildTools(client: SupabaseClient, ownedIds: Set<string>): ToolDef[] {
       },
       run: async (args) => {
         if (typeof args.entry_id !== 'string') throw new Error('entry_id required')
+        // E2EE: the decrypted bundle is the only source of bodies.
+        const fromCtx = ctx.get(args.entry_id)
+        if (ctx.size > 0) {
+          if (!fromCtx) throw new Error('entry not in the decrypted context for this conversation')
+          return fromCtx
+        }
         const { data, error } = await client
           .from('entries')
           .select('id, notebook_id, title, body, mood, tags, created_at')
@@ -135,6 +164,14 @@ function buildTools(client: SupabaseClient, ownedIds: Set<string>): ToolDef[] {
       run: async (args) => {
         if (typeof args.q !== 'string' || !args.q.trim()) throw new Error('q required')
         const limit = Math.min(20, Math.max(1, (args.limit as number) || 8))
+        // E2EE: search over the decrypted bundle.
+        if (ctx.size > 0) {
+          const q = args.q.trim().toLowerCase()
+          return [...ctx.values()]
+            .filter((e) => `${e.title}\n${e.body}`.toLowerCase().includes(q))
+            .slice(0, limit)
+            .map((e) => ({ id: e.id, title: e.title, created_at: e.created_at ?? null, preview: preview(e.body) }))
+        }
         const like = escapePostgrestValue(`%${args.q.trim()}%`)
         const { data, error } = await client
           .from('entries')
@@ -160,6 +197,20 @@ function buildTools(client: SupabaseClient, ownedIds: Set<string>): ToolDef[] {
         properties: { since: { type: 'string', description: 'ISO date, e.g. 2026-08-01' } },
       },
       run: async (args) => {
+        // E2EE: counts over the decrypted bundle (mood is plaintext metadata
+        // in both modes, but timestamps live in the bundle for sealed rows).
+        if (ctx.size > 0) {
+          const since = typeof args.since === 'string' ? args.since : null
+          const counts: Record<string, number> = {}
+          let latest: string | null = null
+          for (const e of ctx.values()) {
+            if (since && e.created_at && e.created_at < since) continue
+            const m = e.mood ?? 'none'
+            counts[m] = (counts[m] ?? 0) + 1
+            if (!latest || (e.created_at && e.created_at > latest)) latest = e.created_at ?? null
+          }
+          return { counts, latest_entry_at: latest }
+        }
         let query = client
           .from('entries')
           .select('mood, created_at')
@@ -396,6 +447,22 @@ const ChatBody = z
       .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().min(1).max(2000) }))
       .min(1)
       .max(20),
+    /** Client-decrypted entries (E2EE) the agent may read this turn. */
+    context: z
+      .array(
+        z
+          .object({
+            id: UuidSchema,
+            title: z.string().min(1).max(200),
+            body: z.string().max(20_000),
+            mood: z.string().max(10).nullable().optional(),
+            tags: z.array(z.string().max(40)).max(20).optional(),
+            created_at: z.string().max(40).optional(),
+          })
+          .strict(),
+      )
+      .max(40)
+      .optional(),
   })
   .strict()
 
@@ -424,7 +491,7 @@ export function registerReflectRoutes(app: App) {
   app.openapi(chat, async (c) => {
     const cfg = getAIConfig()
     if (!cfg) throw aiNotConfigured()
-    const { notebook_ids, messages } = c.req.valid('json')
+    const { notebook_ids, messages, context } = c.req.valid('json')
     const me = c.var.user.id
 
     // Scope: only notebooks the caller owns. Anything else reads as 404 so
@@ -439,6 +506,27 @@ export function registerReflectRoutes(app: App) {
       throw Errors.notFound('Notebook not found (or not visible to you)')
     }
     const ownedIds = new Set(owned.map((n) => n.id))
+
+    // E2EE mode: the client sends decrypted entries for the ticked
+    // notebooks. Verify each id really lives in a ticked notebook (metadata
+    // check only — the server never reads the body), then let the agent
+    // tools answer from the bundle instead of the database, so the agent
+    // reads plaintext the server itself can no longer produce.
+    const ctxByEntry = new Map<string, ContextEntry>()
+    if (context && context.length > 0) {
+      const ids = context.map((e) => e.id)
+      const { data: rows, error: ctxErr } = await c.var.userClient
+        .from('entries')
+        .select('id, notebook_id, encrypted')
+        .in('id', ids)
+      if (ctxErr) throw fromPostgrestError(ctxErr)
+      const valid = new Set(
+        ((rows ?? []) as Array<{ id: string; notebook_id: string }>)
+          .filter((r) => ownedIds.has(r.notebook_id))
+          .map((r) => r.id),
+      )
+      for (const e of context) if (valid.has(e.id)) ctxByEntry.set(e.id, e)
+    }
 
     const today = new Date().toISOString().slice(0, 10)
     const thread: AgentMessage[] = [
@@ -460,7 +548,7 @@ export function registerReflectRoutes(app: App) {
       ...messages.map((m): AgentMessage => ({ role: m.role, content: m.content })),
     ]
 
-    const tools = buildTools(c.var.userClient, ownedIds)
+    const tools = buildTools(c.var.userClient, ownedIds, ctxByEntry)
     const { reply, toolsUsed } = await runAgentLoop((msgs, ts) => providerChat(cfg, msgs, ts), tools, thread)
     return c.json({ reply, tools_used: [...new Set(toolsUsed)], model: cfg.model })
   })

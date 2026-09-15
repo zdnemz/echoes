@@ -202,29 +202,11 @@ export interface ReflectMessage {
   content: string
 }
 
-export const reflectChat = (input: { notebook_ids: string[]; messages: ReflectMessage[] }) =>
-  api<{ reply: string; tools_used: string[]; model: string }>('/api/reflect/chat', {
-    method: 'POST',
-    ...json(input),
-  })
-
-export interface ReflectContextEntry {
-  title: string
-  body: string
-  mood: string | null
-  tags: string[]
-  created_at: string
-}
-
-/**
- * Reflect with a client-decrypted context bundle: entries the caller
- * decrypted locally are passed to the AI provider via the tool loop —
- * the server relays them without storing or re-reading them.
- */
-export const reflectChatWithContext = (input: {
+export const reflectChat = (input: {
   notebook_ids: string[]
   messages: ReflectMessage[]
-  context?: ReflectContextEntry[]
+  /** Client-decrypted entries (E2EE mode) the agent may read this turn. */
+  context?: Array<{ id: string; title: string; body: string; mood: string | null; tags: string[]; created_at: string }>
 }) =>
   api<{ reply: string; tools_used: string[]; model: string }>('/api/reflect/chat', {
     method: 'POST',
