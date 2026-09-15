@@ -68,6 +68,11 @@ export interface UpdateNotebookInput {
 
 // ----------------------------------------------------------------- entries
 
+export interface EntryKeyWrap {
+  scope: 'author' | 'group'
+  wrapped_key: string
+}
+
 export interface Entry {
   id: string
   notebook_id: string
@@ -77,10 +82,13 @@ export interface Entry {
   mood: Mood | null
   tags: string[]
   is_shared: boolean
+  encrypted: boolean
   created_at: string
   updated_at: string
   /** Others who opened this entry — only present on GET /entries/:id */
   readers?: Array<{ user_id: string; display_name: string | null; viewed_at: string }>
+  /** Content-key wraps visible to you (author and/or group scope) */
+  key_wraps?: EntryKeyWrap[]
 }
 
 export interface CreateEntryInput {
@@ -89,6 +97,8 @@ export interface CreateEntryInput {
   mood?: Mood
   tags?: string[]
   is_shared?: boolean
+  encrypted?: boolean
+  key_wraps?: EntryKeyWrap[]
 }
 
 export interface UpdateEntryInput {
@@ -97,6 +107,8 @@ export interface UpdateEntryInput {
   mood?: Mood | null
   tags?: string[]
   is_shared?: boolean
+  encrypted?: boolean
+  key_wraps?: EntryKeyWrap[]
 }
 
 // ----------------------------------------------------------------- groups

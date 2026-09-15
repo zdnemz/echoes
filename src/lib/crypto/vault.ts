@@ -27,7 +27,9 @@ import {
   generateIdentityKeypair,
   importPrivateKey,
   openSealedKey,
+  openText,
   randomSalt,
+  sealText,
   unwrapKey,
   wrapKey,
   PBKDF2_ITERATIONS,
@@ -71,6 +73,7 @@ export function isUnlocked(): boolean {
 }
 
 function setUnlockedFlag(on: boolean) {
+  if (typeof window === 'undefined') return
   try {
     if (on) window.localStorage.setItem(UNLOCKED_FLAG, '1')
     else window.localStorage.removeItem(UNLOCKED_FLAG)
@@ -113,10 +116,11 @@ export async function provision(password: string): Promise<void> {
   const wrappedDek = await wrapKey(dek, kek)
 
   const identity = await generateIdentityKeypair()
-  // Identity private key sealed under the DEK: unwrapping it proves the DEK.
   const identityPrivatePem = await exportPrivateKey(identity.privateKey)
   const identityPublic = await exportPublicKey(identity.publicKey)
-  const wrappedIdentityPrivate = await wrapKey(identity.privateKey, dek)
+  // Identity private key (pkcs8 PEM) sealed as text under the DEK: opening
+  // it proves the DEK; ECDH keys cannot be raw-wrapped like AES keys.
+  const wrappedIdentityPrivate = await sealText(identityPrivatePem, dek)
 
   await api('/api/me/keys', {
     method: 'PUT',
@@ -142,6 +146,7 @@ export async function provision(password: string): Promise<void> {
 // ---------------------------------------------------------------- unlocking
 
 function stashPassword(password: string) {
+  if (typeof window === 'undefined') return // tests / CLI contexts
   try {
     window.sessionStorage.setItem(UNLOCK_STASH, password)
   } catch {
@@ -177,7 +182,7 @@ export async function unlock(password: string): Promise<void> {
   const iterations = keys.iterations ?? PBKDF2_ITERATIONS
   const kek = await deriveKekFromPassword(password, keys.salt, iterations)
   const dek = await unwrapKey(keys.wrapped_dek, kek)
-  const identityPrivate = await unwrapKey(keys.wrapped_private_key, dek)
+  const identityPrivate = await importPrivateKey(await openText(keys.wrapped_private_key, dek))
   vault = { dek, identityPrivate, identityPublic: keys.public_key }
   stashPassword(password)
   setUnlockedFlag(true)

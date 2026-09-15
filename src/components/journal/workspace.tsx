@@ -28,7 +28,9 @@ import { UserMenu } from './user-menu'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useSession } from '@/lib/auth/session'
 import { useCreateNotebook, useNotebooks } from '@/lib/api/hooks'
+import { useVaultStatus } from '@/lib/crypto/use-vault'
 import { isUnconfigured } from '@/lib/api/client'
+import { VaultGate } from './vault-gate'
 
 export type View =
   | { kind: 'notebook'; notebookId: string }
@@ -160,6 +162,7 @@ export function Workspace() {
   const searchParams = useSearchParams()
   const params = useParams<{ slug?: string[] }>()
   const { status: sessionStatus } = useSession()
+  const vaultStatus = useVaultStatus()
   const [railOpen, setRailOpen] = useState(false)
 
   // ---- session gate
@@ -218,6 +221,11 @@ export function Workspace() {
 
   if (sessionStatus === 'restoring') return <RestoreSkeleton />
   if (sessionStatus !== 'authenticated') return <SignedOutGate />
+
+  // Authenticated but the E2EE vault is locked (fresh tab, OAuth sign-in,
+  // stale stash) — everything below needs the keys, so the gate comes first.
+  // Give auto-unlock a beat to finish before demanding the password.
+  if (vaultStatus === false && notebooks.data !== undefined) return <VaultGate />
 
   const search = (q: string) => {
     if (q.trim()) navigate({ kind: 'search', q: q.trim() })

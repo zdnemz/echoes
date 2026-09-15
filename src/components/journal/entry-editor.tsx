@@ -40,6 +40,8 @@ import { MOODS, MOOD_META, MoodGlyph } from '@/components/mood/glyphs'
 import { useSession } from '@/lib/auth/session'
 import { useCreateEntry, useDeleteEntry, useEntry, useNotebooks, useUpdateEntry } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
+import { useVaultStatus } from '@/lib/crypto/use-vault'
+import { sealForStorage, openFromStorage, rewrapForSharing, type KeyWrapInput } from '@/lib/crypto/entry-codec'
 import { useRovingSelection } from '@/hooks/use-roving-selection'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { getDefaultMood } from '@/lib/prefs'
@@ -184,6 +186,7 @@ function TagsInput({
 
 export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: View) => void }) {
   const { user } = useSession()
+  const vaultOpen = useVaultStatus()
   const notebooks = useNotebooks()
   const entryQuery = useEntry(mode.compose ? null : mode.entryId)
   const entry = entryQuery.data ?? null
@@ -203,26 +206,71 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [sealedError, setSealedError] = useState(false)
+
+  // The entry's notebook group — used for both hydration and save-time
+  // sealing; derived from the notebooks cache so it exists before `notebook`.
+  const entryGroupId = useMemo(() => {
+    const id = mode.compose ? mode.notebookId : entry?.notebook_id
+    return notebooks.data?.data.find((nb) => nb.id === id)?.group_id ?? null
+  }, [mode, entry, notebooks.data])
+
+  // Ownership consts must precede the reading effect (it reads canEdit).
+  const isAuthor = entry ? entry.author_id === user?.id : mode.compose
+  const canEdit = isAuthor
+
+  // Sealed shared-entry reading state — resolved at the top level so hooks
+  // stay unconditional (the reading branch below just consumes it).
+  const [reading, setReading] = useState<{ title: string; body: string } | null>(null)
+  useEffect(() => {
+    if (!entry || canEdit || !entry.encrypted) return
+    let alive = true
+    void openFromStorage(entry, user?.id ?? '', entryGroupId)
+      .then((r) => alive && setReading(r))
+      .catch(() => alive && setReading(null))
+    return () => {
+      alive = false
+    }
+  }, [entry, canEdit, entryGroupId, user])
 
   // Hydrate the form once when the entry arrives.
   useEffect(() => {
     if (mode.compose || !entry || hydrated) return
+    // Encrypted entries open with the vault before the form fills — this is
+    // the one async hop in hydration; failures keep the entry readable-only.
+    if (entry.encrypted) {
+      void openFromStorage(entry, user?.id ?? '', entryGroupId)
+        .then(({ title: t, body: b }) => {
+          setTitle(t)
+          setBody(b)
+          setMood(entry.mood)
+          setTags(entry.tags)
+          setIsShared(entry.is_shared)
+          setHydrated(true)
+        })
+        .catch(() => {
+          // Locked (group key missing / vault rotation in flight): show the
+          // cipher fields but never save them back blindly.
+          setTitle('')
+          setBody('')
+          setSealedError(true)
+        })
+      return
+    }
     setTitle(entry.title)
     setBody(entry.body)
     setMood(entry.mood)
     setTags(entry.tags)
     setIsShared(entry.is_shared)
     setHydrated(true)
-  }, [mode.compose, entry, hydrated])
+  }, [mode.compose, entry, hydrated, entryGroupId, user])
 
   const notebook = useMemo(() => {
     const id = mode.compose ? mode.notebookId : entry?.notebook_id
     return notebooks.data?.data.find((nb) => nb.id === id) ?? null
   }, [mode, entry, notebooks.data])
 
-  const isAuthor = entry ? entry.author_id === user?.id : mode.compose
   const isOwner = notebook ? notebook.owner_id === user?.id : false
-  const canEdit = isAuthor
   const groupLinked = Boolean(notebook?.group_id)
 
   const markDirty = useCallback(() => {
@@ -232,12 +280,13 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
 
   const exportEntry = useCallback(() => {
     if (!entry) return
-    downloadTextFile(
-      entryFilename(entry.title || 'untitled'),
-      serializeEntry({ title: entry.title, body: entry.body, mood: entry.mood, tags: entry.tags }),
-    )
+    // Sealed entries export the opened plaintext form (hydrated above);
+    // a locked vault falls back to a filename-only export.
+    const t = entry.encrypted ? title || 'untitled' : entry.title || 'untitled'
+    const b = entry.encrypted ? body : entry.body
+    downloadTextFile(entryFilename(t), serializeEntry({ title: t, body: b, mood: entry.mood, tags: entry.tags }))
     toast.success('Exported as markdown.')
-  }, [entry])
+  }, [entry, title, body])
 
   // ---- save
   const save = useCallback(async () => {
@@ -248,14 +297,19 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
     }
     setSaving(true)
     try {
+      // Seal under the vault when it's open (all new saves encrypt).
+      // Locked vault → legacy plaintext save so nothing is ever lost.
+      const sealed =
+        vaultOpen && !sealedError ? await sealForStorage(t, body, entryGroupId, groupLinked ? isShared : false) : null
       if (mode.compose) {
         const created = await create.mutateAsync({
           notebookId: mode.notebookId,
-          title: t,
-          body,
+          title: sealed ? sealed.title : t,
+          body: sealed ? sealed.body : body,
           mood: mood ?? undefined,
           tags,
           is_shared: groupLinked ? isShared : undefined,
+          ...(sealed ? { encrypted: true, key_wraps: sealed.key_wraps } : {}),
         })
         setDirty(false)
         setSavedAt(Date.now())
@@ -266,13 +320,22 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           fromGroup: mode.fromGroup,
         })
       } else if (entry) {
+        // Toggling sharing re-wraps the content key when encrypted.
+        let keyWraps: KeyWrapInput[] | undefined
+        if (sealed) {
+          keyWraps = sealed.key_wraps
+        } else if (entry.encrypted) {
+          keyWraps = await rewrapForSharing(entry, user?.id ?? '', entryGroupId, groupLinked ? isShared : false)
+        }
         await update.mutateAsync({
           id: entry.id,
-          title: t,
-          body,
+          title: sealed ? sealed.title : t,
+          body: sealed ? sealed.body : body,
           mood,
           tags,
           ...(groupLinked ? { is_shared: isShared } : {}),
+          ...(sealed ? { encrypted: true, key_wraps: keyWraps } : {}),
+          ...(keyWraps && !sealed ? { key_wraps: keyWraps } : {}),
         })
         setDirty(false)
         setSavedAt(Date.now())
@@ -283,7 +346,23 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
     } finally {
       setSaving(false)
     }
-  }, [mode, entry, title, body, mood, tags, isShared, groupLinked, create, update, onNavigate])
+  }, [
+    mode,
+    entry,
+    title,
+    body,
+    mood,
+    tags,
+    isShared,
+    groupLinked,
+    entryGroupId,
+    create,
+    update,
+    onNavigate,
+    vaultOpen,
+    sealedError,
+    user,
+  ])
 
   // Autosave with the shared bouncer: the form stays instant, the save only
   // sees settled values. Edit mode only — in compose a pause would create
@@ -374,6 +453,26 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
   // --------------------------------------------------------------- reading mode
 
   if (!canEdit && entry) {
+    if (entry.encrypted && !reading) {
+      return (
+        <div className="mx-4 max-w-[70ch] lg:mx-0">
+          <button
+            type="button"
+            onClick={back}
+            className="press -ml-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint hover:text-ink"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> back to {backLabel}
+          </button>
+          <p className="mt-16 text-center text-[13px] text-ink-faint">
+            {reading === null && entry.encrypted
+              ? 'This entry is sealed — its key is not available in this tab.'
+              : 'Opening…'}
+          </p>
+        </div>
+      )
+    }
+    const displayTitle = entry.encrypted ? (reading?.title ?? 'Sealed entry') : entry.title
+    const displayBody = entry.encrypted ? (reading?.body ?? '') : entry.body
     return (
       <article className="mx-4 max-w-[70ch] lg:mx-0">
         <button
@@ -386,7 +485,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
 
         <header className="mt-6 border-b border-line pb-6">
           <p className="font-mono text-[10.5px] text-ink-faint">{entry.created_at.slice(0, 10)} · shared entry</p>
-          <h1 className="font-display mt-2 text-3xl leading-tight tracking-tight text-ink">{entry.title}</h1>
+          <h1 className="font-display mt-2 text-3xl leading-tight tracking-tight text-ink">{displayTitle}</h1>
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
             {entry.mood && (
               <span
@@ -414,7 +513,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
         </header>
 
         <div className="measure py-8">
-          <MarkdownView className="text-[16.5px]">{entry.body}</MarkdownView>
+          <MarkdownView className="text-[16.5px]">{displayBody}</MarkdownView>
         </div>
       </article>
     )

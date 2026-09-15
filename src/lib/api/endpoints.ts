@@ -218,8 +218,8 @@ export interface ReflectContextEntry {
 
 /**
  * Reflect with a client-decrypted context bundle: entries the caller
- * decrypted locally are re-sealed for the AI provider only — the server
- * passes them through its tool loop without storing or re-reading them.
+ * decrypted locally are passed to the AI provider via the tool loop —
+ * the server relays them without storing or re-reading them.
  */
 export const reflectChatWithContext = (input: {
   notebook_ids: string[]
@@ -230,3 +230,45 @@ export const reflectChatWithContext = (input: {
     method: 'POST',
     ...json(input),
   })
+
+// ----------------------------------------------------------------- encryption (E2EE)
+
+export interface KeyMaterial {
+  salt: string | null
+  iterations: number | null
+  wrapped_dek: string | null
+  public_key: string | null
+  wrapped_private_key: string | null
+}
+
+export const getMyKeys = () => api<KeyMaterial>('/api/me/keys')
+
+export const publishKeys = (input: {
+  salt: string
+  iterations: number
+  wrapped_dek: string
+  public_key: string
+  wrapped_private_key: string
+}) => api<KeyMaterial>('/api/me/keys', { method: 'PUT', ...json(input) })
+
+export interface GroupKeyWrap {
+  group_id: string
+  generation: number
+  sealed_box: string
+  created_at: string
+}
+
+export const getMyGroupKeyWrap = (groupId: string) => api<GroupKeyWrap>(`/api/groups/${groupId}/key`)
+
+export const distributeGroupKeys = (
+  groupId: string,
+  input: { generation: number; wraps: Array<{ user_id: string; sealed_box: string }> },
+) => api<{ group_id: string; generation: number }>(`/api/groups/${groupId}/key`, { method: 'PUT', ...json(input) })
+
+export const rotateGroupEntryKeys = (
+  groupId: string,
+  input: { rewraps: Array<{ entry_id: string; wrapped_key: string }> },
+) => api<{ rewrapped: number }>(`/api/groups/${groupId}/rotate`, { method: 'POST', ...json(input) })
+
+export const encryptMigrate = (input: { entries: Array<{ id: string; title_cipher: string; body_cipher: string }> }) =>
+  api<{ migrated: number; remaining: number }>('/api/me/encrypt-migrate', { method: 'POST', ...json(input) })

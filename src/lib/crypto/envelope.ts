@@ -79,7 +79,7 @@ export async function deriveKekFromPassword(
     base,
     { name: 'AES-GCM', length: 256 },
     false,
-    ['wrapKey', 'unwrapKey', 'encrypt', 'decrypt'],
+    ['encrypt', 'decrypt'],
   )
 }
 
@@ -87,26 +87,37 @@ export async function deriveKekFromPassword(
 
 /** Wrap an extractable AES key to base64 with a wrapping key (AES-GCM). */
 export async function wrapKey(key: CryptoKey, wrapper: CryptoKey): Promise<string> {
-  const raw = new Uint8Array(await crypto.subtle.exportKey('raw', key))
+  const buf = await crypto.subtle.exportKey('raw', key)
+  const raw = new Uint8Array(buf)
+  return sealBytes(raw, wrapper)
+}
+
+/** Unwrap a base64-wrapped key. Throws if the wrapper is wrong (auth tag fails). */
+export async function unwrapKey(wrapped: string, wrapper: CryptoKey): Promise<CryptoKey> {
+  const raw = await openBytes(wrapped, wrapper)
+  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt'])
+}
+
+/** Seal raw bytes (iv ‖ ciphertext) — the shared core of wrap/seal. */
+async function sealBytes(raw: Uint8Array<ArrayBuffer>, wrapper: CryptoKey): Promise<string> {
   const iv = new Uint8Array(12)
   crypto.getRandomValues(iv)
   const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, wrapper, raw))
-  // iv ‖ ciphertext in one blob — one column, one round trip.
   const blob = new Uint8Array(iv.length + sealed.length)
   blob.set(iv)
   blob.set(sealed, iv.length)
   return `${CIPHER_VERSION}.${b64(blob)}`
 }
 
-/** Unwrap a base64-wrapped key. Throws if the wrapper is wrong (auth tag fails). */
-export async function unwrapKey(wrapped: string, wrapper: CryptoKey): Promise<CryptoKey> {
-  const [version, blobB64] = wrapped.split('.')
-  if (version !== CIPHER_VERSION || !blobB64) throw new Error('bad wrapped key format')
+/** Open raw bytes sealed by sealBytes. */
+async function openBytes(sealedText: string, wrapper: CryptoKey): Promise<Uint8Array<ArrayBuffer>> {
+  const [version, blobB64] = sealedText.split('.')
+  if (version !== CIPHER_VERSION || !blobB64) throw new Error('bad ciphertext format')
   const blob = unb64(blobB64)
   const iv = blob.slice(0, 12)
   const sealed = blob.slice(12)
-  const raw = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, wrapper, sealed))
-  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt'])
+  const buf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, wrapper, sealed)
+  return new Uint8Array(buf)
 }
 
 // --------------------------------------------------------------- text sealing

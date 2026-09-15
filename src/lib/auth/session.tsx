@@ -15,6 +15,7 @@ import { useSyncExternalStore } from 'react'
 import type { AuthUser, Session } from '@/lib/api/types'
 import * as api from '@/lib/api/endpoints'
 import { getToken, isUnauthorized, persistSession, readStoredUser, setToken, storeUser } from '@/lib/api/client'
+import { provision, unlock as vaultUnlock, lock as vaultLock, tryAutoUnlock } from '@/lib/crypto/vault'
 
 export type SessionStatus = 'restoring' | 'authenticated' | 'anonymous'
 
@@ -94,7 +95,17 @@ function applySession(session: Session | null): AuthUser | null {
 
 export async function login(email: string, password: string): Promise<AuthUser> {
   const session = await api.login({ email, password })
-  return applySession(session) as AuthUser
+  const user = applySession(session) as AuthUser
+  // Session ok → open the key vault with the same password. A wrong password
+  // cannot reach here (login failed above); vault failure means the stored
+  // material predates E2EE or the password changed elsewhere — the unlock
+  // prompt handles that case, so this stays best-effort.
+  try {
+    await vaultUnlock(password)
+  } catch {
+    /* locked vault — VaultGate shows the unlock prompt */
+  }
+  return user
 }
 
 export async function signup(email: string, password: string, displayName?: string): Promise<AuthUser | null> {
@@ -103,7 +114,18 @@ export async function signup(email: string, password: string, displayName?: stri
     password,
     ...(displayName ? { display_name: displayName } : {}),
   })
-  return applySession(session)
+  const user = applySession(session)
+  // A usable session means the account is live right now: provision the
+  // E2EE keys under this password. Confirmation-pending signups (null
+  // session) provision on their first real login instead.
+  if (user) {
+    try {
+      await provision(password)
+    } catch {
+      /* provisioning can be retried from the unlock prompt */
+    }
+  }
+  return user
 }
 
 export async function logout(): Promise<void> {
@@ -112,6 +134,7 @@ export async function logout(): Promise<void> {
   } catch {
     // best-effort server revocation; the token is dropped regardless
   }
+  vaultLock()
   applySession(null)
 }
 
@@ -121,7 +144,10 @@ export async function refresh(): Promise<void> {
     storeUser(fresh)
     setState({ user: fresh, status: 'authenticated' })
   } catch (err) {
-    if (isUnauthorized(err)) applySession(null)
+    if (isUnauthorized(err)) {
+      vaultLock()
+      applySession(null)
+    }
   }
 }
 
@@ -135,7 +161,11 @@ export function adoptSession(session: Session): AuthUser {
 /** Mounts the one-time restore; children render regardless. */
 export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
-    void restore()
+    void restore().then(() => {
+      // Same-tab reload with a live session: re-open the vault from the
+      // stashed password before components render locked UI.
+      void tryAutoUnlock()
+    })
     // The API client rotates tokens transparently (api.ts) and emits this
     // event when a refresh brought back fresher user data — mirror it here
     // so subscribers see the update without a re-fetch.
