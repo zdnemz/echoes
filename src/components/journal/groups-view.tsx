@@ -647,6 +647,23 @@ function GroupJournalTab({
     }
   }
 
+  /**
+   * Linking a notebook is only half the job: shared entries are sealed under
+   * the group CEK, which does not exist until someone distributes it. The
+   * notebook's own Share dialog does this; skipping it here left
+   * getGroupCek() returning null and every shared save throwing
+   * "no group key available".
+   */
+  const distributeGroupKey = async (groupId: string) => {
+    try {
+      const { distributeOrRotate } = await import('@/lib/crypto/group-keys')
+      await distributeOrRotate(groupId, user?.id ?? '')
+    } catch {
+      // Members without published keys can't be sealed for yet. Best-effort:
+      // the save path degrades to author-only and says so.
+    }
+  }
+
   const handleLinkOrCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusyModal(true)
@@ -655,11 +672,13 @@ function GroupJournalTab({
         const title = newNotebookTitle.trim() || `${group.name} Notes`
         const created = await createNotebook.mutateAsync({ title })
         await updateNotebook.mutateAsync({ id: created.id, group_id: group.id })
+        await distributeGroupKey(group.id)
         setLinkModalOpen(false)
         onNavigate({ kind: 'compose', notebookId: created.id, fromGroup: group.id })
       } else {
         if (!selectedNotebookId) return
         await updateNotebook.mutateAsync({ id: selectedNotebookId, group_id: group.id })
+        await distributeGroupKey(group.id)
         setLinkModalOpen(false)
         onNavigate({ kind: 'compose', notebookId: selectedNotebookId, fromGroup: group.id })
       }

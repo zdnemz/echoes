@@ -22,30 +22,51 @@ export interface KeyWrapInput {
   wrapped_key: string
 }
 
+/** What sealForStorage managed to do about the group wrap. */
+export type ShareSealState = 'shared' | 'author-only'
+
 /**
  * Seal an entry for storage. Returns the fields to send the API.
  * `groupId` must be the entry's notebook group when is_shared is true.
+ *
+ * When the group CEK is missing (not distributed yet, or nobody has
+ * published keys) the entry is still saved — sealed under the author wrap
+ * only — and `shareState` reports 'author-only'. Throwing here instead
+ * meant a missing key lost the writing entirely, so the entry is kept and
+ * the caller warns that it isn't shared yet.
  */
 export async function sealForStorage(
   title: string,
   body: string,
   groupId: string | null,
   isShared: boolean,
-): Promise<{ title: string; body: string; encrypted: true; key_wraps: KeyWrapInput[] }> {
+): Promise<{
+  title: string
+  body: string
+  encrypted: true
+  key_wraps: KeyWrapInput[]
+  shareState: ShareSealState
+}> {
   const vault = getVault()
   if (!vault) throw new Error('vault locked')
 
-  const cek = groupId && isShared ? await getGroupCek(groupId) : null
+  const wantsGroup = Boolean(groupId && isShared)
+  const cek = wantsGroup ? await getGroupCek(groupId as string) : null
   const contentKey = await generateDataKey()
 
   const sealed = await sealEntry({ title, body }, contentKey)
   const wraps: KeyWrapInput[] = [{ scope: 'author', wrapped_key: await wrapKey(contentKey, vault.dek) }]
-  if (groupId && isShared) {
-    if (!cek) throw new Error('no group key available — link sharing first')
+  if (cek) {
     wraps.push({ scope: 'group', wrapped_key: await wrapKey(contentKey, cek) })
   }
 
-  return { title: sealed, body: sealed, encrypted: true, key_wraps: wraps }
+  return {
+    title: sealed,
+    body: sealed,
+    encrypted: true,
+    key_wraps: wraps,
+    shareState: wantsGroup && !cek ? 'author-only' : 'shared',
+  }
 }
 
 /**
@@ -93,6 +114,9 @@ export async function previewFromStorage(
  *  - sharing ON  → re-seal nothing, just add the group wrap (needs CEK)
  *  - sharing OFF → drop the group wrap
  * Returns the new key_wraps array for PATCH /entries/:id.
+ *
+ * A missing CEK is not fatal: the author wrap alone is returned so the edit
+ * survives. Callers mark the entry unshared in that case.
  */
 export async function rewrapForSharing(
   entry: Pick<Entry, 'key_wraps' | 'encrypted' | 'author_id'>,
@@ -111,7 +135,9 @@ export async function rewrapForSharing(
 
   if (groupId) {
     const cek = await getGroupCek(groupId)
-    if (!cek) throw new Error('no group key available')
+    // No CEK yet: keep the author wrap so the edit is never lost. The caller
+    // marks the entry unshared rather than advertising a row nobody can open.
+    if (!cek) return [{ scope: 'author', wrapped_key: authorWrap.wrapped_key }]
     const contentKey = await unwrapKey(authorWrap.wrapped_key, vault.dek)
     return [
       { scope: 'author', wrapped_key: authorWrap.wrapped_key },

@@ -301,6 +301,13 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
       // Locked vault → legacy plaintext save so nothing is ever lost.
       const sealed =
         vaultOpen && !sealedError ? await sealForStorage(t, body, entryGroupId, groupLinked ? isShared : false) : null
+      // No group CEK yet (keys not distributed / none published): the entry
+      // saves under the author wrap alone, so it must not be flagged shared —
+      // members would see a row they cannot open.
+      const authorOnly = sealed?.shareState === 'author-only'
+      if (authorOnly) {
+        toast('Saved to you only — this group has no encryption key yet, so it is not shared yet.')
+      }
       if (mode.compose) {
         const created = await create.mutateAsync({
           notebookId: mode.notebookId,
@@ -308,7 +315,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           body: sealed ? sealed.body : body,
           mood: mood ?? undefined,
           tags,
-          is_shared: groupLinked ? isShared : undefined,
+          is_shared: groupLinked ? (authorOnly ? false : isShared) : undefined,
           ...(sealed ? { encrypted: true, key_wraps: sealed.key_wraps } : {}),
         })
         setDirty(false)
@@ -325,7 +332,11 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
         if (sealed) {
           keyWraps = sealed.key_wraps
         } else if (entry.encrypted) {
-          keyWraps = await rewrapForSharing(entry, user?.id ?? '', entryGroupId, groupLinked ? isShared : false)
+          // Same missing-CEK case, reached when the vault is locked: keep the
+          // author wrap rather than losing the edit to a throw.
+          keyWraps = await rewrapForSharing(entry, user?.id ?? '', entryGroupId, groupLinked ? isShared : false).catch(
+            () => undefined,
+          )
         }
         await update.mutateAsync({
           id: entry.id,
@@ -333,7 +344,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           body: sealed ? sealed.body : body,
           mood,
           tags,
-          ...(groupLinked ? { is_shared: isShared } : {}),
+          ...(groupLinked ? { is_shared: authorOnly ? false : isShared } : {}),
           ...(sealed ? { encrypted: true, key_wraps: keyWraps } : {}),
           ...(keyWraps && !sealed ? { key_wraps: keyWraps } : {}),
         })
