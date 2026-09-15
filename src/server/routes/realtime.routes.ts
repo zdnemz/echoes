@@ -74,10 +74,13 @@ function presenceKey(snapshot: unknown): string {
 
 /** Count + latest update of the entries this caller may see in the group. */
 async function journalVersion(userClient: Parameters<typeof requireGroupVisible>[0], groupId: string) {
+  // count 'planned' (EXPLAIN estimate) instead of 'exact': change detection
+  // only needs to NOTICE a difference, not report a precise total — exact
+  // counts forced a full scan of the group's rows every 2s per open tab.
   const [entriesRes, viewsRes] = await Promise.all([
     userClient
       .from('entries')
-      .select('updated_at, notebooks!inner(group_id)', { count: 'exact' })
+      .select('updated_at, notebooks!inner(group_id)', { count: 'planned' })
       .eq('notebooks.group_id', groupId)
       .order('updated_at', { ascending: false })
       .limit(1),
@@ -86,7 +89,7 @@ async function journalVersion(userClient: Parameters<typeof requireGroupVisible>
     // entry_views is missing (pre-0011 database) the version still works.
     userClient
       .from('entry_views')
-      .select('viewed_at', { count: 'exact', head: true })
+      .select('viewed_at', { count: 'planned', head: true })
       .order('viewed_at', { ascending: false })
       .limit(1)
       .then(undefined, () => null),
@@ -102,13 +105,13 @@ async function membersVersion(userClient: Parameters<typeof requireGroupVisible>
   const [{ count: memberCount, data: latestMember, error: memberErr }, { count: pendingCount }] = await Promise.all([
     userClient
       .from('group_members')
-      .select('joined_at', { count: 'exact' })
+      .select('joined_at', { count: 'planned' })
       .eq('group_id', groupId)
       .order('joined_at', { ascending: false })
       .limit(1),
     userClient
       .from('group_join_requests')
-      .select('id', { count: 'exact', head: true })
+      .select('id', { count: 'planned', head: true })
       .eq('group_id', groupId)
       .eq('status', 'pending'),
   ])

@@ -163,7 +163,11 @@ export interface GroupJournalFilters {
   until?: string
 }
 
-export function useGroupEntries(groupId: string | null, filters: GroupJournalFilters = {}) {
+export function useGroupEntries(
+  groupId: string | null,
+  filters: GroupJournalFilters = {},
+  streamStatus: 'live' | 'connecting' | 'offline' = 'live',
+) {
   const enabled = useAuthed() && groupId !== null
   const { author_id, mood, tags, q, since, until } = filters
   return useInfiniteQuery({
@@ -186,8 +190,10 @@ export function useGroupEntries(groupId: string | null, filters: GroupJournalFil
     enabled,
     retry: retryPolicy,
     placeholderData: (prev) => prev,
-    // ponytail: polling pengganti realtime — ganti Supabase Realtime + presence saat tabel read/typing ada.
-    refetchInterval: 15_000,
+    // Safety poll under the SSE stream: the stream pushes changes in ~2s,
+    // so the poll only needs to catch a dropped connection. 60s while
+    // live, 15s while reconnecting.
+    refetchInterval: streamStatus === 'live' ? 60_000 : 15_000,
     refetchOnWindowFocus: true,
   })
 }

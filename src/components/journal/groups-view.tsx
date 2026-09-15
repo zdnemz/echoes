@@ -537,7 +537,7 @@ function GroupJournalTab({
     [authorId, mood, searchQuery, since, until],
   )
 
-  const entriesQuery = useGroupEntries(group.id, filters)
+  const entriesQuery = useGroupEntries(group.id, filters, realtime.status)
   const entries = useMemo(() => entriesQuery.data?.pages.flatMap((p) => p.data) ?? [], [entriesQuery.data])
   const total = entriesQuery.data?.pages[0]?.pagination.total ?? 0
 
