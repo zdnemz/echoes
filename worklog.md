@@ -112,3 +112,24 @@ Stage Summary:
 - Two real latent bugs found and fixed with migrations (0002 RLS recursion, 0003 embed FK) — both would have broken identically on hosted Supabase on first use; SETUP.md updated to apply all migrations.
 - For production hosting: user still supplies hosted Supabase keys per SETUP.md §1 and (optionally) Google provider per §2; switching is a .env swap.
 - Stack running: postgres :5432, gotrue :5999, postgrest :5998, gateway :54321; app :3000 + realtime :3004/:3005. Demo login: alex@example.com / sam@example.com (Password123!).
+
+---
+
+## Task ID: 5 — E2EE privacy upgrade, vuln scan, perf pass (branch: security/e2ee-privacy-upgrade)
+
+Stage Summary:
+
+- End-to-end encryption shipped for ALL entries (private + shared): AES-256-GCM per-entry content keys, PBKDF2-SHA256 600k password-wrapped DEK, ECDH P-256 sealed boxes for group CEK distribution. The server is a dumb RLS-guarded relay — verified by direct service-role reads that the DB holds only ciphertext.
+- Per-entry dual wraps (author scope under DEK, group scope under CEK) mean rotation after member removal re-wraps 32-byte keys, never bodies — offline authors lose nothing.
+- Reflect reads via a client-decrypted context bundle (server verifies entry ids against owned notebooks but never reads bodies); search moved client-side over a cached decrypted corpus.
+- Lazy client-driven migration seals existing entries in batches of 25; verified live: all 8 seeded alex entries flipped with author (+group) wraps, sam unwrapped the CEK and decrypted shared entries end to end.
+- Vuln scan: 0 dependency CVEs; fixed webhook SSRF (https-only, private-range/dotless/credentialed URL rejection at schema + send time) and a realtime in-memory map leak; escape-grammar fuzzing of the PostgREST or() filter held.
+- Perf: SSE version ticks use planned (EXPLAIN) counts instead of exact row scans; client group poll backs off 15s→60s while live. getClaims-vs-getUser measured both ways — remote getUser is FASTER on this GoTrue build (10.3ms vs 14.3ms), so it stays.
+- Docs: README/SETUP now lead with the zero-knowledge story (sealed-before-it-leaves, sealed circles, E2EE-native Reflect, no password recovery by design).
+
+Verification (all live, gates green: typecheck ✓ lint ✓ prettier ✓ 21 tests ✓ prod build ✓):
+
+- signup → provision → sealed create → DB ciphertext-only → client decrypt round trip.
+- unlock with wrong password fails closed (GCM auth tag); overwrite of key material requires the current wrapped DEK.
+- Owner distribute → member CEK unwrap → member decrypt of shared entries; rotation re-wraps group wraps without touching bodies.
+- Reflect answered from the client context bundle (pineapple test), not the sealed DB rows.
