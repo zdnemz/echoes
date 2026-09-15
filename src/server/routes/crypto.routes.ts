@@ -10,7 +10,7 @@ import {
 } from '../schemas'
 import { Errors, fromPostgrestError } from '../errors'
 import { requireAuth } from '../auth'
-import { bearerAuth, errorResponses, jsonBody, requireGroupOwner, type App } from './helpers'
+import { bearerAuth, errorResponses, jsonBody, requireGroupOwner, requireGroupVisible, type App } from './helpers'
 
 /**
  * E2EE key routes — the server is a dumb, RLS-guarded relay for opaque blobs.
@@ -95,12 +95,13 @@ export function registerCryptoRoutes(app: App) {
     if (readErr) throw fromPostgrestError(readErr)
     if (!existing) throw Errors.notFound('Profile not found')
 
-    // First publish is free; later ones must carry the current wrapped DEK so
-    // only a client that can decrypt can rotate the material.
+    // First publish is free; later ones must prove possession of the
+    // current wrapped DEK (the caller can only know it by decrypting — a
+    // hijacked session cannot rotate the user onto attacker keys).
     if (existing.enc_wrapped_dek && existing.enc_wrapped_dek !== body.wrapped_dek) {
-      throw Errors.badRequest(
-        'Key material already exists — use the re-wrap flow (old wrapped_dek required) to change it',
-      )
+      if (!body.previous_wrapped_dek || body.previous_wrapped_dek !== existing.enc_wrapped_dek) {
+        throw Errors.badRequest('Key material already exists — the re-wrap must carry the current wrapped_dek')
+      }
     }
 
     const { data, error } = await c.var.userClient
@@ -206,6 +207,51 @@ export function registerCryptoRoutes(app: App) {
     return c.json({ group_id: id, generation, sealed_box: '', created_at: new Date().toISOString() })
   })
 
+  // ----------------------------------------------------------------- co-member public keys
+  const memberKeys = createRoute({
+    method: 'get',
+    path: '/groups/{id}/member-keys',
+    tags: ['Encryption'],
+    summary: 'Public encryption keys of a group\u2019s members',
+    description:
+      'ECDH public keys (SPKI base64) for every member of a group you belong to. Public keys are not secret — the owner needs them to seal group CEK boxes per member. RLS: group members only.',
+    security: [bearerAuth],
+    middleware: [requireAuth],
+    request: { params: GroupIdParam },
+    responses: {
+      ...errorResponses(401, 404, 503),
+      200: {
+        description: 'user_id → public key map',
+        content: {
+          'application/json': { schema: z.object({ keys: z.record(z.string(), z.string().nullable()) }) },
+        },
+      },
+    },
+  })
+  app.openapi(memberKeys, async (c) => {
+    const { id } = c.req.valid('param')
+
+    // Visible only through membership (requireGroupVisible checks the
+    // groups RLS; co-membership is implied by group visibility).
+    await requireGroupVisible(c.var.userClient, id, 'id')
+
+    const { data, error } = await c.var.userClient
+      .from('group_members')
+      .select('user_id, profiles!inner(enc_public_key)')
+      .eq('group_id', id)
+    if (error) throw fromPostgrestError(error)
+
+    const keys: Record<string, string | null> = {}
+    for (const row of (data ?? []) as Array<{
+      user_id: string
+      profiles: { enc_public_key: string | null } | Array<{ enc_public_key: string | null }>
+    }>) {
+      const p = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+      keys[row.user_id] = p?.enc_public_key ?? null
+    }
+    return c.json({ keys })
+  })
+
   // ----------------------------------------------------------------- entry key wraps
   // Creation-time wraps ride along with POST /notebooks/:id/entries and
   // PATCH /entries/:id (the client batches them) — see entries.routes.ts.
@@ -289,22 +335,42 @@ export function registerCryptoRoutes(app: App) {
     const { entries } = c.req.valid('json')
     const me = c.var.user.id
 
-    const { data, error } = await c.var.userClient
-      .from('entries')
-      .upsert(
-        entries.map((e) => ({
-          id: e.id,
-          author_id: me,
-          title: e.title_cipher,
-          body: e.body_cipher,
-          encrypted: true,
-        })),
-        { onConflict: 'id' },
-      )
-      .eq('author_id', me)
-      .neq('encrypted', true)
-      .select('id')
-    if (error) throw fromPostgrestError(error)
+    // Per-row: PostgREST bulk updates need one call per row for distinct
+    // cipher values. A zero-row update (already flipped concurrently) reads
+    // as 404 via maybeSingle — treat as skipped, not failed.
+    const flipped: string[] = []
+    for (const e of entries) {
+      const { data: row, error: rowErr } = await c.var.userClient
+        .from('entries')
+        .update({ title: e.title_cipher, body: e.body_cipher, encrypted: true })
+        .eq('id', e.id)
+        .eq('author_id', me)
+        .eq('encrypted', false)
+        .select('id')
+        .maybeSingle()
+      if (rowErr) {
+        const code = (rowErr as { code?: string }).code
+        if (code !== 'PGRST116') throw fromPostgrestError(rowErr)
+        continue
+      }
+      if (row) flipped.push((row as { id: string }).id)
+    }
+
+    // Author-scope key wraps ride along so flipped rows stay decryptable;
+    // shared entries in group-linked notebooks also get the group wrap.
+    if (flipped.length > 0) {
+      const { error: wrapErr } = await c.var.userClient
+        .from('entry_key_wraps')
+        .insert(
+          entries
+            .filter((e) => flipped.includes(e.id))
+            .flatMap((e) => [
+              { entry_id: e.id, scope: 'author' as const, wrapped_key: e.author_wrap },
+              ...(e.group_wrap ? [{ entry_id: e.id, scope: 'group' as const, wrapped_key: e.group_wrap }] : []),
+            ]),
+        )
+      if (wrapErr) throw fromPostgrestError(wrapErr)
+    }
 
     const { count, error: countErr } = await c.var.userClient
       .from('entries')
@@ -313,6 +379,6 @@ export function registerCryptoRoutes(app: App) {
       .eq('encrypted', false)
     if (countErr) throw fromPostgrestError(countErr)
 
-    return c.json({ migrated: data?.length ?? 0, remaining: count ?? 0 })
+    return c.json({ migrated: flipped.length, remaining: count ?? 0 })
   })
 }

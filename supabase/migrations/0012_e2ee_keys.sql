@@ -82,11 +82,15 @@ create policy "group_key_wraps: owner write"
 alter table public.entries
   add column if not exists encrypted boolean not null default false;
 
--- Ciphertext can exceed the old 100k plaintext cap by the envelope overhead.
+-- Ciphertext can exceed the old plaintext caps by the envelope overhead.
 alter table public.entries
   drop constraint if exists entries_body_len;
 alter table public.entries
+  drop constraint if exists entries_title_check;
+alter table public.entries
   add constraint entries_body_len check (length(body) <= 140000);
+alter table public.entries
+  add constraint entries_title_len check (length(title) <= 2000);
 
 -- Partial index: encrypted-row lookups during the client migration stay cheap.
 create index if not exists idx_entries_unencrypted

@@ -216,6 +216,37 @@ export function lock(): void {
   emit()
 }
 
+// ---------------------------------------------------------------- re-wrap
+
+/**
+ * Password change: re-derive the KEK from the new password, re-wrap the
+ * CURRENT DEK under it, and republish the material. The DEK itself never
+ * changes, so every entry stays decryptable. The caller changes the auth
+ * password server-side only after this succeeds.
+ */
+export async function rewrapPassword(newPassword: string): Promise<void> {
+  if (!vault) throw new Error('vault locked')
+  const keys = await fetchKeys()
+  if (!keys.salt) throw new Error('no key material to re-wrap')
+
+  const salt = randomSalt()
+  const newKek = await deriveKekFromPassword(newPassword, salt)
+  const newWrappedDek = await wrapKey(vault.dek, newKek)
+
+  await api('/api/me/keys', {
+    method: 'PUT',
+    ...json({
+      salt,
+      iterations: PBKDF2_ITERATIONS,
+      wrapped_dek: newWrappedDek,
+      public_key: vault.identityPublic,
+      wrapped_private_key: keys.wrapped_private_key as string,
+      previous_wrapped_dek: keys.wrapped_dek as string,
+    }),
+  })
+  stashPassword(newPassword)
+}
+
 // ---------------------------------------------------------------- group CEKs
 
 const groupCeks = new Map<string, { key: CryptoKey; generation: number }>()

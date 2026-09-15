@@ -132,6 +132,8 @@ export const PublishKeysSchema = z
       .min(1)
       .max(8192)
       .openapi({ description: 'Identity private key sealed under the DEK' }),
+    /** Required when replacing existing material: proves the caller holds the current DEK. */
+    previous_wrapped_dek: z.string().min(1).max(4096).optional(),
   })
   .strict()
 
@@ -193,6 +195,17 @@ export const EncryptMigrationSchema = z
               .string()
               .max(140_000)
               .openapi({ description: 'Sealed body (or legacy body when unencrypted)' }),
+            author_wrap: z
+              .string()
+              .min(1)
+              .max(8192)
+              .openapi({ description: 'Content key sealed under the author\u2019s DEK' }),
+            group_wrap: z
+              .string()
+              .min(1)
+              .max(8192)
+              .optional()
+              .openapi({ description: 'Content key sealed under the group CEK (shared entries only)' }),
           })
           .strict(),
       )

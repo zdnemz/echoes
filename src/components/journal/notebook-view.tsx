@@ -67,6 +67,7 @@ import { isUnconfigured } from '@/lib/api/client'
 import type { Mood } from '@/components/mood/glyphs'
 import type { Notebook } from '@/lib/api/types'
 import { listMembers } from '@/lib/api/endpoints'
+import { useDecryptedPreviews } from '@/lib/crypto/use-previews'
 import type { View } from './workspace'
 
 // --------------------------------------------------------------- dialogs
@@ -129,6 +130,7 @@ function RenameDialog({ notebook, onClose }: { notebook: Notebook; onClose: () =
 function ShareDialog({ notebook, onClose }: { notebook: Notebook; onClose: () => void }) {
   const groups = useGroups()
   const update = useUpdateNotebook()
+  const { user } = useSession()
   const [selected, setSelected] = useState<string | null>(notebook.group_id)
 
   const mine = groups.data ?? []
@@ -136,6 +138,16 @@ function ShareDialog({ notebook, onClose }: { notebook: Notebook; onClose: () =>
   const apply = async (groupId: string | null) => {
     try {
       await update.mutateAsync({ id: notebook.id, group_id: groupId })
+      // E2EE: linking a group needs its CEK distributed (sealed box per
+      // member); best-effort — without keys, shared entries stay author-only.
+      if (groupId) {
+        try {
+          const { distributeOrRotate } = await import('@/lib/crypto/group-keys')
+          await distributeOrRotate(groupId, user?.id ?? '')
+        } catch {
+          toast('Members without published keys see entries as sealed until keys are distributed.')
+        }
+      }
       setSelected(groupId)
       if (groupId === null) toast.success('Private again — for everyone, immediately.')
       else toast.success('Linked. Members see new entries the moment you save them.')
@@ -286,6 +298,9 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
 
   const entries = useEntries(notebookId, mood)
   const list = useMemo(() => entries.data?.pages.flatMap((p) => p.data) ?? [], [entries.data])
+
+  // E2EE: open sealed rows for display (author wrap via the vault DEK).
+  const previews = useDecryptedPreviews(list, user?.id, () => notebook?.group_id ?? null)
 
   const isOwner = notebook ? notebook.owner_id === user?.id : false
   const groupName = notebook?.group_id ? (groups.data?.find((g) => g.id === notebook.group_id)?.name ?? null) : null
@@ -494,6 +509,7 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
                 authorName={!isOwner ? authorName(entry.author_id) : null}
                 showPrivate={Boolean(notebook.group_id)}
                 onOpen={(e) => onNavigate({ kind: 'entry', entryId: e.id, notebookId: notebook.id })}
+                preview={previews[entry.id]}
               />
             ))}
           </ul>

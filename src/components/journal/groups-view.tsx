@@ -59,6 +59,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MOODS, MOOD_META, MoodGlyph, type Mood } from '@/components/mood/glyphs'
 import { EntryRow, EntryRowSkeleton } from './entry-row'
+import { useDecryptedPreviews } from '@/lib/crypto/use-previews'
 import { QueryError } from '@/components/query-error'
 import { useSession } from '@/lib/auth/session'
 import {
@@ -539,6 +540,9 @@ function GroupJournalTab({
   const entriesQuery = useGroupEntries(group.id, filters)
   const entries = useMemo(() => entriesQuery.data?.pages.flatMap((p) => p.data) ?? [], [entriesQuery.data])
   const total = entriesQuery.data?.pages[0]?.pagination.total ?? 0
+
+  // E2EE: open sealed rows for display (group wrap via the group CEK).
+  const previews = useDecryptedPreviews(entries, user?.id, () => group.id)
   // The layout preference is local-only; mirror it so changing it in Settings
   // (same tab session) is picked up on the next mount of this tab.
   const [layout] = useState<GroupLayout>(() => getGroupLayout())
@@ -985,6 +989,7 @@ function GroupJournalTab({
                   key={entry.id}
                   entry={entry}
                   authorName={authorName(entry.author_id)}
+                  preview={previews[entry.id]}
                   onOpen={(e) =>
                     onNavigate({
                       kind: 'entry',
@@ -1734,10 +1739,23 @@ export function GroupsView({
                                   removeMember.mutate(
                                     { groupId: group.id, userId: m.user_id },
                                     {
-                                      onSuccess: () =>
+                                      onSuccess: () => {
                                         toast.success(
                                           `${m.display_name ?? 'Member'} removed — their access is gone immediately.`,
-                                        ),
+                                        )
+                                        // E2EE: rotate the group CEK so the removed member's
+                                        // key dies. Best-effort — a missed rotation surfaces as
+                                        // a "rotate keys" hint, entries stay sealed regardless.
+                                        void import('@/lib/crypto/group-keys')
+                                          .then(({ distributeOrRotate }) =>
+                                            distributeOrRotate(group.id, user?.id ?? ''),
+                                          )
+                                          .catch(() =>
+                                            toast(
+                                              'Rotate the group key from the sharing panel to lock them out of new entries.',
+                                            ),
+                                          )
+                                      },
                                       onError: (err) =>
                                         toast.error(err instanceof Error ? err.message : "Couldn't remove."),
                                     },

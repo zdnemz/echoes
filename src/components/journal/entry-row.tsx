@@ -2,11 +2,13 @@
 
 /**
  * One entry, as an editorial row — hairline-separated, not boxed. Reused
- * by the notebook list and search results.
+ * by the notebook list, group journal and search results. Encrypted rows
+ * render from the decrypted preview (passed by the list parent) with a
+ * sealed fallback when the key is unavailable.
  */
 
 import { motion } from 'framer-motion'
-import { EyeSlash } from '@phosphor-icons/react/dist/ssr'
+import { EyeSlash, LockKey } from '@phosphor-icons/react/dist/ssr'
 import { MoodGlyph } from '@/components/mood/glyphs'
 import { excerpt, formatStamp } from '@/lib/format'
 import type { Entry } from '@/lib/api/types'
@@ -18,6 +20,7 @@ export function EntryRow({
   authorName,
   showPrivate = false,
   notebookTitle,
+  preview,
 }: {
   entry: Entry
   onOpen: (entry: Entry) => void
@@ -28,7 +31,14 @@ export function EntryRow({
   showPrivate?: boolean
   /** Set in search results: which notebook this entry lives in. */
   notebookTitle?: string | null
+  /** Decrypted title/preview for encrypted rows (null = locked). */
+  preview?: { title: string; bodyPreview: string } | null
 }) {
+  const sealed = entry.encrypted
+  const title = sealed ? (preview?.title ?? '') : entry.title
+  const body = sealed ? (preview?.bodyPreview ?? '') : entry.body
+  const locked = sealed && !preview
+
   return (
     <motion.li
       layout="position"
@@ -58,6 +68,14 @@ export function EntryRow({
                 </span>
               </span>
             )}
+            {sealed && (
+              <span
+                title="Encrypted on this device — only you and your circle hold the key"
+                className="inline-flex items-center gap-1 font-mono text-[9.5px] text-ink-faint"
+              >
+                <LockKey weight="light" className="h-3.5 w-3.5" /> sealed
+              </span>
+            )}
             {showPrivate && !entry.is_shared && (
               <span
                 title="Kept private from the group"
@@ -70,13 +88,19 @@ export function EntryRow({
         </div>
 
         <h3 className="mt-1.5 font-display text-[19px] leading-snug text-ink transition-colors group-hover:text-clay-ink">
-          {entry.title}
+          {locked ? 'A sealed entry' : title || 'Untitled entry'}
         </h3>
 
-        {entry.body.trim().length > 0 && (
-          <p className="mt-1 line-clamp-2 max-w-[70ch] font-serif text-[14px] leading-relaxed text-ink-soft">
-            {excerpt(entry.body, 150)}
+        {locked ? (
+          <p className="mt-1 flex items-center gap-1.5 font-serif text-[13.5px] italic leading-relaxed text-ink-faint">
+            <LockKey weight="light" className="h-3.5 w-3.5" /> the key for this entry is not in this tab
           </p>
+        ) : (
+          body.trim().length > 0 && (
+            <p className="mt-1 line-clamp-2 max-w-[70ch] font-serif text-[14px] leading-relaxed text-ink-soft">
+              {excerpt(body, 150)}
+            </p>
+          )
         )}
 
         {(entry.tags.length > 0 || authorName) && (

@@ -26,6 +26,8 @@ import { getDefaultMood, getGroupLayout, setDefaultMood, setGroupLayout, type Gr
 const MOOD_OPTIONS: Array<Mood | null> = [null, ...MOODS]
 import { useHealth } from '@/lib/api/hooks'
 import { updatePassword, updateProfile } from '@/lib/api/endpoints'
+import { useVaultStatus } from '@/lib/crypto/use-vault'
+import { useEncryptMigration } from '@/lib/crypto/migrate'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -42,6 +44,43 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <p className="text-[13px] font-medium text-ink">{label}</p>
       <div className="flex min-w-0 items-center gap-2">{children}</div>
     </div>
+  )
+}
+
+/** E2EE state: vault status + lazy-migration progress. */
+function EncryptionStatus() {
+  const { status } = useSession()
+  const vaultOpen = useVaultStatus()
+  const migration = useEncryptMigration()
+  return (
+    <>
+      <Row label="End-to-end encryption">
+        {status !== 'authenticated' ? (
+          <span className="font-mono text-[12px] text-ink-faint">—</span>
+        ) : vaultOpen ? (
+          <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-sage">
+            <Check weight="bold" className="h-3.5 w-3.5" /> sealed on this device
+          </span>
+        ) : (
+          <span className="font-mono text-[12px] text-clay-ink">locked — unlock to read &amp; write</span>
+        )}
+      </Row>
+      {vaultOpen && (migration.running || migration.remaining > 0 || migration.migrated > 0) && (
+        <Row label="Sealing older entries">
+          <span className="font-mono text-[12px] text-ink-soft">
+            {migration.running
+              ? `sealing… ${migration.migrated} done`
+              : migration.remaining > 0
+                ? `${migration.remaining} remaining`
+                : `${migration.migrated} sealed`}
+          </span>
+        </Row>
+      )}
+      <p className="mt-1 text-[11.5px] leading-relaxed text-ink-faint">
+        Titles and bodies are encrypted in your browser before they reach the server — a database dump shows ciphertext.
+        Moods, tags and timestamps stay searchable. Lose the password and the entries are gone; there is no reset.
+      </p>
+    </>
   )
 }
 
@@ -108,10 +147,15 @@ export function SettingsView() {
     if (pw1 !== pw2) return toast.error("The passwords don't match.")
     setSavingPw(true)
     try {
+      // E2EE first: re-wrap the DEK under the NEW password before the
+      // server accepts it. If this fails, the password stays unchanged and
+      // the vault keeps opening with the old one.
+      const { rewrapPassword } = await import('@/lib/crypto/vault')
+      await rewrapPassword(pw1)
       await updatePassword(pw1)
       setPw1('')
       setPw2('')
-      toast.success('Password updated.')
+      toast.success('Password updated — your encryption keys were re-sealed with it.')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't update the password.")
     } finally {
@@ -157,6 +201,11 @@ export function SettingsView() {
               </Button>
             </div>
           </form>
+        </Section>
+
+        {/* ------------------------------------------------ encryption */}
+        <Section title="Encryption">
+          <EncryptionStatus />
         </Section>
 
         {/* ------------------------------------------------ account */}
