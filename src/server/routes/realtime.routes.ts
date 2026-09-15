@@ -47,9 +47,17 @@ function groupMarks<T>(store: Map<string, Map<string, T>>, groupId: string): Map
   return m
 }
 
+/** Drop empty inner maps so deleted groups don't leak them forever. */
+function pruneGroupMarks<T>(store: Map<string, Map<string, T>>) {
+  for (const [gid, m] of store) if (m.size === 0) store.delete(gid)
+}
+
 function presenceSnapshot(groupId: string, now: number) {
   const t = groupMarks(typing, groupId)
   for (const [uid, mark] of t) if (mark.exp <= now) t.delete(uid)
+  if (t.size === 0) typing.delete(groupId) // free empty inner maps
+  const s = groupMarks(seen, groupId)
+  if (s.size === 0) seen.delete(groupId)
   return {
     typing: [...t.entries()].map(([user_id, mark]) => ({ user_id, name: mark.name })),
     seen: [...groupMarks(seen, groupId).entries()].map(([user_id, mark]) => ({
@@ -207,6 +215,8 @@ export function registerRealtimeRoutes(app: App) {
     if (body.data.typing)
       marks.set(c.var.user.id, { name: body.data.name || 'Someone', exp: Date.now() + TYPING_TTL_MS })
     else marks.delete(c.var.user.id)
+    pruneGroupMarks(typing)
+    pruneGroupMarks(seen)
     return c.json({ ok: true })
   })
 

@@ -395,10 +395,14 @@ export const UpdateGroupSchema = z
     webhook_url: z
       .union([z.string().url(), z.literal(''), z.null()])
       .optional()
-      .transform((v) => (v === '' ? null : v))
+      .transform((v) => (v === '' || v === undefined ? null : v))
+      .refine((v: string | null) => v === null || /^https:\/\//i.test(v), {
+        message: 'Webhook URLs must be https',
+      })
       .openapi({
         example: 'https://discord.com/api/webhooks/123/xyz',
-        description: 'Webhook URL for notifications, or null/empty to disable',
+        description:
+          'HTTPS webhook URL for notifications, or null/empty to disable. Private/internal hosts are rejected at send time.',
       }),
   })
   .strict()

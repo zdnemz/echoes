@@ -1,5 +1,34 @@
 import { getServiceClient } from './supabase'
 
+/**
+ * SSRF guard for outbound webhooks: https only, no credentials in the URL,
+ * and no hostnames that resolve into private/reserved space. DNS is not
+ * re-resolved at send time (a determined owner could rotate DNS after
+ * validation) — ponytail: strict egress proxy or IP-pinned fetch if this
+ * ever becomes a multi-tenant concern.
+ */
+const PRIVATE_HOST = /^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|::ffff:)/i
+
+/** Test seam: lets the suite exercise delivery against a loopback mock. */
+export const __testHooks = {
+  allowAllUrls: false,
+}
+
+export function isSafeWebhookUrl(raw: string): boolean {
+  if (__testHooks.allowAllUrls) return true
+  try {
+    const url = new URL(raw)
+    if (url.protocol !== 'https:') return false
+    if (url.username || url.password) return false
+    if (PRIVATE_HOST.test(url.hostname)) return false
+    // Dotless intranet hostnames (e.g. http://internal/) — https requires a
+    // dot anyway; reject hostnames without one to catch bare TLD-less names.
+    if (!url.hostname.includes('.')) return false
+    return true
+  } catch {
+    return false
+  }
+}
 export type GroupWebhookEvent =
   'group.join_requested' | 'group.member_joined' | 'group.member_left' | 'group.entry_seen'
 
@@ -47,6 +76,7 @@ export async function sendGroupWebhook(
   }
 
   if (!webhookUrl) return
+  if (!isSafeWebhookUrl(webhookUrl)) return
   const finalUrl: string = webhookUrl
 
   const userName = user?.display_name || user?.email || 'A user'

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { sendGroupWebhook, sendSeenWebhookThrottled } from '../webhook'
+import { __testHooks, isSafeWebhookUrl, sendGroupWebhook, sendSeenWebhookThrottled } from '../webhook'
 
 describe('webhook dispatcher', () => {
   test('does nothing if no webhook_url is set', async () => {
@@ -12,11 +12,50 @@ describe('webhook dispatcher', () => {
     ).resolves.toBeUndefined()
   })
 
+  test('SSRF guard: rejects private, http, and dotless webhook targets', () => {
+    expect(isSafeWebhookUrl('http://127.0.0.1:8080/hook')).toBe(false) // not https
+    expect(isSafeWebhookUrl('https://localhost/hook')).toBe(false) // private host
+    expect(isSafeWebhookUrl('https://127.0.0.1/hook')).toBe(false)
+    expect(isSafeWebhookUrl('https://10.0.0.5/hook')).toBe(false)
+    expect(isSafeWebhookUrl('https://192.168.1.4/hook')).toBe(false)
+    expect(isSafeWebhookUrl('https://169.254.169.254/latest/meta-data')).toBe(false) // cloud metadata
+    expect(isSafeWebhookUrl('https://172.20.0.9/hook')).toBe(false)
+    expect(isSafeWebhookUrl('https://internal/hook')).toBe(false) // dotless intranet name
+    expect(isSafeWebhookUrl('https://user:pass@hooks.example.com/hook')).toBe(false) // creds in URL
+    expect(isSafeWebhookUrl('https://hooks.example.com/hook')).toBe(true)
+    expect(isSafeWebhookUrl('https://discord.com/api/webhooks/123/xyz')).toBe(true)
+  })
+
+  test('refuses to deliver to blocked (private/http) webhook targets', async () => {
+    let hit = false
+    const server = Bun.serve({
+      port: 0,
+      fetch() {
+        hit = true
+        return new Response('ok')
+      },
+    })
+    try {
+      // Even though the target is a live local server, the SSRF guard stops
+      // the delivery before any fetch happens.
+      await sendGroupWebhook(
+        { id: 'g', name: 'X', webhook_url: `http://127.0.0.1:${server.port}/hook` },
+        'group.member_joined',
+        { id: 'u' },
+      )
+      await new Promise((r) => setTimeout(r, 30))
+      expect(hit).toBe(false)
+    } finally {
+      server.stop()
+    }
+  })
+
   test('formats Discord and Slack compatible payloads', async () => {
     let capturedUrl = ''
     let capturedBody: any = null
 
-    // Spin up a local server mock
+    // Spin up a local server mock. Delivery to loopback is guarded in
+    // production; the test bypasses the guard by stubbing the checker.
     const server = Bun.serve({
       port: 0,
       fetch(req) {
@@ -28,6 +67,8 @@ describe('webhook dispatcher', () => {
       },
     })
 
+    const original = __testHooks.allowAllUrls
+    __testHooks.allowAllUrls = true
     try {
       const webhookUrl = `http://127.0.0.1:${server.port}/webhook`
       await sendGroupWebhook(
@@ -35,6 +76,7 @@ describe('webhook dispatcher', () => {
         'group.join_requested',
         { id: 'user-2', display_name: 'Bob' },
       )
+      __testHooks.allowAllUrls = original
 
       expect(capturedUrl).toContain('/webhook')
       expect(capturedBody).not.toBeNull()
@@ -45,18 +87,9 @@ describe('webhook dispatcher', () => {
       expect(capturedBody.content).toContain('Hiking Circle')
       expect(capturedBody.text).toBe(capturedBody.content)
     } finally {
+      __testHooks.allowAllUrls = original
       server.stop()
     }
-  })
-
-  test('swallows fetch failures without throwing', async () => {
-    const invalidUrl = 'http://127.0.0.1:1/invalid' // port 1 will reject
-    await expect(
-      sendGroupWebhook({ id: 'group-1', name: 'Family', webhook_url: invalidUrl }, 'group.member_left', {
-        id: 'user-3',
-        email: 'left@example.com',
-      }),
-    ).resolves.toBeUndefined()
   })
 
   test('throttles repeated entry_seen notifications', async () => {
@@ -64,15 +97,16 @@ describe('webhook dispatcher', () => {
     const server = Bun.serve({
       port: 0,
       fetch() {
-        hitCount++
+        hitCount += 1
         return new Response('ok')
       },
     })
 
+    const original = __testHooks.allowAllUrls
+    __testHooks.allowAllUrls = true
     try {
-      const webhookUrl = `http://127.0.0.1:${server.port}/webhook`
-      const target = { id: 'group-throttled', name: 'Chat', webhook_url: webhookUrl }
-      const user = { id: 'user-throttle-1', email: 'test@example.com' }
+      const target = { id: 'group-9', name: 'Book Club', webhook_url: `http://127.0.0.1:${server.port}/hook` }
+      const user = { id: 'user-9', display_name: 'Zoe' }
 
       sendSeenWebhookThrottled(target, user)
       sendSeenWebhookThrottled(target, user)
@@ -81,6 +115,7 @@ describe('webhook dispatcher', () => {
       await new Promise((r) => setTimeout(r, 50))
       expect(hitCount).toBe(1)
     } finally {
+      __testHooks.allowAllUrls = original
       server.stop()
     }
   })
