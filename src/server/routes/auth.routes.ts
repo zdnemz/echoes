@@ -79,7 +79,8 @@ export function registerAuthRoutes(app: App) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error || !data.session || !data.user) throw Errors.unauthorized(error?.message ?? 'Invalid credentials')
 
-    return c.json(sessionFrom(data.session, data.user))
+    const displayName = await fetchDisplayName(data.session.access_token, data.user.id)
+    return c.json(sessionFrom(data.session, data.user, displayName))
   })
 
   // ----------------------------------------------------------------- magic link
@@ -307,7 +308,8 @@ export function registerAuthRoutes(app: App) {
     const session = await tokenGrant('pkce', { auth_code, code_verifier })
 
     // Best-effort: surface the provider's name in shared notebooks.
-    if (session.user.display_name === null) {
+    // Empty (not just null) — tokenGrant reports a nameless profile as ''.
+    if (!(session.user.display_name ?? '').trim()) {
       try {
         const meta = session.rawUser?.raw_user_meta_data as Record<string, unknown> | null | undefined
         const name = [meta?.full_name, meta?.name, meta?.display_name].find(
@@ -401,6 +403,27 @@ export function registerAuthRoutes(app: App) {
 
 /** Shape the Supabase auth response into our Session schema (or null). */
 
+/**
+ * Read the user's display name from public.profiles — the single source of
+ * truth PATCH /auth/profile writes to.
+ *
+ * Supabase auth user metadata is NOT that source: it is only seeded once at
+ * signup and never updated when the name is changed, so anything reading it
+ * concludes "this account has no name" forever and bounces the user back to
+ * the /welcome gate on every single login.
+ *
+ * Best-effort: a missing/unreadable profile falls back to '' (nameless),
+ * which is exactly the pre-existing behaviour, so no caller has to change.
+ */
+async function fetchDisplayName(jwt: string, userId: string): Promise<string> {
+  try {
+    const { data } = await createUserClient(jwt).from('profiles').select('display_name').eq('id', userId).maybeSingle()
+    return (data?.display_name as string | null | undefined) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 interface TokenGrantUser {
   id: string
   email?: string | null
@@ -465,16 +488,22 @@ async function tokenGrant(
     user: {
       id: payload.user.id,
       email: payload.user.email ?? null,
-      display_name:
-        (typeof payload.user.raw_user_meta_data?.display_name === 'string'
-          ? payload.user.raw_user_meta_data.display_name
-          : null) ?? null,
+      // From public.profiles, not the auth-metadata snapshot: the latter is
+      // frozen at signup, so OAuth sign-ins and every token refresh would
+      // otherwise report a stale/empty name and re-trigger the /welcome gate.
+      display_name: await fetchDisplayName(payload.access_token, payload.user.id),
       created_at: payload.user.created_at ?? new Date().toISOString(),
     },
     rawUser: payload.user,
   }
 }
 
+/**
+ * `displayName` is the authoritative name read from public.profiles. Callers
+ * that already fetched it pass it in; those that cannot (signup, where the
+ * row is created by a trigger a moment later) leave it undefined and the
+ * auth-metadata snapshot is used as a seed instead.
+ */
 function sessionFrom(
   session: {
     access_token: string
@@ -483,6 +512,7 @@ function sessionFrom(
     token_type?: string | null
   },
   user: { id: string; email?: string | null; created_at?: string; raw_user_meta_data?: Record<string, unknown> | null },
+  displayName?: string,
 ) {
   return {
     access_token: session.access_token,
@@ -493,6 +523,7 @@ function sessionFrom(
       id: user.id,
       email: user.email ?? null,
       display_name:
+        displayName ??
         (typeof user.raw_user_meta_data?.display_name === 'string' ? user.raw_user_meta_data.display_name : null) ??
         null,
       created_at: user.created_at ?? new Date().toISOString(),
