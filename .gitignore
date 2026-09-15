@@ -40,7 +40,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-local-*
+/local-*
+# src/lib/crypto/local-search.ts is real source, not a scratch file — an
+# unanchored local-* rule silently swallowed it, so fresh clones failed to
+# build on the missing module. Scoped to the repo root to keep it a
+# scratch-file rule.
 .claude
 .z-ai-config
 *.log
