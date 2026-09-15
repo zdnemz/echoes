@@ -7,6 +7,8 @@ Echoes is engineered around two core layers:
 
 This guide walks through setting up your environment, choosing between a local zero-config stack and hosted cloud Supabase, wiring Google OAuth, and preparing for production deployment.
 
+> **🔐 End-to-End Encryption**: Entries are sealed in the browser (AES-256-GCM, keys wrapped via PBKDF2-SHA256 600k) before they reach the database. Migration `0012_e2ee_keys.sql` and `0013_entry_key_wraps.sql` add the key-material columns — apply migrations as usual and the app handles the rest. Existing plaintext entries are sealed lazily after your first unlock. There is no password recovery for sealed entries by design: the server holds only ciphertext it cannot open.
+
 ---
 
 ## ⚡ Quick Navigation

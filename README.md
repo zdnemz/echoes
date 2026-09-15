@@ -4,7 +4,7 @@
 
 ### A quiet place for loud thoughts.
 
-A contemplative personal journaling sanctuary built with a tactile **Paper & Ink** editorial aesthetic. Write Markdown entries with mood tracking and tag taxonomies, keep your notebooks strictly private by default, selectively open live sharing circles with the people who matter most, and converse with a permission-grounded AI companion.
+A contemplative personal journaling sanctuary built with a tactile **Paper & Ink** editorial aesthetic. Write Markdown entries with mood tracking and tag taxonomies — **sealed with end-to-end encryption before they ever leave your device** — keep your notebooks strictly private by default, selectively open live sharing circles with the people who matter most, and converse with a permission-grounded AI companion that reads only what you decrypt for it.
 
 [![Next.js 16](https://img.shields.io/badge/Next.js-16.3-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React 19](https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
@@ -28,6 +28,7 @@ Most modern notes apps try to be your second brain: endless kanban boards, compl
 **Echoes is the digital equivalent of a linen-bound notebook** — something that holds the day, asks for nothing in return, and keeps its mouth shut.
 
 - **No Streak Guilt**: No artificial red dots or guilt-tripping push notifications engineered to manipulate your dopamine.
+- **Sealed Before It Leaves**: Every entry's title and body is encrypted in your browser with AES-256-GCM under a key derived from your password — the database holds only ciphertext it mathematically cannot open. Lose the password and the words are gone; there is no reset, no backdoor, no escrow.
 - **Privacy by Engine, Not by Policy**: Every notebook starts private and stays that way. Your privacy is enforced by PostgreSQL Row-Level Security directly at the database engine level — not by a terms of service promise.
 - **Selective Connection**: When you want to share, you don't broadcast to a public feed. You link one specific notebook to a small circle of trusted friends or family.
 
@@ -40,7 +41,8 @@ Most modern notes apps try to be your second brain: endless kanban boards, compl
 - **Tactile Palette**: Warm paper canvas, deep ink contrasts, and subtle earthen clay tones designed for long, comfortable writing sessions.
 - **Newsreader Serif Typography**: Generous line heights, thoughtful measures, and distraction-free split-pane Markdown composition.
 - **Hand-Crafted Mood Glyphs**: Rate your day through evocative, original weather glyphs: _Sun_ (Great), _Sunrise_ (Good), _Level_ (Okay), _Drizzle_ (Low), and _Squall_ (Rough).
-- **Taxonomies & Deep Search**: Organise thoughts with tag systems and full-text trigram indexing (`pg_trgm`) that searches across years of entries in milliseconds.
+- **Taxonomies & Deep Search**: Organise thoughts with tag systems and search that runs **on the decrypted corpus in your browser** — the server never sees the words it is searching, and results still land in milliseconds.
+- **Zero-Knowledge Key Vault**: Keys are sealed with PBKDF2-SHA256 (600,000 rounds) and unwrapped only in memory for the session; the password never travels, and the sealed key never leaves the device.
 
 ---
 
@@ -54,6 +56,7 @@ A sharing circle is a private room for a handful of people you trust with a note
 - **Live Typing & Ephemeral Presence**: Gentle, non-intrusive typing indicators keep conversations natural and alive.
 - **Instant Links & Approval Queues**: Invite trusted members with expiring capability links, toggling between instant-join or owner-approval modes.
 - **Discord & Slack Webhooks**: Configure a webhook URL per circle to receive peace-of-mind alerts in Discord or Slack whenever someone requests access, joins, or leaves.
+- **Sealed Circles**: Circle entries are encrypted under a per-group key delivered to each member as an ECDH sealed box only their device can open. Remove a member and the key rotates — past and future entries stay sealed to them without rewriting a single word.
 
 ---
 
@@ -62,11 +65,13 @@ A sharing circle is a private room for a handful of people you trust with a note
 A warm, thoughtful conversational companion — _not a guru, not a therapist_.
 
 - **Permission-Scoped by Design**: Tick only the specific notebooks Reflect is permitted to consult. Anything outside your selection remains strictly invisible.
+- **E2EE-Native**: Reflect reads your journal through a bundle your browser decrypts on the fly — the companion sees your words for the conversation, while the server beneath it still holds nothing but ciphertext.
 - **Grounded in Reality**: An autonomous tool loop searches your actual entries, inspects mood trends, and quotes real words instead of inventing platitudes.
 - **Any Provider (OpenAI & Anthropic Compatible)**: Completely open and decoupled from vendor lock-in. Connect your own API key and entrypoint:
   - **OpenAI Compatible**: Groq, Together AI, DeepSeek, Cerebras, Ollama, vLLM, or OpenAI.
   - **Anthropic Compatible**: Claude 3.5 Haiku, Claude 3.5 Sonnet.
 - **Zero Memory Leaks**: Entirely stateless per request; your private thoughts are never retained for model training.
+- **Grounded Tools, Verified Scope**: Its list/read/search/mood tools answer only from the decrypted, server-verified bundle — no invented entries, no scope creep.
 
 ---
 
@@ -129,7 +134,8 @@ Visit **[http://localhost:3000](http://localhost:3000)** to begin writing.
 ┌────────────────────────────────────────────────────────┐
 │                   Browser / Client                     │
 │   Next.js 16 App Router (Paper & Ink Design System)    │
-│   React 19 • Tailwind CSS 4 • TanStack Query v5        │
+│   React 19 • Tailwind CSS 4 • TanStack Query v5       │
+│   AES-256-GCM Envelope Vault (E2EE Key Sealing)        │
 └───────────────────────────┬────────────────────────────┘
                             │
       HTTP / REST (Bearer)  │  SSE Stream (Realtime Presence & Events)
@@ -152,12 +158,15 @@ Visit **[http://localhost:3000](http://localhost:3000)** to begin writing.
               ▼                            ▼
 ┌────────────────────────────────────────────────────────┐
 │                 PostgreSQL 17 Database                 │
-│   • Strict Row-Level Security (RLS) Isolation          │
-│   • Trigram Search (pg_trgm) & Automated Triggers      │
+│   • Strict Row-Level Security (RLS) Isolation         │
+│   • Ciphertext-Only Entry Storage (E2EE)              │
+│   • Trigram Indexes (Legacy Plaintext Window)         │
 └────────────────────────────────────────────────────────┘
 ```
 
 - **Strict RLS Enforcement**: The database is the true security boundary. Even if the UI is compromised, PostgreSQL refuses to disclose records across tenant boundaries.
+- **True Zero-Knowledge Storage**: A leaked database dump yields nothing but ciphertext — entry titles and bodies are sealed client-side under per-entry AES-256-GCM keys, wrapped for the author (password-derived KEK) and, in circles, for the group (ECDH-sealed CEK). Moods, tags and timestamps stay queryable by design; the words never do.
+- **Key Rotation Without Rewrites**: Circle keys rotate by re-wrapping 32-byte content keys, not re-encrypting bodies — removing a member is instant, and offline authors lose nothing.
 - **Zero Client Key Leakage**: Service roles, OAuth secrets, and AI provider API keys remain strictly confined to the server environment.
 - **Offline-First Developer Experience**: Embedded dev-stack spins up real PostgreSQL, GoTrue, and PostgREST in seconds for fully isolated testing.
 
