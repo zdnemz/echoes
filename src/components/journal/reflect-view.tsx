@@ -17,7 +17,7 @@ import { useNotebooks } from '@/lib/api/hooks'
 import { useSession } from '@/lib/auth/session'
 import { reflectChat, type ReflectMessage } from '@/lib/api/endpoints'
 import { ApiError } from '@/lib/api/client'
-import { useSearchCorpus } from '@/lib/crypto/local-search'
+import { corpusReady } from '@/lib/crypto/local-search'
 
 interface Turn extends ReflectMessage {
   tools?: string[]
@@ -31,7 +31,6 @@ const HISTORY_CAP = 60
 export function ReflectView() {
   const { user } = useSession()
   const notebooks = useNotebooks()
-  const corpus = useSearchCorpus()
   const mine = (notebooks.data?.data ?? []).filter((nb) => nb.owner_id === user?.id)
   const [selected, setSelected] = useState<string[]>([])
   const [turns, setTurns] = useState<Turn[]>([])
@@ -78,12 +77,16 @@ export function ReflectView() {
     try {
       // E2EE: with the vault open, decrypt the ticked notebooks' entries
       // here and ship them as the agent's readable context — the server
-      // holds only ciphertext and can no longer read bodies itself.
+      // holds only ciphertext and can no longer read bodies itself. Await
+      // the corpus so the FIRST message of a cold session still carries a
+      // bundle; without it the agent would fall back to sealed rows it
+      // cannot read and answer from ciphertext.
+      const items = await corpusReady()
       let context:
         | Array<{ id: string; title: string; body: string; mood: string | null; tags: string[]; created_at: string }>
         | undefined
-      if (corpus.items) {
-        context = corpus.items
+      if (items) {
+        context = items
           .filter((i) => selected.includes(i.entry.notebook_id))
           .slice(0, 40)
           .map((i) => ({

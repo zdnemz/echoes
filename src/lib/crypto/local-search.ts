@@ -77,6 +77,32 @@ async function buildCorpus(): Promise<CorpusItem[]> {
   return items
 }
 
+let corpusPromise: Promise<CorpusItem[] | null> | null = null
+
+/**
+ * Resolve to the decrypted corpus (null when the vault has no keys — nothing
+ * is readable). Builds on demand and shares the hook's cache, so the Reflect
+ * composer can attach a bundle to its very first message even on a cold load
+ * where the hook hasn't populated yet.
+ */
+export async function corpusReady(): Promise<CorpusItem[] | null> {
+  if (corpusCache) return corpusCache
+  if (corpusPromise) return corpusPromise
+  const vault = await whenReady()
+  if (!vault) return null
+  corpusPromise = buildCorpus()
+    .then((built) => {
+      corpusCache = built
+      for (const l of corpusListeners) l()
+      return built
+    })
+    .catch(() => null)
+    .finally(() => {
+      corpusPromise = null
+    })
+  return corpusPromise
+}
+
 /** One-shot corpus build + cache. Rebuilds on vault lock/unlock. */
 export function useSearchCorpus(): { items: CorpusItem[] | null; ready: boolean } {
   const [items, setItems] = useState<CorpusItem[] | null>(corpusCache)

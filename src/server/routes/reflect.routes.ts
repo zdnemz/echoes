@@ -66,6 +66,14 @@ function aiNotConfigured(): ApiError {
 
 const preview = (body: string, max = 160) => body.replace(/\s+/g, ' ').trim().slice(0, max)
 
+/**
+ * Sealed rows store ciphertext in `title`/`body`. Handing that to the model
+ * as prose makes it quote base64 and hallucinate around it — an explicit
+ * marker keeps the fallback honest when no decrypted bundle was shipped
+ * (cold load before the corpus finished, or a vault with no device keys).
+ */
+const SEALED = '[sealed — this entry is end-to-end encrypted and its words are not readable here]'
+
 /** Client-decrypted entry the agent may read (E2EE mode). */
 export interface ContextEntry {
   id: string
@@ -76,7 +84,11 @@ export interface ContextEntry {
   created_at?: string
 }
 
-function buildTools(client: SupabaseClient, ownedIds: Set<string>, ctxByEntry?: Map<string, ContextEntry>): ToolDef[] {
+export function buildTools(
+  client: SupabaseClient,
+  ownedIds: Set<string>,
+  ctxByEntry?: Map<string, ContextEntry>,
+): ToolDef[] {
   const guardNotebook = (id: unknown) => {
     if (typeof id !== 'string' || !ownedIds.has(id)) throw new Error('notebook not in scope')
     return id
@@ -111,16 +123,22 @@ function buildTools(client: SupabaseClient, ownedIds: Set<string>, ctxByEntry?: 
         }
         const { data, error } = await client
           .from('entries')
-          .select('id, title, mood, tags, created_at, body')
+          .select('id, title, mood, tags, created_at, body, encrypted')
           .eq('notebook_id', notebook_id)
           .order('created_at', { ascending: false })
           .limit(limit)
         if (error) throw fromPostgrestError(error)
-        return ((data ?? []) as Array<{ body: string } & Record<string, unknown>>).map((e) => ({
-          ...e,
-          preview: preview(e.body),
-          body: undefined,
-        }))
+        return (
+          (data ?? []) as Array<{ body: string; title: string; encrypted?: boolean } & Record<string, unknown>>
+        ).map((e) => {
+          const sealed = Boolean(e.encrypted)
+          return {
+            ...e,
+            title: sealed ? SEALED : e.title,
+            preview: sealed ? SEALED : preview(e.body),
+            body: undefined,
+          }
+        })
       },
     },
     {
@@ -141,12 +159,13 @@ function buildTools(client: SupabaseClient, ownedIds: Set<string>, ctxByEntry?: 
         }
         const { data, error } = await client
           .from('entries')
-          .select('id, notebook_id, title, body, mood, tags, created_at')
+          .select('id, notebook_id, title, body, mood, tags, created_at, encrypted')
           .eq('id', args.entry_id)
           .maybeSingle()
         if (error) throw fromPostgrestError(error)
-        const row = data as { notebook_id: string } | null
+        const row = data as { notebook_id: string; encrypted?: boolean } | null
         if (!row || !ownedIds.has(row.notebook_id)) throw new Error('entry not in scope')
+        if (row.encrypted) return { ...data, title: SEALED, body: SEALED }
         return data
       },
     },
@@ -175,16 +194,21 @@ function buildTools(client: SupabaseClient, ownedIds: Set<string>, ctxByEntry?: 
         const like = escapePostgrestValue(`%${args.q.trim()}%`)
         const { data, error } = await client
           .from('entries')
-          .select('id, notebook_id, title, created_at, body, notebooks!inner(id)')
+          .select('id, notebook_id, title, created_at, body, encrypted, notebooks!inner(id)')
           .in('notebook_id', [...ownedIds])
           .or(`title.ilike.${like},body.ilike.${like}`)
           .order('created_at', { ascending: false })
           .limit(limit)
         if (error) throw fromPostgrestError(error)
-        return ((data ?? []) as Array<{ body: string; notebooks?: unknown } & Record<string, unknown>>).map((e) => {
+        return (
+          (data ?? []) as Array<
+            { body: string; title: string; encrypted?: boolean; notebooks?: unknown } & Record<string, unknown>
+          >
+        ).map((e) => {
           const { notebooks: _j, body, ...rest } = e
           void _j
-          return { ...rest, preview: preview(body) }
+          const sealed = Boolean(e.encrypted)
+          return { ...rest, title: sealed ? SEALED : rest.title, preview: sealed ? SEALED : preview(body) }
         })
       },
     },
