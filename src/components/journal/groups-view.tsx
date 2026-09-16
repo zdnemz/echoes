@@ -624,15 +624,27 @@ function GroupJournalTab({
     const body = quickText.trim()
     if (!body || !quickTarget || createEntry.isPending) return
     try {
+      // Chat messages are entries like any other: sealed on this device
+      // before they leave the browser. Without this they would land in the
+      // database as plaintext while every other view seals.
+      const { whenReady } = await import('@/lib/crypto/vault')
+      await whenReady()
+      const { sealForStorage } = await import('@/lib/crypto/entry-codec')
+      const title = body.split('\n')[0].slice(0, 80) || 'Quick note'
+      // Fail closed: if sealing is impossible (device keys not ready), keep
+      // the message in the box and say so — never store it as plaintext.
+      const sealed = await sealForStorage(title, body, group.id, true)
       await createEntry.mutateAsync({
         notebookId: quickTarget.id,
-        title: body.split('\n')[0].slice(0, 80) || 'Quick note',
-        body,
-        is_shared: true,
+        title: sealed.title,
+        body: sealed.body,
+        is_shared: sealed.shareState !== 'author-only',
+        encrypted: true,
+        key_wraps: sealed.key_wraps,
       })
       setQuickText('')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't send.")
+      toast.error("Couldn't send — your message is still here, try again.")
     }
   }
 
