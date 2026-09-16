@@ -147,6 +147,23 @@ export const KeyMaterialSchema = z
   })
   .openapi('KeyMaterial')
 
+export const RegisterDeviceSchema = z
+  .object({
+    public_key: z.string().min(1).max(1024),
+    label: z.string().max(120).optional(),
+  })
+  .strict()
+
+export const DeviceView = z
+  .object({
+    id: UuidSchema,
+    user_id: UuidSchema,
+    public_key: z.string(),
+    label: z.string().nullable(),
+    created_at: TimestampSchema,
+  })
+  .openapi('Device')
+
 export const DistributeGroupKeysSchema = z
   .object({
     generation: z.coerce
@@ -155,29 +172,42 @@ export const DistributeGroupKeysSchema = z
       .min(1)
       .max(1_000)
       .openapi({ description: 'Key generation; bumped on rotation' }),
+    replace: z.boolean().optional().openapi({ description: 'Delete existing wraps first (owner only, for rotation)' }),
     wraps: z
       .array(
         z
           .object({
-            user_id: UuidSchema,
-            sealed_box: z.string().min(1).max(8192).openapi({ description: 'CEK sealed for this member only' }),
+            device_id: UuidSchema,
+            sealed_box: z.string().min(1).max(8192).openapi({ description: 'CEK sealed for this device' }),
           })
           .strict(),
       )
       .min(1)
-      .max(50)
-      .openapi({ description: 'One sealed box per current member' }),
+      .max(200)
+      .openapi({ description: 'One sealed box per device' }),
   })
   .strict()
 
-export const GroupKeyWrapView = z
+export const GroupKeyWrapsView = z
   .object({
-    group_id: UuidSchema,
-    generation: z.number().int(),
-    sealed_box: z.string(),
-    created_at: TimestampSchema,
+    wraps: z.array(
+      z.object({
+        device_id: UuidSchema,
+        generation: z.number().int(),
+        sealed_box: z.string(),
+      }),
+    ),
   })
-  .openapi('GroupKeyWrap')
+  .openapi('GroupKeyWraps')
+
+export const GroupDeviceView = z
+  .object({
+    user_id: UuidSchema,
+    device_id: UuidSchema,
+    public_key: z.string(),
+    has_wrap: z.boolean(),
+  })
+  .openapi('GroupDevice')
 
 export const EncryptMigrationSchema = z
   .object({

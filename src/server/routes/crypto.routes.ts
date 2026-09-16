@@ -1,227 +1,243 @@
 import { createRoute, z } from '@hono/zod-openapi'
 import {
+  DeviceView,
   DistributeGroupKeysSchema,
   EncryptMigrationResultSchema,
   EncryptMigrationSchema,
-  GroupKeyWrapView,
-  KeyMaterialSchema,
-  PublishKeysSchema,
+  GroupDeviceView,
+  GroupKeyWrapsView,
+  RegisterDeviceSchema,
   UuidSchema,
 } from '../schemas'
 import { Errors, fromPostgrestError } from '../errors'
 import { requireAuth } from '../auth'
 import { bearerAuth, errorResponses, jsonBody, requireGroupOwner, requireGroupVisible, type App } from './helpers'
 
-/**
- * E2EE key routes — the server is a dumb, RLS-guarded relay for opaque blobs.
- *
- * It never sees: passwords, KEKs, DEKs, identity private keys, group CEKs,
- * or any plaintext. Every write is scoped to rows the caller owns by policy;
- * every read is scoped to rows addressed to them.
- */
-
 const GroupIdParam = z.object({
   id: UuidSchema.openapi({ param: { name: 'id', in: 'path' } }),
 })
 
 export function registerCryptoRoutes(app: App) {
-  // ----------------------------------------------------------------- my key material
-  const getKeys = createRoute({
-    method: 'get',
-    path: '/me/keys',
+  const registerDevice = createRoute({
+    method: 'post',
+    path: '/me/devices',
     tags: ['Encryption'],
-    summary: 'Fetch your key material (opaque blobs)',
-    description:
-      'Returns the salt, PBKDF2 iteration count, wrapped DEK, public identity key and wrapped private identity key stored on your profile. The server cannot use any of these to decrypt entries.',
+    summary: 'Register a device public key',
+    security: [bearerAuth],
+    middleware: [requireAuth],
+    request: { body: jsonBody(RegisterDeviceSchema) },
+    responses: {
+      ...errorResponses(400, 401, 503),
+      200: { description: 'Device registered', content: { 'application/json': { schema: DeviceView } } },
+    },
+  })
+  app.openapi(registerDevice, async (c) => {
+    const body = c.req.valid('json')
+    const me = c.var.user.id
+    const { data, error } = await c.var.userClient
+      .from('user_devices')
+      .insert({ user_id: me, public_key: body.public_key, label: body.label ?? null })
+      .select('id, user_id, public_key, label, created_at')
+      .single()
+    if (error) throw fromPostgrestError(error)
+    return c.json(data as z.infer<typeof DeviceView>)
+  })
+
+  const getDevices = createRoute({
+    method: 'get',
+    path: '/me/devices',
+    tags: ['Encryption'],
+    summary: 'List your devices',
     security: [bearerAuth],
     middleware: [requireAuth],
     responses: {
       ...errorResponses(401, 503),
-      200: {
-        description: 'Key material (fields null before first publish)',
-        content: { 'application/json': { schema: KeyMaterialSchema } },
-      },
+      200: { description: 'Your devices', content: { 'application/json': { schema: z.array(DeviceView) } } },
     },
   })
-  app.openapi(getKeys, async (c) => {
+  app.openapi(getDevices, async (c) => {
     const { data, error } = await c.var.userClient
-      .from('profiles')
-      .select('enc_salt, enc_iterations, enc_wrapped_dek, enc_public_key, enc_wrapped_private_key')
-      .eq('id', c.var.user.id)
-      .maybeSingle()
+      .from('user_devices')
+      .select('id, user_id, public_key, label, created_at')
+      .eq('user_id', c.var.user.id)
+      .order('created_at', { ascending: false })
     if (error) throw fromPostgrestError(error)
-    if (!data) throw Errors.notFound('Profile not found')
-    const row = data as {
-      enc_salt: string | null
-      enc_iterations: number | null
-      enc_wrapped_dek: string | null
-      enc_public_key: string | null
-      enc_wrapped_private_key: string | null
-    }
-    return c.json({
-      salt: row.enc_salt,
-      iterations: row.enc_iterations,
-      wrapped_dek: row.enc_wrapped_dek,
-      public_key: row.enc_public_key,
-      wrapped_private_key: row.enc_wrapped_private_key,
-    })
+    return c.json((data ?? []) as Array<z.infer<typeof DeviceView>>)
   })
 
-  // ----------------------------------------------------------------- publish keys
-  const publishKeys = createRoute({
-    method: 'put',
-    path: '/me/keys',
-    tags: ['Encryption'],
-    summary: 'Publish key material (signup or first E2EE enablement)',
-    description:
-      'Stores the PBKDF2 parameters, the DEK wrapped under the password-derived KEK, and the ECDH identity keys on the profile. Once set, the wrapped DEK can only be replaced by proving knowledge of the OLD wrapped DEK (re-wrap on password change) — a hijacked session cannot silently rotate the user onto attacker keys.',
-    security: [bearerAuth],
-    middleware: [requireAuth],
-    request: { body: jsonBody(PublishKeysSchema) },
-    responses: {
-      ...errorResponses(400, 401, 404, 422, 503),
-      200: { description: 'Stored', content: { 'application/json': { schema: KeyMaterialSchema } } },
-    },
-  })
-  app.openapi(publishKeys, async (c) => {
-    const body = c.req.valid('json')
-    const me = c.var.user.id
-
-    const { data: existing, error: readErr } = await c.var.userClient
-      .from('profiles')
-      .select('enc_wrapped_dek')
-      .eq('id', me)
-      .maybeSingle()
-    if (readErr) throw fromPostgrestError(readErr)
-    if (!existing) throw Errors.notFound('Profile not found')
-
-    // First publish is free; later ones must prove possession of the
-    // current wrapped DEK (the caller can only know it by decrypting — a
-    // hijacked session cannot rotate the user onto attacker keys).
-    if (existing.enc_wrapped_dek && existing.enc_wrapped_dek !== body.wrapped_dek) {
-      if (!body.previous_wrapped_dek || body.previous_wrapped_dek !== existing.enc_wrapped_dek) {
-        throw Errors.badRequest('Key material already exists — the re-wrap must carry the current wrapped_dek')
-      }
-    }
-
-    const { data, error } = await c.var.userClient
-      .from('profiles')
-      .update({
-        enc_salt: body.salt,
-        enc_iterations: body.iterations,
-        enc_wrapped_dek: body.wrapped_dek,
-        enc_public_key: body.public_key,
-        enc_wrapped_private_key: body.wrapped_private_key,
-      })
-      .eq('id', me)
-      .select('enc_salt, enc_iterations, enc_wrapped_dek, enc_public_key, enc_wrapped_private_key')
-      .single()
-    if (error) throw fromPostgrestError(error)
-    const row = data as {
-      enc_salt: string | null
-      enc_iterations: number | null
-      enc_wrapped_dek: string | null
-      enc_public_key: string | null
-      enc_wrapped_private_key: string | null
-    }
-    return c.json({
-      salt: row.enc_salt,
-      iterations: row.enc_iterations,
-      wrapped_dek: row.enc_wrapped_dek,
-      public_key: row.enc_public_key,
-      wrapped_private_key: row.enc_wrapped_private_key,
-    })
-  })
-
-  // ----------------------------------------------------------------- group CEK wraps
   const getGroupWrap = createRoute({
     method: 'get',
     path: '/groups/{id}/key',
     tags: ['Encryption'],
-    summary: 'Fetch your sealed box for a group',
-    description:
-      'Returns the sealed box carrying the group CEK addressed to the caller. RLS restricts reads to the box owner or the group owner.',
+    summary: 'Fetch all your sealed boxes for a group',
     security: [bearerAuth],
     middleware: [requireAuth],
     request: { params: GroupIdParam },
     responses: {
       ...errorResponses(401, 404, 503),
-      200: { description: 'Your sealed box', content: { 'application/json': { schema: GroupKeyWrapView } } },
+      200: { description: 'Your sealed boxes', content: { 'application/json': { schema: GroupKeyWrapsView } } },
     },
   })
   app.openapi(getGroupWrap, async (c) => {
     const { id } = c.req.valid('param')
-
     const { data, error } = await c.var.userClient
       .from('group_key_wraps')
-      .select('group_id, generation, sealed_box, created_at')
+      .select('device_id, generation, sealed_box')
       .eq('group_id', id)
       .eq('user_id', c.var.user.id)
-      .maybeSingle()
     if (error) throw fromPostgrestError(error)
-    if (!data) throw Errors.notFound('No group key addressed to you (or not visible)')
-    return c.json(data)
+    if (!data || data.length === 0) throw Errors.notFound('No group key addressed to you')
+    return c.json({ wraps: data })
   })
 
-  // Owner distributes/rotates: one generation, all members covered.
   const distributeGroupKeys = createRoute({
     method: 'put',
     path: '/groups/{id}/key',
     tags: ['Encryption'],
-    summary: 'Distribute or rotate the group CEK (owner only)',
-    description:
-      'Replaces the group\u2019s key generation with a fresh set of per-member sealed boxes. All members must be covered — the endpoint rejects partial distributions so a rotation can never lock someone out silently. Rotation should follow every member removal.',
+    summary: 'Distribute or rotate the group CEK',
     security: [bearerAuth],
     middleware: [requireAuth],
     request: { params: GroupIdParam, body: jsonBody(DistributeGroupKeysSchema) },
     responses: {
       ...errorResponses(400, 401, 403, 404, 422, 503),
-      200: { description: 'Distribution stored', content: { 'application/json': { schema: GroupKeyWrapView } } },
+      200: { description: 'Distribution stored', content: { 'application/json': { schema: GroupKeyWrapsView } } },
     },
   })
   app.openapi(distributeGroupKeys, async (c) => {
     const { id } = c.req.valid('param')
-    const { generation, wraps } = c.req.valid('json')
+    const { generation, replace, wraps } = c.req.valid('json')
+    const me = c.var.user.id
 
-    // Owner gate + current member list in one read.
-    const group = await requireGroupOwner(c.var.userClient, id, c.var.user.id, {
+    const group = await requireGroupOwner(c.var.userClient, id, me, {
       select: 'id, owner_id, group_members(user_id, role)',
-    })
-    const members = (group as unknown as { group_members: Array<{ user_id: string }> }).group_members ?? []
-    const memberIds = new Set(members.map((m) => m.user_id))
-    const wrapFor = new Set(wraps.map((w) => w.user_id))
-    if (memberIds.size === 0 || [...memberIds].some((m) => !wrapFor.has(m))) {
-      throw Errors.badRequest('Sealed boxes must cover every current member exactly once')
+    }).catch(() => null)
+    const isOwner = group !== null
+
+    if (replace && !isOwner) throw Errors.badRequest('Only the owner can replace every wrap')
+
+    // Resolve every targeted device to its owner. The row's user_id must be
+    // the device's real owner (read policies are keyed on it), so it is never
+    // taken from the caller.
+    const { data: targeted } = await c.var.userClient
+      .from('user_devices')
+      .select('id, user_id')
+      .in(
+        'id',
+        wraps.map((w) => w.device_id),
+      )
+    const ownerOf = new Map((targeted ?? []).map((d) => [d.id as string, d.user_id as string]))
+    for (const w of wraps) {
+      if (!ownerOf.has(w.device_id)) throw Errors.badRequest('Unknown device in wraps')
     }
 
-    // Delete-then-insert inside one generation bump — RLS owner-write policy
-    // is the enforcement; a failed insert leaves zero wraps for the group,
-    // which the owner UI surfaces as "distribute again".
-    const { error: delErr } = await c.var.userClient.from('group_key_wraps').delete().eq('group_id', id)
-    if (delErr) throw fromPostgrestError(delErr)
+    if (!isOwner) {
+      // A member may only bring their OWN new devices into the group.
+      for (const w of wraps) {
+        if (ownerOf.get(w.device_id) !== me) {
+          throw Errors.badRequest('Non-owners can only write wraps for their own devices')
+        }
+      }
+    }
+
+    if (replace) {
+      // A rotation must never lock someone out silently: every member that
+      // has at least one registered device needs a box in the new generation.
+      const members = ((group as unknown as { group_members: Array<{ user_id: string }> }).group_members ?? []).map(
+        (m) => m.user_id,
+      )
+      const covered = new Set(wraps.map((w) => ownerOf.get(w.device_id)))
+      const { data: memberDevices } = await c.var.userClient
+        .from('user_devices')
+        .select('user_id')
+        .in('user_id', members)
+      const membersWithDevices = new Set((memberDevices ?? []).map((d) => d.user_id as string))
+      const uncovered = members.filter((m) => membersWithDevices.has(m) && !covered.has(m))
+      if (uncovered.length > 0) {
+        throw Errors.badRequest('Sealed boxes must cover every member that has a registered device')
+      }
+
+      const { error: delErr } = await c.var.userClient.from('group_key_wraps').delete().eq('group_id', id)
+      if (delErr) throw fromPostgrestError(delErr)
+    }
+
+    const rows = wraps.map((w) => ({
+      group_id: id,
+      device_id: w.device_id,
+      user_id: ownerOf.get(w.device_id) as string,
+      generation,
+      sealed_box: w.sealed_box,
+    }))
+
     const { error: insErr } = await c.var.userClient
       .from('group_key_wraps')
-      .insert(wraps.map((w) => ({ group_id: id, user_id: w.user_id, generation, sealed_box: w.sealed_box })))
+      .upsert(rows, { onConflict: 'group_id,device_id' })
     if (insErr) throw fromPostgrestError(insErr)
 
-    return c.json({ group_id: id, generation, sealed_box: '', created_at: new Date().toISOString() })
+    return c.json({ wraps: wraps.map((w) => ({ device_id: w.device_id, generation, sealed_box: w.sealed_box })) })
   })
 
-  // ----------------------------------------------------------------- co-member public keys
-  const memberKeys = createRoute({
+  const groupDevices = createRoute({
     method: 'get',
-    path: '/groups/{id}/member-keys',
+    path: '/groups/{id}/devices',
     tags: ['Encryption'],
-    summary: 'Public encryption keys of a group\u2019s members',
-    description:
-      'ECDH public keys (SPKI base64) for every member of a group you belong to. Public keys are not secret — the owner needs them to seal group CEK boxes per member. RLS: group members only.',
+    summary: 'Device keys of group members with wrap status',
     security: [bearerAuth],
     middleware: [requireAuth],
     request: { params: GroupIdParam },
     responses: {
       ...errorResponses(401, 404, 503),
       200: {
-        description: 'user_id → public key map',
+        description: 'Member devices',
+        content: { 'application/json': { schema: z.array(GroupDeviceView) } },
+      },
+    },
+  })
+  app.openapi(groupDevices, async (c) => {
+    const { id } = c.req.valid('param')
+    await requireGroupVisible(c.var.userClient, id, 'id')
+
+    const { data: members, error: mErr } = await c.var.userClient
+      .from('group_members')
+      .select('user_id')
+      .eq('group_id', id)
+    if (mErr) throw fromPostgrestError(mErr)
+    const memberIds = (members ?? []).map((m) => m.user_id)
+    if (memberIds.length === 0) return c.json([])
+
+    const { data: devices, error: dErr } = await c.var.userClient
+      .from('user_devices')
+      .select('id, user_id, public_key')
+      .in('user_id', memberIds)
+    if (dErr) throw fromPostgrestError(dErr)
+
+    const { data: existingWraps, error: wErr } = await c.var.userClient
+      .from('group_key_wraps')
+      .select('device_id')
+      .eq('group_id', id)
+    if (wErr) throw fromPostgrestError(wErr)
+    const wrappedIds = new Set((existingWraps ?? []).map((w) => w.device_id))
+
+    const result = (devices ?? []).map((d) => ({
+      user_id: d.user_id,
+      device_id: d.id,
+      public_key: d.public_key,
+      has_wrap: wrappedIds.has(d.id),
+    }))
+    return c.json(result as Array<z.infer<typeof GroupDeviceView>>)
+  })
+
+  const memberKeys = createRoute({
+    method: 'get',
+    path: '/groups/{id}/member-keys',
+    tags: ['Encryption'],
+    summary: 'Public encryption keys of a group members',
+    security: [bearerAuth],
+    middleware: [requireAuth],
+    request: { params: GroupIdParam },
+    responses: {
+      ...errorResponses(401, 404, 503),
+      200: {
+        description: 'user_id to public key map',
         content: {
           'application/json': { schema: z.object({ keys: z.record(z.string(), z.string().nullable()) }) },
         },
@@ -230,40 +246,36 @@ export function registerCryptoRoutes(app: App) {
   })
   app.openapi(memberKeys, async (c) => {
     const { id } = c.req.valid('param')
-
-    // Visible only through membership (requireGroupVisible checks the
-    // groups RLS; co-membership is implied by group visibility).
     await requireGroupVisible(c.var.userClient, id, 'id')
-
-    const { data, error } = await c.var.userClient
+    const { data: members, error: mErr } = await c.var.userClient
       .from('group_members')
-      .select('user_id, profiles!inner(enc_public_key)')
+      .select('user_id')
       .eq('group_id', id)
-    if (error) throw fromPostgrestError(error)
+    if (mErr) throw fromPostgrestError(mErr)
+    const memberIds = (members ?? []).map((m) => m.user_id)
+    if (memberIds.length === 0) return c.json({ keys: {} })
+
+    const { data: devices, error: dErr } = await c.var.userClient
+      .from('user_devices')
+      .select('user_id, public_key')
+      .in('user_id', memberIds)
+    if (dErr) throw fromPostgrestError(dErr)
 
     const keys: Record<string, string | null> = {}
-    for (const row of (data ?? []) as Array<{
-      user_id: string
-      profiles: { enc_public_key: string | null } | Array<{ enc_public_key: string | null }>
-    }>) {
-      const p = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
-      keys[row.user_id] = p?.enc_public_key ?? null
+    for (const d of devices ?? []) {
+      if (!keys[d.user_id]) keys[d.user_id] = d.public_key
+    }
+    for (const uid of memberIds) {
+      if (!keys[uid]) keys[uid] = null
     }
     return c.json({ keys })
   })
-
-  // ----------------------------------------------------------------- entry key wraps
-  // Creation-time wraps ride along with POST /notebooks/:id/entries and
-  // PATCH /entries/:id (the client batches them) — see entries.routes.ts.
-  // Rotation after member removal is the one dedicated write path:
 
   const rotateGroupKeys = createRoute({
     method: 'post',
     path: '/groups/{id}/rotate',
     tags: ['Encryption'],
     summary: 'Re-wrap group-scope entry keys under a new CEK (owner only)',
-    description:
-      'After removing a member the owner generates a fresh CEK, distributes new sealed boxes (PUT /groups/:id/key) and calls this to re-wrap the group-scope content keys of every shared entry in the group\u2019s notebooks. The rewraps array carries { entry_id, wrapped_key } blobs the owner produced client-side by opening each old group wrap (with the previous CEK they still hold) and re-sealing under the new one. Bodies never move.',
     security: [bearerAuth],
     middleware: [requireAuth],
     request: {
@@ -297,9 +309,7 @@ export function registerCryptoRoutes(app: App) {
   app.openapi(rotateGroupKeys, async (c) => {
     const { id } = c.req.valid('param')
     const { rewraps } = c.req.valid('json')
-
     await requireGroupOwner(c.var.userClient, id, c.var.user.id)
-
     const { data, error } = await c.var.userClient
       .from('entry_key_wraps')
       .upsert(
@@ -308,18 +318,14 @@ export function registerCryptoRoutes(app: App) {
       )
       .select('entry_id')
     if (error) throw fromPostgrestError(error)
-
     return c.json({ rewrapped: data?.length ?? 0 })
   })
 
-  // ----------------------------------------------------------------- encrypt migration
   const migrateEntries = createRoute({
     method: 'post',
     path: '/me/encrypt-migrate',
     tags: ['Encryption'],
-    summary: 'Flip a batch of your entries to encrypted (client-driven migration)',
-    description:
-      'The client decrypts nothing here — it re-seals already-fetched plaintext rows (or directly re-wraps) and POSTs the ciphers. The server just flips encrypted=true and stores the blobs. Bounded to the caller\u2019s own rows by RLS. Returns remaining unencrypted count.',
+    summary: 'Flip a batch of your entries to encrypted',
     security: [bearerAuth],
     middleware: [requireAuth],
     request: { body: jsonBody(EncryptMigrationSchema) },
@@ -334,10 +340,6 @@ export function registerCryptoRoutes(app: App) {
   app.openapi(migrateEntries, async (c) => {
     const { entries } = c.req.valid('json')
     const me = c.var.user.id
-
-    // Per-row: PostgREST bulk updates need one call per row for distinct
-    // cipher values. A zero-row update (already flipped concurrently) reads
-    // as 404 via maybeSingle — treat as skipped, not failed.
     const flipped: string[] = []
     for (const e of entries) {
       const { data: row, error: rowErr } = await c.var.userClient
@@ -355,9 +357,6 @@ export function registerCryptoRoutes(app: App) {
       }
       if (row) flipped.push((row as { id: string }).id)
     }
-
-    // Author-scope key wraps ride along so flipped rows stay decryptable;
-    // shared entries in group-linked notebooks also get the group wrap.
     if (flipped.length > 0) {
       const { error: wrapErr } = await c.var.userClient
         .from('entry_key_wraps')
@@ -371,14 +370,12 @@ export function registerCryptoRoutes(app: App) {
         )
       if (wrapErr) throw fromPostgrestError(wrapErr)
     }
-
     const { count, error: countErr } = await c.var.userClient
       .from('entries')
       .select('id', { count: 'exact', head: true })
       .eq('author_id', me)
       .eq('encrypted', false)
     if (countErr) throw fromPostgrestError(countErr)
-
     return c.json({ migrated: flipped.length, remaining: count ?? 0 })
   })
 }
