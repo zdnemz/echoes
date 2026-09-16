@@ -28,7 +28,7 @@ Most modern notes apps try to be your second brain: endless kanban boards, compl
 **Echoes is the digital equivalent of a linen-bound notebook** — something that holds the day, asks for nothing in return, and keeps its mouth shut.
 
 - **No Streak Guilt**: No artificial red dots or guilt-tripping push notifications engineered to manipulate your dopamine.
-- **Sealed Before It Leaves**: Every entry's title and body is encrypted in your browser with AES-256-GCM under a key derived from your password — the database holds only ciphertext it mathematically cannot open. Lose the password and the words are gone; there is no reset, no backdoor, no escrow.
+- **Sealed Before It Leaves**: Every entry's title and body is encrypted in your browser with AES-256-GCM under a key that never leaves your device — the database holds only ciphertext it mathematically cannot open. There is no reset, no backdoor, no escrow.
 - **Privacy by Engine, Not by Policy**: Every notebook starts private and stays that way. Your privacy is enforced by PostgreSQL Row-Level Security directly at the database engine level — not by a terms of service promise.
 - **Selective Connection**: When you want to share, you don't broadcast to a public feed. You link one specific notebook to a small circle of trusted friends or family.
 
@@ -42,7 +42,7 @@ Most modern notes apps try to be your second brain: endless kanban boards, compl
 - **Newsreader Serif Typography**: Generous line heights, thoughtful measures, and distraction-free split-pane Markdown composition.
 - **Hand-Crafted Mood Glyphs**: Rate your day through evocative, original weather glyphs: _Sun_ (Great), _Sunrise_ (Good), _Level_ (Okay), _Drizzle_ (Low), and _Squall_ (Rough).
 - **Taxonomies & Deep Search**: Organise thoughts with tag systems and search that runs **on the decrypted corpus in your browser** — the server never sees the words it is searching, and results still land in milliseconds.
-- **Zero-Knowledge Key Vault**: Keys are sealed with PBKDF2-SHA256 (600,000 rounds) and unwrapped only in memory for the session; the password never travels, and the sealed key never leaves the device.
+- **Keys You Never Have To Think About**: Sign up and a key is generated for you on the spot, kept on that device, and used automatically from then on. No encryption passphrase to invent, remember, or lose — and because the key is not derived from your login password, resetting your password never puts your writing at risk.
 
 ---
 
@@ -165,7 +165,7 @@ Visit **[http://localhost:3000](http://localhost:3000)** to begin writing.
 ```
 
 - **Strict RLS Enforcement**: The database is the true security boundary. Even if the UI is compromised, PostgreSQL refuses to disclose records across tenant boundaries.
-- **True Zero-Knowledge Storage**: A leaked database dump yields nothing but ciphertext — entry titles and bodies are sealed client-side under per-entry AES-256-GCM keys, wrapped for the author (password-derived KEK) and, in circles, for the group (ECDH-sealed CEK). Moods, tags and timestamps stay queryable by design; the words never do.
+- **True Zero-Knowledge Storage**: A leaked database dump yields nothing but ciphertext — entry titles and bodies are sealed client-side under per-entry AES-256-GCM keys, wrapped for the author's device key and, in circles, for the group (ECDH-sealed CEK). Moods, tags and timestamps stay queryable by design; the words never do.
 - **Key Rotation Without Rewrites**: Circle keys rotate by re-wrapping 32-byte content keys, not re-encrypting bodies — removing a member is instant, and offline authors lose nothing.
 - **Zero Client Key Leakage**: Service roles, OAuth secrets, and AI provider API keys remain strictly confined to the server environment.
 - **Offline-First Developer Experience**: Embedded dev-stack spins up real PostgreSQL, GoTrue, and PostgREST in seconds for fully isolated testing.
