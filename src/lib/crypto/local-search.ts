@@ -42,37 +42,43 @@ export function invalidateCorpus() {
 async function buildCorpus(): Promise<CorpusItem[]> {
   // List every entry the caller can see in their own notebooks (RLS).
   const nbs = await api<{ data: Array<{ id: string; group_id: string | null }> }>('/api/notebooks?limit=100')
+  // Fetch notebooks concurrently — the serial loop billed every notebook's
+  // latency one after another, which is what made a cold corpus slow.
+  const perNotebook = await Promise.all(nbs.data.map((nb) => notebookItems(nb.id, nb.group_id)))
+  return perNotebook.flat()
+}
+
+/** Page through one notebook's entries and decrypt what this device can open. */
+async function notebookItems(notebookId: string, groupId: string | null): Promise<CorpusItem[]> {
   const items: CorpusItem[] = []
-  for (const nb of nbs.data) {
-    let page = 1
-    for (;;) {
-      const res = await api<{ data: Entry[]; pagination: { page: number; limit: number; total: number } }>(
-        `/api/notebooks/${nb.id}/entries?page=${page}&limit=100`,
-      )
-      for (const e of res.data) {
-        let title = e.title
-        let body = e.body
-        if (e.encrypted) {
-          try {
-            // own rows open via the author wrap; other members' shared rows
-            // via the group CEK — the resolver needs the notebook's group.
-            const opened = await openFromStorage(e, e.author_id, nb.group_id)
-            title = opened.title
-            body = opened.body
-          } catch {
-            continue // locked row — not searchable locally
-          }
+  let page = 1
+  for (;;) {
+    const res = await api<{ data: Entry[]; pagination: { page: number; limit: number; total: number } }>(
+      `/api/notebooks/${notebookId}/entries?page=${page}&limit=100`,
+    )
+    for (const e of res.data) {
+      let title = e.title
+      let body = e.body
+      if (e.encrypted) {
+        try {
+          // own rows open via the author wrap; other members' shared rows
+          // via the group CEK — the resolver needs the notebook's group.
+          const opened = await openFromStorage(e, e.author_id, groupId)
+          title = opened.title
+          body = opened.body
+        } catch {
+          continue // locked row — not searchable locally
         }
-        items.push({
-          entry: e,
-          title,
-          body,
-          haystack: `${title}\n${body}\n${(e.tags ?? []).join(' ')}`.toLowerCase(),
-        })
       }
-      if (page * res.pagination.limit >= res.pagination.total || res.data.length === 0) break
-      page += 1
+      items.push({
+        entry: e,
+        title,
+        body,
+        haystack: `${title}\n${body}\n${(e.tags ?? []).join(' ')}`.toLowerCase(),
+      })
     }
+    if (page * res.pagination.limit >= res.pagination.total || res.data.length === 0) break
+    page += 1
   }
   return items
 }
