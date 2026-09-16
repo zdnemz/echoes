@@ -1,14 +1,13 @@
 'use client'
 
 /**
- * Search — over the locally-decrypted corpus (E2EE) with the server search
- * as fallback for pre-encryption rows on locked vaults.
+ * Search — over the locally-decrypted corpus. The server never sees the
+ * words, so every hit is resolved on this device.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MagnifyingGlass, X } from '@phosphor-icons/react/dist/ssr'
-import { useNotebooks, useSearch } from '@/lib/api/hooks'
-import { useVaultStatus } from '@/lib/crypto/use-vault'
+import { useNotebooks } from '@/lib/api/hooks'
 import { searchCorpus, useSearchCorpus, type SearchHit } from '@/lib/crypto/local-search'
 import { EntryRow, EntryRowSkeleton } from './entry-row'
 import type { Entry } from '@/lib/api/types'
@@ -20,11 +19,7 @@ export function SearchView({ initialQuery, onNavigate }: { initialQuery: string;
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const notebooks = useNotebooks()
-  const vaultOpen = useVaultStatus()
   const corpus = useSearchCorpus()
-  // Server search only covers plaintext-era rows now; with the vault open
-  // the local corpus is the source of truth.
-  const serverResults = useSearch(submitted, !vaultOpen)
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -37,22 +32,19 @@ export function SearchView({ initialQuery, onNavigate }: { initialQuery: string;
 
   // Local hits: decrypted rows straight from the corpus.
   const localHits: SearchHit[] = useMemo(
-    () => (vaultOpen && corpus.items ? searchCorpus(corpus.items, submitted) : []),
-    [vaultOpen, corpus.items, submitted],
+    () => (corpus.items ? searchCorpus(corpus.items, submitted) : []),
+    [corpus.items, submitted],
   )
-  const serverList = useMemo(() => serverResults.data?.pages.flatMap((p) => p.data) ?? [], [serverResults.data])
 
   // Unified result rows for rendering — entries with previews.
-  const rows: Array<{ entry: Entry; preview?: { title: string; bodyPreview: string } }> = vaultOpen
-    ? localHits.map((h) => ({
-        entry: h.entry,
-        preview: { title: h.title, bodyPreview: h.body.slice(0, 150) },
-      }))
-    : serverList.map((e) => ({ entry: e }))
-  const total = vaultOpen ? localHits.length : (serverResults.data?.pages[0]?.pagination.total ?? 0)
+  const rows: Array<{ entry: Entry; preview?: { title: string; bodyPreview: string } }> = localHits.map((h) => ({
+    entry: h.entry,
+    preview: { title: h.title, bodyPreview: h.body.slice(0, 150) },
+  }))
+  const total = localHits.length
 
   const nbTitle = (id: string) => notebooks.data?.data.find((nb) => nb.id === id)?.title ?? null
-  const loading = vaultOpen ? !corpus.ready && submitted.length > 0 : serverResults.isLoading
+  const loading = !corpus.ready && submitted.length > 0
 
   return (
     <div className="mx-4 lg:mx-0">
@@ -92,7 +84,7 @@ export function SearchView({ initialQuery, onNavigate }: { initialQuery: string;
           <p className="border-b border-line pb-3 font-mono text-[10.5px] text-ink-faint">
             {total === 0
               ? `nothing matches “${submitted}”`
-              : `${total} ${total === 1 ? 'entry' : 'entries'} · your own words only${vaultOpen ? ' · decrypted on this device' : ''}`}
+              : `${total} ${total === 1 ? 'entry' : 'entries'} · your own words only`}
           </p>
         )}
 

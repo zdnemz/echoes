@@ -1423,6 +1423,20 @@ export function GroupsView({
   const isOwner = group?.my_role === 'owner'
   const list = groups.data ?? []
 
+  // A newer device of mine may still be missing this group's key (it was
+  // sealed before that device existed). If I hold the key here, hand it over
+  // silently — one background write, no prompt, no rotation.
+  const coveredFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!selectedGroupId || !user || coveredFor.current === selectedGroupId) return
+    coveredFor.current = selectedGroupId
+    void import('@/lib/crypto/group-keys')
+      .then(({ ensureDeviceCoverage }) => ensureDeviceCoverage(selectedGroupId, user.id))
+      .catch(() => {
+        coveredFor.current = null // retry on the next visit
+      })
+  }, [selectedGroupId, user])
+
   // Sharing is owner-only, so it must not be an arrow-key destination for
   // members.
   const sectionTabs = (isOwner ? ['journal', 'members', 'sharing'] : ['journal', 'members']) as Array<

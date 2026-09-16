@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from 'react'
 import { previewFromStorage } from './entry-codec'
-import { isUnlocked, onVaultChange } from './vault'
+import { isUnlocked, onVaultChange, whenReady } from './vault'
 import type { Entry } from '@/lib/api/types'
 
 export type EntryPreview = { title: string; bodyPreview: string }
@@ -24,7 +24,14 @@ export function useDecryptedPreviews(
   const [previews, setPreviews] = useState<Record<string, EntryPreview | null>>({})
   const [unlocked, setUnlocked] = useState(isUnlocked())
 
-  useEffect(() => onVaultChange(() => setUnlocked(isUnlocked())), [])
+  useEffect(() => {
+    const off = onVaultChange(() => setUnlocked(isUnlocked()))
+    // Keys are generated on first load, so the first `isUnlocked()` read is
+    // usually false — without this the list would render every row as
+    // "written on another device" and never recover.
+    void whenReady().then(() => setUnlocked(isUnlocked()))
+    return off
+  }, [])
 
   useEffect(() => {
     if (!unlocked || entries.length === 0) return

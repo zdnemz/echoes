@@ -40,8 +40,8 @@ import { MOODS, MOOD_META, MoodGlyph } from '@/components/mood/glyphs'
 import { useSession } from '@/lib/auth/session'
 import { useCreateEntry, useDeleteEntry, useEntry, useNotebooks, useUpdateEntry } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
-import { useVaultStatus } from '@/lib/crypto/use-vault'
 import { sealForStorage, openFromStorage, rewrapForSharing, type KeyWrapInput } from '@/lib/crypto/entry-codec'
+import { whenReady } from '@/lib/crypto/vault'
 import { useRovingSelection } from '@/hooks/use-roving-selection'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { getDefaultMood } from '@/lib/prefs'
@@ -186,7 +186,6 @@ function TagsInput({
 
 export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: View) => void }) {
   const { user } = useSession()
-  const vaultOpen = useVaultStatus()
   const notebooks = useNotebooks()
   const entryQuery = useEntry(mode.compose ? null : mode.entryId)
   const entry = entryQuery.data ?? null
@@ -225,7 +224,11 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
   useEffect(() => {
     if (!entry || canEdit || !entry.encrypted) return
     let alive = true
-    void openFromStorage(entry, user?.id ?? '', entryGroupId)
+    // Keys are generated on first load, so decryption must WAIT for them —
+    // reading before they exist would permanently show "written elsewhere"
+    // for an entry this device can in fact open.
+    void whenReady()
+      .then(() => (alive ? openFromStorage(entry, user?.id ?? '', entryGroupId) : null))
       .then((r) => alive && setReading(r))
       .catch(() => alive && setReading(null))
     return () => {
@@ -239,7 +242,8 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
     // Encrypted entries open with the vault before the form fills — this is
     // the one async hop in hydration; failures keep the entry readable-only.
     if (entry.encrypted) {
-      void openFromStorage(entry, user?.id ?? '', entryGroupId)
+      void whenReady()
+        .then(() => openFromStorage(entry, user?.id ?? '', entryGroupId))
         .then(({ title: t, body: b }) => {
           setTitle(t)
           setBody(b)
@@ -249,8 +253,8 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           setHydrated(true)
         })
         .catch(() => {
-          // Locked (group key missing / vault rotation in flight): show the
-          // cipher fields but never save them back blindly.
+          // Genuinely unopenable here: written on another device, or the
+          // group key hasn't reached this device yet. Never save over it.
           setTitle('')
           setBody('')
           setSealedError(true)
@@ -297,16 +301,23 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
     }
     setSaving(true)
     try {
-      // Seal under the vault when it's open (all new saves encrypt).
-      // Locked vault → legacy plaintext save so nothing is ever lost.
-      const sealed =
-        vaultOpen && !sealedError ? await sealForStorage(t, body, entryGroupId, groupLinked ? isShared : false) : null
-      // No group CEK yet (keys not distributed / none published): the entry
-      // saves under the author wrap alone, so it must not be flagged shared —
-      // members would see a row they cannot open.
+      // Every save is sealed on this device before it leaves the browser.
+      // Keys are generated on first load, so wait for them rather than
+      // falling through to a plaintext write.
+      await whenReady()
+      // Shared save with no group key yet: distribute it now (covers a
+      // link-time distribution that ran before this device registered).
+      // Still nothing afterwards → save for me alone; the group catches up
+      // on its own the next time any key-holding device is around.
+      const wantsGroupShare = groupLinked ? isShared : false
+      if (entryGroupId && wantsGroupShare && !sealedError) {
+        const { ensureShareableCek } = await import('@/lib/crypto/vault')
+        await ensureShareableCek(entryGroupId, user?.id ?? '').catch(() => null)
+      }
+      const sealed = sealedError ? null : await sealForStorage(t, body, entryGroupId, wantsGroupShare)
       const authorOnly = sealed?.shareState === 'author-only'
       if (authorOnly) {
-        toast('Saved to you only — this group has no encryption key yet, so it is not shared yet.')
+        toast("Saved — it'll appear for the group as soon as everyone's connected.")
       }
       if (mode.compose) {
         const created = await create.mutateAsync({
@@ -352,8 +363,14 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
         setSavedAt(Date.now())
       }
     } catch (err) {
-      if (isUnconfigured(err)) toast.error("The data layer isn't connected on this deployment.")
-      else toast.error(err instanceof Error ? err.message : 'Save failed.')
+      if (isUnconfigured(err)) {
+        toast.error("The data layer isn't connected on this deployment.")
+      } else if (err instanceof Error && /prepare this device|connection/i.test(err.message)) {
+        // Key setup needs the network once per device — say that plainly.
+        toast.error("Couldn't reach the server — your words are still here, try saving again.")
+      } else {
+        toast.error('Save failed — your words are still here, try again.')
+      }
     } finally {
       setSaving(false)
     }
@@ -370,7 +387,6 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
     create,
     update,
     onNavigate,
-    vaultOpen,
     sealedError,
     user,
   ])
@@ -476,13 +492,13 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           </button>
           <p className="mt-16 text-center text-[13px] text-ink-faint">
             {reading === null && entry.encrypted
-              ? 'This entry is sealed — its key is not available in this tab.'
+              ? 'This entry was written on another device — open it there to read it.'
               : 'Opening…'}
           </p>
         </div>
       )
     }
-    const displayTitle = entry.encrypted ? (reading?.title ?? 'Sealed entry') : entry.title
+    const displayTitle = entry.encrypted ? (reading?.title ?? 'Entry from another device') : entry.title
     const displayBody = entry.encrypted ? (reading?.body ?? '') : entry.body
     return (
       <article className="mx-4 max-w-[70ch] lg:mx-0">

@@ -1,103 +1,70 @@
 'use client'
 
-/**
- * Group key distribution & rotation (owner side).
- *
- * distributeOrRotate(groupId):
- *   1. generate a fresh CEK
- *   2. fetch members + their published public keys
- *   3. seal the CEK per member → PUT /groups/:id/key (one generation)
- *   4. re-wrap every existing group-scope entry key under the new CEK
- *      (opens each with the OLD CEK the owner still holds) → /groups/:id/rotate
- *
- * After a member removal this is exactly the rotation the threat model
- * demands: the removed member's sealed box is deleted server-side and the
- * new CEK never reaches them, while existing entries re-key without
- * touching bodies or needing authors online.
- */
-
 import { generateDataKey, openSealedKey, sealKeyFor, unwrapKey, wrapKey } from './envelope'
-import { getVault, forgetGroupCek, getGroupCek } from './vault'
+import { whenReady, forgetGroupCek, getGroupCek } from './vault'
 import { api, json } from '@/lib/api/client'
-import type { GroupMember, Entry } from '@/lib/api/types'
+import type { Entry } from '@/lib/api/types'
 
-interface MemberWithKey extends GroupMember {
-  public_key?: string | null
+interface DeviceKeyInfo {
+  user_id: string
+  device_id: string
+  public_key: string
 }
 
-/** Distribute a fresh CEK and re-wrap existing group entry keys. */
 export async function distributeOrRotate(groupId: string, me: string): Promise<void> {
-  const vault = getVault()
-  if (!vault) throw new Error('vault locked')
+  // Keys are generated on first load, so wait for them — throwing here used
+  // to surface as a "key not set" error when creating the first entry of a
+  // fresh group before the background provisioning had finished.
+  const vault = await whenReady()
+  if (!vault) throw new Error("couldn't prepare this device — check your connection and try again")
 
-  // Current CEK (may not exist yet on first link) — needed to re-wrap.
   let oldCek: CryptoKey | null = null
   try {
-    const oldWrap = await api<{ sealed_box: string }>(`/api/groups/${groupId}/key`)
-    oldCek = await openSealedKey(oldWrap.sealed_box, vault.identityPrivate)
+    const res = await api<{ wraps: Array<{ device_id: string; generation: number; sealed_box: string }> }>(
+      `/api/groups/${groupId}/key`,
+    )
+    const mine = res.wraps.find((w) => w.device_id === vault.deviceId)
+    if (mine) oldCek = await openSealedKey(mine.sealed_box, vault.identityPrivate)
   } catch {
-    oldCek = null // first distribution — nothing to re-wrap
+    oldCek = null
   }
 
-  const members = (await api<GroupMember[]>(`/api/groups/${groupId}/members`)) as MemberWithKey[]
-  // Public keys ride on profiles; the members listing doesn't embed them —
-  // fetch the group detail which does (key material is public by design).
-  let keyed = members.filter((m) => (m as MemberWithKey).public_key)
-  if (keyed.length === 0) {
-    // fall back: member profiles publish keys via /me/keys only for self.
-    // Group owners list members with display names; keys must come from the
-    // profiles table — ask the server for the co-member key map.
-    try {
-      const map = await api<{ keys: Record<string, string> }>(`/api/groups/${groupId}/member-keys`)
-      keyed = members.filter((m) => map.keys[m.user_id]).map((m) => ({ ...m, public_key: map.keys[m.user_id] }))
-    } catch {
-      keyed = []
-    }
-  }
-  if (keyed.length === 0) throw new Error('no members have published encryption keys yet')
+  const devices = await api<DeviceKeyInfo[]>(`/api/groups/${groupId}/devices`)
+  if (devices.length === 0) throw new Error('no member devices registered yet')
 
   const newCek = await generateDataKey()
-  // Generation is a small counter, not a timestamp — read the current one
-  // and bump (0 → first distribution).
   let generation = 1
   try {
-    const current = await api<{ generation: number }>(`/api/groups/${groupId}/key`)
-    generation = (current.generation ?? 0) + 1
+    const current = await api<{ wraps: Array<{ generation: number }> }>(`/api/groups/${groupId}/key`)
+    if (current.wraps.length > 0) generation = Math.max(...current.wraps.map((w) => w.generation)) + 1
   } catch {
-    generation = 1 // no existing distribution
+    generation = 1
   }
 
   const wraps = await Promise.all(
-    keyed.map(async (m) => ({
-      user_id: m.user_id,
-      sealed_box: await sealKeyFor(m.public_key as string, newCek, vault.identityPrivate, vault.identityPublic),
+    devices.map(async (d) => ({
+      device_id: d.device_id,
+      sealed_box: await sealKeyFor(d.public_key, newCek, vault.identityPrivate, vault.identityPublic),
     })),
   )
 
-  // Store the new generation (delete-then-insert server-side).
   await api(`/api/groups/${groupId}/key`, {
     method: 'PUT',
-    ...json({ generation, wraps }),
+    ...json({ generation, replace: true, wraps }),
   })
 
-  // Re-key existing entries under the new CEK.
-  //   - rows WITH a group wrap: re-wrap that key (rotation)
-  //   - the owner's OWN shared rows WITHOUT one (pre-distribution legacy):
-  //     open the author wrap with the owner's DEK and add the group wrap
   const entries = await api<{ data: Entry[] }>(`/api/groups/${groupId}/entries?limit=100&page=1`)
   const rewraps: Array<{ entry_id: string; wrapped_key: string }> = []
   const newGroupWraps: Array<{ entry_id: string; scope: 'group'; wrapped_key: string }> = []
   for (const e of entries.data) {
     if (!e.encrypted) continue
-    const wraps = e.key_wraps ?? []
-    const gw = wraps.find((w) => w.scope === 'group')
+    const kw = e.key_wraps ?? []
+    const gw = kw.find((w) => w.scope === 'group')
     if (gw && oldCek) {
       const contentKey = await unwrapKey(gw.wrapped_key, oldCek)
       rewraps.push({ entry_id: e.id, wrapped_key: await wrapKey(contentKey, newCek) })
     } else if (!gw) {
-      // Owner-authored shared rows can be group-wrapped directly; entries by
-      // other authors get their group wrap when those authors next save.
-      const aw = wraps.find((w) => w.scope === 'author')
+      const aw = kw.find((w) => w.scope === 'author')
       if (aw && e.author_id === me) {
         const contentKey = await unwrapKey(aw.wrapped_key, vault.dek)
         newGroupWraps.push({ entry_id: e.id, scope: 'group', wrapped_key: await wrapKey(contentKey, newCek) })
@@ -108,7 +75,6 @@ export async function distributeOrRotate(groupId: string, me: string): Promise<v
     await api(`/api/groups/${groupId}/rotate`, { method: 'POST', ...json({ rewraps }) })
   }
   if (newGroupWraps.length > 0) {
-    // The rotate endpoint upserts scope='group' rows — same payload shape.
     await api(`/api/groups/${groupId}/rotate`, {
       method: 'POST',
       ...json({ rewraps: newGroupWraps.map((w) => ({ entry_id: w.entry_id, wrapped_key: w.wrapped_key })) }),
@@ -116,6 +82,93 @@ export async function distributeOrRotate(groupId: string, me: string): Promise<v
   }
 
   forgetGroupCek(groupId)
-  // warm the owner's own cache with the new CEK
   await getGroupCek(groupId).catch(() => null)
+}
+
+/**
+ * Last-resort distribution at save time: the link-time distribution may have
+ * run before this device registered its key (or failed on a flaky network),
+ * leaving a group with no key at all. If NOBODY has a box yet, distribute
+ * now so the first shared entry just works. If anyone already has a box,
+ * hands off — rotating here would orphan their entries; their device (or
+ * the owner's next visit) brings the missing boxes instead.
+ *
+ * Returns a usable CEK, or null when there is nothing safe to do.
+ */
+export async function tryFirstDistribution(groupId: string, me: string): Promise<CryptoKey | null> {
+  const vault = await whenReady()
+  if (!vault) return null
+  try {
+    const devices = await api<Array<{ user_id: string; device_id: string; public_key: string; has_wrap: boolean }>>(
+      `/api/groups/${groupId}/devices`,
+    )
+    if (devices.some((d) => d.has_wrap)) return null
+    if (devices.length === 0) return null
+    await distributeOrRotate(groupId, me)
+    return await getGroupCek(groupId).catch(() => null)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The one call a save path needs: return this group's CEK, distributing it
+ * first when the group genuinely has no key yet. Cheap after the first load
+ * (the CEK is cached in memory), so shared saves can call it unconditionally.
+ */
+export async function ensureShareableCek(groupId: string, me: string): Promise<CryptoKey | null> {
+  const existing = await getGroupCek(groupId).catch(() => null)
+  if (existing) return existing
+  return tryFirstDistribution(groupId, me)
+}
+
+/**
+ * Bring this device into a group whose key already exists — silently.
+ *
+ * A device holding the CEK seals it for every one of MY other registered
+ * devices that has no box yet (a fresh browser profile, a new phone). No new
+ * CEK and no rotation, so the group's history stays intact and no member
+ * loses anything; the new device simply catches up.
+ *
+ * Runs from a device that ALREADY has the key: a brand-new device cannot open
+ * any existing box (its identity key is new), so it can never seal for
+ * itself — the gift has to come from a device that can. This is the one
+ * honest limit of the no-password design: the new device reads the group once
+ * an older device of the same account is online again.
+ */
+export async function ensureDeviceCoverage(groupId: string, me: string): Promise<void> {
+  const vault = await whenReady()
+  if (!vault) return
+
+  let devices: Array<{ user_id: string; device_id: string; public_key: string; has_wrap: boolean }>
+  let cek: CryptoKey | null = null
+  let generation = 1
+  try {
+    devices = await api<Array<{ user_id: string; device_id: string; public_key: string; has_wrap: boolean }>>(
+      `/api/groups/${groupId}/devices`,
+    )
+    cek = await getGroupCek(groupId)
+    if (!cek) return // I hold no key for this group — nothing to share
+    const res = await api<{ wraps: Array<{ device_id: string; generation: number; sealed_box: string }> }>(
+      `/api/groups/${groupId}/key`,
+    )
+    if (res.wraps.length > 0) generation = Math.max(...res.wraps.map((w) => w.generation))
+  } catch {
+    return // not a member / key never distributed — nothing to backfill
+  }
+
+  const missing = devices.filter((d) => !d.has_wrap && d.user_id === me)
+  if (missing.length === 0) return
+
+  const wraps = await Promise.all(
+    missing.map(async (d) => ({
+      device_id: d.device_id,
+      sealed_box: await sealKeyFor(d.public_key, cek!, vault.identityPrivate, vault.identityPublic),
+    })),
+  )
+
+  await api(`/api/groups/${groupId}/key`, {
+    method: 'PUT',
+    ...json({ generation, replace: false, wraps }),
+  })
 }

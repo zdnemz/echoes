@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api/client'
 import { openFromStorage } from './entry-codec'
-import { isUnlocked, onVaultChange } from './vault'
+import { isUnlocked, onVaultChange, whenReady } from './vault'
 import type { Entry } from '@/lib/api/types'
 
 export interface SearchHit {
@@ -114,6 +114,11 @@ export function useSearchCorpus(): { items: CorpusItem[] | null; ready: boolean 
         corpusCache = null
         sync()
       } else if (!corpusCache) rebuild()
+    })
+    // First load generates the keys asynchronously, so the corpus build has
+    // to be retried once they exist — otherwise search stays empty forever.
+    void whenReady().then(() => {
+      if (isUnlocked() && !corpusCache) rebuild()
     })
     return off
   }, [])

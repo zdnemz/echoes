@@ -12,7 +12,7 @@
  */
 
 import { unwrapKey } from './envelope'
-import { getGroupCek } from './vault'
+import { forgetGroupCek, getGroupCek } from './vault'
 import type { UnlockedVault } from './vault'
 import type { Entry } from '@/lib/api/types'
 
@@ -57,7 +57,18 @@ export async function resolveEntryKey(
       try {
         return { key: await unwrapKey(groupWrap.wrapped_key, cek), locked: false }
       } catch {
-        // CEK generation mismatch — rotation in flight.
+        // The cached CEK may be stale (another device rotated while this tab
+        // was open). Drop it, fetch the current generation once, and retry —
+        // without this the entry stays unreadable until a full reload.
+        forgetGroupCek(groupId)
+        const fresh = await getGroupCek(groupId).catch(() => null)
+        if (fresh) {
+          try {
+            return { key: await unwrapKey(groupWrap.wrapped_key, fresh), locked: false }
+          } catch {
+            /* genuinely unreadable here — locked UI below */
+          }
+        }
       }
     }
   }

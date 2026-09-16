@@ -215,42 +215,22 @@ export const reflectChat = (input: {
 
 // ----------------------------------------------------------------- encryption (E2EE)
 
-export interface KeyMaterial {
-  salt: string | null
-  iterations: number | null
-  wrapped_dek: string | null
-  public_key: string | null
-  wrapped_private_key: string | null
-}
-
-export const getMyKeys = () => api<KeyMaterial>('/api/me/keys')
-
-export const publishKeys = (input: {
-  salt: string
-  iterations: number
-  wrapped_dek: string
+export interface Device {
+  id: string
+  user_id: string
   public_key: string
-  wrapped_private_key: string
-}) => api<KeyMaterial>('/api/me/keys', { method: 'PUT', ...json(input) })
-
-export interface GroupKeyWrap {
-  group_id: string
-  generation: number
-  sealed_box: string
+  label: string | null
   created_at: string
 }
 
-export const getMyGroupKeyWrap = (groupId: string) => api<GroupKeyWrap>(`/api/groups/${groupId}/key`)
+export const registerDevice = (input: { public_key: string; label?: string }) =>
+  api<Device>('/api/me/devices', { method: 'POST', ...json(input) })
 
-export const distributeGroupKeys = (
-  groupId: string,
-  input: { generation: number; wraps: Array<{ user_id: string; sealed_box: string }> },
-) => api<{ group_id: string; generation: number }>(`/api/groups/${groupId}/key`, { method: 'PUT', ...json(input) })
+export const listDevices = () => api<Device[]>('/api/me/devices')
 
-export const rotateGroupEntryKeys = (
-  groupId: string,
-  input: { rewraps: Array<{ entry_id: string; wrapped_key: string }> },
-) => api<{ rewrapped: number }>(`/api/groups/${groupId}/rotate`, { method: 'POST', ...json(input) })
+export interface GroupKeyWraps {
+  wraps: Array<{ device_id: string; generation: number; sealed_box: string }>
+}
 
 export const encryptMigrate = (input: { entries: Array<{ id: string; title_cipher: string; body_cipher: string }> }) =>
   api<{ migrated: number; remaining: number }>('/api/me/encrypt-migrate', { method: 'POST', ...json(input) })

@@ -1,23 +1,7 @@
 'use client'
 
-/**
- * useVault — React binding over the key vault.
- *
- * Components ask two questions: "is the vault unlocked?" and "give me the
- * key that decrypts this entry". The hook re-renders on lock/unlock
- * transitions; key resolution goes through resolveEntryKey.
- */
-
 import { useSyncExternalStore } from 'react'
-import {
-  onVaultChange,
-  getVault,
-  isUnlocked,
-  lock,
-  unlock,
-  tryAutoUnlock,
-  type UnlockedVault,
-} from '@/lib/crypto/vault'
+import { onVaultChange, getVault, isUnlocked, lock, ensureKeys, type UnlockedVault } from '@/lib/crypto/vault'
 
 const SERVER_UNLOCKED = false
 
@@ -38,4 +22,4 @@ export function useVault(): UnlockedVault | null {
   return getVault()
 }
 
-export { lock, unlock, tryAutoUnlock, type UnlockedVault }
+export { lock, ensureKeys, type UnlockedVault }

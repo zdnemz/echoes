@@ -1,54 +1,14 @@
 'use client'
 
-/**
- * The key vault — the client half of E2EE.
- *
- * Lifecycle:
- *   signup → provision(): new DEK + identity keys, sealed under the chosen
- *            password (PBKDF2 600k in-browser), published to the profile.
- *   login   → unlock(): fetch the stored blobs, re-derive the KEK from the
- *            password, unwrap the DEK + identity private key, keep both in
- *            module memory for the session. The password is never stored.
- *   logout  → lock(): drop every key from memory.
- *
- * The unlocked DEK lives in a closure variable — not localStorage, not a
- * cookie, not React state — so an XSS-free page holds it only while the
- * session runs and any full reload requires a fresh unlock. Auto-unlock
- * after reload reuses the stashed password only within the same tab session
- * (sessionStorage, cleared on tab close) — a deliberate usability trade:
- * the password lives at most one tab-lifetime in the browser.
- */
-
-import {
-  deriveKekFromPassword,
-  exportPrivateKey,
-  exportPublicKey,
-  generateDataKey,
-  generateIdentityKeypair,
-  importPrivateKey,
-  openSealedKey,
-  openText,
-  randomSalt,
-  sealText,
-  unwrapKey,
-  wrapKey,
-  PBKDF2_ITERATIONS,
-} from './envelope'
+import { exportPublicKey, generateDataKey, generateIdentityKeypair, openSealedKey } from './envelope'
+import { loadDeviceKeys, saveDeviceKeys } from './device-store'
 import { api, json } from '@/lib/api/client'
-
-// ---------------------------------------------------------------- storage keys
-
-const UNLOCK_STASH = 'echoes.keys.stash' // sessionStorage — password for this tab
-const UNLOCKED_FLAG = 'echoes.keys.unlocked' // localStorage — "was unlocked this session"
-
-// ---------------------------------------------------------------- vault state
 
 export interface UnlockedVault {
   dek: CryptoKey
-  /** ECDH identity private key (unwrapped). */
   identityPrivate: CryptoKey
-  /** ECDH identity public key (SPKI base64) — matches the profile. */
   identityPublic: string
+  deviceId: string
 }
 
 let vault: UnlockedVault | null = null
@@ -63,7 +23,6 @@ export function onVaultChange(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
-/** Raw access for crypto operations; null when locked. */
 export function getVault(): UnlockedVault | null {
   return vault
 }
@@ -72,206 +31,102 @@ export function isUnlocked(): boolean {
   return vault !== null
 }
 
-function setUnlockedFlag(on: boolean) {
-  if (typeof window === 'undefined') return
-  try {
-    if (on) window.localStorage.setItem(UNLOCKED_FLAG, '1')
-    else window.localStorage.removeItem(UNLOCKED_FLAG)
-  } catch {
-    /* storage blocked — unlock state just won't persist */
-  }
-}
-
-export function wasUnlockedBeforeReload(): boolean {
-  try {
-    return window.localStorage.getItem(UNLOCKED_FLAG) === '1'
-  } catch {
-    return false
-  }
-}
-
-// ---------------------------------------------------------------- server types
-
-interface KeyMaterialResponse {
-  salt: string | null
-  iterations: number | null
-  wrapped_dek: string | null
-  public_key: string | null
-  wrapped_private_key: string | null
-}
-
-const fetchKeys = () => api<KeyMaterialResponse>('/api/me/keys')
-
-// ---------------------------------------------------------------- provisioning
-
 /**
- * Create + publish key material for a fresh account. Returns the unlock
- * password's derived artifacts already cached — the caller just signed up,
- * so the vault opens immediately without a second derivation.
+ * Key setup is automatic and silent: the first time this device runs it
+ * generates a DEK + ECDH identity pair, keeps them in IndexedDB and
+ * registers only the public key with the server. Nothing here is derived
+ * from the password, so signing in on a new device "just works" — and a
+ * password reset can never destroy existing entries.
+ *
+ * The in-flight promise is kept so concurrent callers (session restore,
+ * login, first save) share one run instead of racing to register twice.
  */
-export async function provision(password: string): Promise<void> {
+let starting: Promise<void> | null = null
+
+export function ensureKeys(): Promise<void> {
+  if (vault) return Promise.resolve()
+  if (!starting) {
+    starting = startKeys().finally(() => {
+      starting = null
+    })
+  }
+  return starting
+}
+
+async function startKeys(): Promise<void> {
+  const stored = await loadDeviceKeys()
+  if (stored) {
+    vault = {
+      dek: stored.dek,
+      identityPrivate: stored.identityPrivate,
+      identityPublic: stored.identityPublic,
+      deviceId: stored.deviceId,
+    }
+    emit()
+    return
+  }
   const dek = await generateDataKey()
-  const salt = randomSalt()
-  const kek = await deriveKekFromPassword(password, salt)
-  const wrappedDek = await wrapKey(dek, kek)
-
   const identity = await generateIdentityKeypair()
-  const identityPrivatePem = await exportPrivateKey(identity.privateKey)
   const identityPublic = await exportPublicKey(identity.publicKey)
-  // Identity private key (pkcs8 PEM) sealed as text under the DEK: opening
-  // it proves the DEK; ECDH keys cannot be raw-wrapped like AES keys.
-  const wrappedIdentityPrivate = await sealText(identityPrivatePem, dek)
-
-  await api('/api/me/keys', {
-    method: 'PUT',
-    ...json({
-      salt,
-      iterations: PBKDF2_ITERATIONS,
-      wrapped_dek: wrappedDek,
-      public_key: identityPublic,
-      wrapped_private_key: wrappedIdentityPrivate,
-    }),
+  const res = await api<{ id: string }>('/api/me/devices', {
+    method: 'POST',
+    ...json({ public_key: identityPublic }),
   })
-
+  await saveDeviceKeys({
+    deviceId: res.id,
+    dek,
+    identityPrivate: identity.privateKey,
+    identityPublic,
+  })
   vault = {
     dek,
-    identityPrivate: await importPrivateKey(identityPrivatePem),
+    identityPrivate: identity.privateKey,
     identityPublic,
+    deviceId: res.id,
   }
-  stashPassword(password)
-  setUnlockedFlag(true)
-  emit()
-}
-
-// ---------------------------------------------------------------- unlocking
-
-function stashPassword(password: string) {
-  if (typeof window === 'undefined') return // tests / CLI contexts
-  try {
-    window.sessionStorage.setItem(UNLOCK_STASH, password)
-  } catch {
-    /* private mode — no auto-unlock after reload, user re-enters */
-  }
-}
-
-function popStashedPassword(): string | null {
-  try {
-    return window.sessionStorage.getItem(UNLOCK_STASH)
-  } catch {
-    return null
-  }
-}
-
-function clearStash() {
-  try {
-    window.sessionStorage.removeItem(UNLOCK_STASH)
-  } catch {
-    /* nothing stashed */
-  }
-}
-
-/**
- * Unlock with an explicit password (fresh login or the unlock prompt).
- * Throws on a wrong password (GCM auth failure inside unwrapKey).
- */
-export async function unlock(password: string): Promise<void> {
-  const keys = await fetchKeys()
-  if (!keys.salt || !keys.wrapped_dek || !keys.public_key || !keys.wrapped_private_key) {
-    throw new Error('No key material on this account yet')
-  }
-  const iterations = keys.iterations ?? PBKDF2_ITERATIONS
-  const kek = await deriveKekFromPassword(password, keys.salt, iterations)
-  const dek = await unwrapKey(keys.wrapped_dek, kek)
-  const identityPrivate = await importPrivateKey(await openText(keys.wrapped_private_key, dek))
-  vault = { dek, identityPrivate, identityPublic: keys.public_key }
-  stashPassword(password)
-  setUnlockedFlag(true)
   emit()
 }
 
 /**
- * Best-effort auto-unlock after a page reload (same tab): the password was
- * stashed in sessionStorage at unlock time. Returns false when no stash
- * exists — the UI then shows the unlock prompt.
+ * Await this before opening or sealing anything. Key generation is async, so
+ * a component that renders before it finishes would otherwise read a locked
+ * vault and could show — or worse, overwrite — an entry it simply hasn't
+ * had time to decrypt yet.
  */
-export async function tryAutoUnlock(): Promise<boolean> {
-  if (vault) return true
-  const pw = popStashedPassword()
-  if (!pw || !wasUnlockedBeforeReload()) return false
-  try {
-    await unlock(pw)
-    return true
-  } catch {
-    clearStash()
-    return false
-  }
+export async function whenReady(): Promise<UnlockedVault | null> {
+  await ensureKeys().catch(() => null)
+  return vault
 }
-
-// ---------------------------------------------------------------- locking
 
 export function lock(): void {
   vault = null
-  clearStash()
-  setUnlockedFlag(false)
   emit()
 }
 
-// ---------------------------------------------------------------- re-wrap
-
-/**
- * Password change: re-derive the KEK from the new password, re-wrap the
- * CURRENT DEK under it, and republish the material. The DEK itself never
- * changes, so every entry stays decryptable. The caller changes the auth
- * password server-side only after this succeeds.
- */
-export async function rewrapPassword(newPassword: string): Promise<void> {
-  if (!vault) throw new Error('vault locked')
-  const keys = await fetchKeys()
-  if (!keys.salt) throw new Error('no key material to re-wrap')
-
-  const salt = randomSalt()
-  const newKek = await deriveKekFromPassword(newPassword, salt)
-  const newWrappedDek = await wrapKey(vault.dek, newKek)
-
-  await api('/api/me/keys', {
-    method: 'PUT',
-    ...json({
-      salt,
-      iterations: PBKDF2_ITERATIONS,
-      wrapped_dek: newWrappedDek,
-      public_key: vault.identityPublic,
-      wrapped_private_key: keys.wrapped_private_key as string,
-      previous_wrapped_dek: keys.wrapped_dek as string,
-    }),
-  })
-  stashPassword(newPassword)
-}
-
-// ---------------------------------------------------------------- group CEKs
-
 const groupCeks = new Map<string, { key: CryptoKey; generation: number }>()
 
-/**
- * Get the group CEK for a linked notebook: fetch my sealed box, open it with
- * my identity key, cache per generation. Returns null when no box exists
- * yet (the owner hasn't distributed) — the caller treats entries as locked.
- */
 export async function getGroupCek(groupId: string): Promise<CryptoKey | null> {
   const cached = groupCeks.get(groupId)
   if (cached) return cached.key
+  if (!vault) return null
   try {
-    const wrap = await api<{ group_id: string; generation: number; sealed_box: string }>(`/api/groups/${groupId}/key`)
-    const cek = await openSealedKey(wrap.sealed_box, vault!.identityPrivate)
-    groupCeks.set(groupId, { key: cek, generation: wrap.generation })
+    const res = await api<{ wraps: Array<{ device_id: string; generation: number; sealed_box: string }> }>(
+      `/api/groups/${groupId}/key`,
+    )
+    const mine = res.wraps.find((w) => w.device_id === vault!.deviceId)
+    if (!mine) return null
+    const cek = await openSealedKey(mine.sealed_box, vault.identityPrivate)
+    groupCeks.set(groupId, { key: cek, generation: mine.generation })
     return cek
   } catch (err) {
     const status = (err as { status?: number }).status
-    if (status === 404) return null // not distributed yet
+    if (status === 404) return null
     throw err
   }
 }
 
-/** Drop cached CEKs (after rotation or when leaving a group). */
 export function forgetGroupCek(groupId: string) {
   groupCeks.delete(groupId)
 }
+
+export { distributeOrRotate, ensureDeviceCoverage, tryFirstDistribution, ensureShareableCek } from './group-keys'
