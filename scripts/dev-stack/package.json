@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "description": "Local Supabase-compatible stack (Postgres + PostgREST + GoTrue + gateway) for running Echoes without cloud credentials. See scripts/dev-stack/README.md.",
   "dependencies": {
-    "@embedded-postgres/linux-x64": "17.10.0-beta.17",
     "pg": "8.13.1"
   }
 }

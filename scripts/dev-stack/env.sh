@@ -9,8 +9,6 @@ ROOT_DIR="$(cd "$STACK_DIR/../.." && pwd)"
 # --- directories ---------------------------------------------------------------
 export STACK_TMP="$STACK_DIR/tmp"
 export STACK_LOGS="$STACK_DIR/logs"
-export STACK_BIN="$STACK_DIR/bin"
-export STACK_PGDATA="$STACK_DIR/pgdata"
 mkdir -p "$STACK_TMP" "$STACK_LOGS"
 
 # --- ports ---------------------------------------------------------------------
@@ -34,8 +32,6 @@ if [ ! -f "$STACK_TMP/.pgpw" ]; then
 fi
 STACK_PG_PW="$(tr -d '\n' < "$STACK_TMP/.pgpw")"
 export STACK_PG_PW
-export STACK_PG_BIN="$STACK_DIR/node_modules/@embedded-postgres/linux-x64/native/bin"
-export STACK_PG_LIB="$STACK_DIR/node_modules/@embedded-postgres/linux-x64/native/lib"
 export PGDATABASE=postgres
 export PGUSER=postgres
 export PGHOST=127.0.0.1

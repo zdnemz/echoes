@@ -1,19 +1,74 @@
 #!/usr/bin/env bash
-# Start the full Echoes local dev stack:
-#   Postgres (embedded, 5440) -> GoTrue auth (5999) -> schema bootstrap
-#   -> PostgREST (5998) -> gateway (54321, the SUPABASE_URL)
+# Start the full Echoes local dev stack in Docker:
+#   Postgres 17 -> GoTrue auth -> schema bootstrap -> PostgREST
+#   -> gateway (54321, the SUPABASE_URL)
 # and wire the stack into the app's .env (managed block, idempotent).
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 
-echo "── Echoes dev stack ─────────────────────────────────────────────"
-bash "$STACK_DIR/scripts/start-pg.sh"
-bash "$STACK_DIR/scripts/ensure-binaries.sh"
-bash "$STACK_DIR/scripts/start-gotrue.sh"
-node "$STACK_DIR/scripts/apply-schema.mjs"
-bash "$STACK_DIR/scripts/start-postgrest.sh"
+COMPOSE=(docker compose -f "$STACK_DIR/docker-compose.yml" --project-directory "$STACK_DIR")
 
-# --- gateway (bun) ---------------------------------------------------------------
+echo "── Echoes dev stack (docker) ────────────────────────────────────"
+
+# --- postgres ------------------------------------------------------------------
+"${COMPOSE[@]}" up -d db
+echo "[db] waiting for postgres to accept connections"
+for _ in $(seq 1 30); do
+  if "${COMPOSE[@]}" exec -T db pg_isready -U postgres > /dev/null 2>&1; then
+    echo "[db] ready"
+    break
+  fi
+  sleep 1
+  if [ "$_" = 30 ]; then
+    echo "[db] FAILED to become ready" >&2
+    exit 1
+  fi
+done
+
+# --- gotrue --------------------------------------------------------------------
+echo "[gotrue] applying auth schema migrations"
+node "$STACK_DIR/scripts/ensure-auth-namespace.mjs"
+"${COMPOSE[@]}" run --rm auth auth migrate >> "$STACK_LOGS/gotrue.log" 2>&1 || {
+  echo "[gotrue] migration step FAILED — see $STACK_LOGS/gotrue.log" >&2
+  exit 1
+}
+
+echo "[gotrue] starting"
+"${COMPOSE[@]}" up -d auth
+for _ in $(seq 1 30); do
+  if curl -sf --max-time 2 "http://127.0.0.1:${GOTRUE_PORT}/health" > /dev/null 2>&1; then
+    echo "[gotrue] ready"
+    break
+  fi
+  sleep 1
+  if [ "$_" = 30 ]; then
+    echo "[gotrue] FAILED to become ready — see $STACK_LOGS/gotrue.log" >&2
+    "${COMPOSE[@]}" logs --tail=30 auth >&2 || true
+    exit 1
+  fi
+done
+
+# --- app schema ----------------------------------------------------------------
+node "$STACK_DIR/scripts/apply-schema.mjs"
+
+# --- postgrest -------------------------------------------------------------------
+echo "[postgrest] starting"
+"${COMPOSE[@]}" up -d rest
+for _ in $(seq 1 30); do
+  code="$(curl -s --max-time 2 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${POSTGREST_PORT}/" -H "Authorization: Bearer $STACK_ANON_KEY" || echo 000)"
+  if [ "$code" != "000" ]; then
+    echo "[postgrest] ready"
+    break
+  fi
+  sleep 1
+  if [ "$_" = 30 ]; then
+    echo "[postgrest] FAILED to become ready" >&2
+    "${COMPOSE[@]}" logs --tail=30 rest >&2 || true
+    exit 1
+  fi
+done
+
+# --- gateway (bun, on the host) --------------------------------------------------
 if port_listening "$GATEWAY_PORT"; then
   echo "[gateway] already running (pid $(port_pid "$GATEWAY_PORT"))"
 else

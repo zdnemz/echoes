@@ -1,0 +1,103 @@
+# Echoes local dev stack — the same three services the binary stack ran
+# (Postgres 17, GoTrue v2.171.0, PostgREST v12.2.12), now as containers.
+#
+# Values come from the shell environment (scripts/dev-stack/env.sh exports
+# everything below before invoking compose — never commit secrets here):
+#   STACK_PG_PW, STACK_JWT_SECRET, STACK_SUPABASE_URL, STACK_APP_URL.
+# Host ports mirror env.sh (5440/5999/5998) so every script, seed and test
+# keeps working unchanged. The bun gateway on :54321 stays on the host.
+name: echoes-dev
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: ${STACK_PG_PW:?STACK_PG_PW must be set (source env.sh)}
+    ports:
+      - '5440:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Same GoTrue binary as bin/auth, same flags as start-gotrue.sh.
+  # `docker compose run --rm auth migrate` applies the auth schema
+  # (reads ./migrations relative to working_dir, like the old script).
+  auth:
+    image: supabase/auth:v2.171.0
+    working_dir: /migrations
+    volumes:
+      - ./bin/migrations:/migrations:ro
+    environment:
+      # 0.0.0.0 inside the container (127.0.0.1 would bind the container's
+      # own loopback, unreachable through the port mapping). Host side is
+      # still 127.0.0.1:5999, exactly like the old binary stack.
+      API_HOST: 0.0.0.0
+      GOTRUE_API_HOST: 0.0.0.0
+      API_PORT: 5999
+      GOTRUE_API_PORT: 5999
+      API_EXTERNAL_URL: ${STACK_SUPABASE_URL:?}
+      GOTRUE_API_EXTERNAL_URL: ${STACK_SUPABASE_URL:?}
+      DB_DRIVER: postgres
+      GOTRUE_DB_DRIVER: postgres
+      DATABASE_URL: 'postgresql://postgres:${STACK_PG_PW:?}@db:5432/postgres?sslmode=disable&options=-csearch_path%3Dauth'
+      GOTRUE_DB_DATABASE_URL: 'postgresql://postgres:${STACK_PG_PW:?}@db:5432/postgres?sslmode=disable&options=-csearch_path%3Dauth'
+      DB_NAMESPACE: auth
+      GOTRUE_DB_NAMESPACE: auth
+      JWT_SECRET: ${STACK_JWT_SECRET:?}
+      GOTRUE_JWT_SECRET: ${STACK_JWT_SECRET:?}
+      JWT_EXP: 3600
+      GOTRUE_JWT_EXP: 3600
+      JWT_ADMIN_GROUP_NAME: service_role
+      GOTRUE_JWT_ADMIN_GROUP_NAME: service_role
+      JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      SITE_URL: ${STACK_APP_URL:?}
+      GOTRUE_SITE_URL: ${STACK_APP_URL:?}
+      URI_ALLOW_LIST: ${STACK_APP_URL:?},${STACK_APP_URL:?}/auth/callback
+      GOTRUE_URI_ALLOW_LIST: ${STACK_APP_URL:?},${STACK_APP_URL:?}/auth/callback
+      MAILER_AUTOCONFIRM: 'true'
+      GOTRUE_MAILER_AUTOCONFIRM: 'true'
+      MAILER_URL_PATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URL_PATHS_INVITE: /auth/v1/verify
+      MAILER_URL_PATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URL_PATHS_CONFIRMATION: /auth/v1/verify
+      MAILER_URL_PATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URL_PATHS_RECOVERY: /auth/v1/verify
+      MAILER_URL_PATHS_EMAIL_CHANGE: /auth/v1/verify
+      GOTRUE_MAILER_URL_PATHS_EMAIL_CHANGE: /auth/v1/verify
+      LOG_LEVEL: info
+      GOTRUE_LOG_LEVEL: info
+      PASSWORD_MIN_LENGTH: 8
+      GOTRUE_PASSWORD_MIN_LENGTH: 8
+    ports:
+      - '5999:5999'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Same PostgREST 12.2.12, same flags as start-postgrest.sh.
+  rest:
+    image: postgrest/postgrest:v12.2.12
+    environment:
+      PGRST_DB_URI: 'postgresql://authenticator:${STACK_PG_PW:?}@db:5432/postgres'
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_DB_USE_LEGACY_GUCS: 'true'
+      PGRST_JWT_SECRET: ${STACK_JWT_SECRET:?}
+      PGRST_JWT_SECRET_IS_BASE64: 'false'
+      PGRST_SERVER_HOST: 0.0.0.0
+      PGRST_SERVER_PORT: 5998
+      PGRST_OPENAPI_SERVER_PROXY_URI: ${STACK_SUPABASE_URL:?}/rest/v1
+      PGRST_DB_POOL: 20
+    ports:
+      - '5998:5998'
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
