@@ -29,9 +29,9 @@ This guide walks through setting up your environment, choosing between a local z
 | :-------------------------- | :---------------------------------- | :------------------------------ |
 | **Setup Time**              | ~10 seconds                         | ~5 minutes                      |
 | **Cloud Accounts Required** | None (100% offline)                 | Supabase account                |
-| **PostgreSQL Version**      | PostgreSQL 17 (Embedded)            | PostgreSQL 15+ (Hosted)         |
-| **Authentication Engine**   | Official GoTrue v2 binary           | Official GoTrue v2 cloud        |
-| **Data Engine**             | PostgREST v12 binary                | PostgREST cloud                 |
+| **PostgreSQL Version**      | PostgreSQL 17 (Docker)              | PostgreSQL 15+ (Hosted)         |
+| **Authentication Engine**   | Official GoTrue v2 image            | Official GoTrue v2 cloud        |
+| **Data Engine**             | PostgREST v12 image                 | PostgREST cloud                 |
 | **Google OAuth**            | Mocked initiation only              | Full PKCE OAuth round-trip      |
 | **Email Verification**      | Instant auto-confirm                | Configurable (SMTP or auto)     |
 | **Ideal For**               | Fast local dev, CI, offline testing | Staging & Production deployment |
@@ -40,7 +40,7 @@ This guide walks through setting up your environment, choosing between a local z
 
 ## Option A: Local Supabase Stack (Zero Credentials)
 
-The local dev stack spins up real binaries for Postgres 17, GoTrue, and PostgREST right on your workstation. It requires **no Docker** and **no cloud account**.
+The local dev stack spins up real Postgres 17, GoTrue, and PostgREST containers on your workstation. It requires **Docker** but **no cloud account** — same versions, ports and behavior as the old binary stack, only the process supervisor changed.
 
 ### 1. Install & Initialize
 

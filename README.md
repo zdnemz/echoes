@@ -82,6 +82,7 @@ Experience Echoes locally in under two minutes with our self-contained, zero-clo
 ### 1. Prerequisites
 
 - [Bun](https://bun.sh/) (v1.1+) installed locally.
+- [Docker](https://docs.docker.com/get-docker/) running locally (the dev backend is real Postgres 17, GoTrue and PostgREST in containers).
 - _No cloud accounts or external databases required._
 
 ### 2. One-Command Setup
@@ -92,7 +93,7 @@ git clone https://github.com/zdnemz/echoes.git
 cd echoes
 bun install
 
-# 2. Install dev-stack binaries (Postgres 17, GoTrue, PostgREST — ~25 MB, run once)
+# 2. Install dev-stack helper dependency (Postgres client for schema setup, run once)
 (cd scripts/dev-stack && bun install)
 
 # 3. Start local Supabase backend & seed demo data
@@ -150,7 +151,7 @@ Visit **[http://localhost:3000](http://localhost:3000)** to begin writing.
                             │
                             ▼
 ┌────────────────────────────────────────────────────────┐
-│           Supabase / Embedded Dev Stack Gateway        │
+│           Supabase / Docker Dev Stack Gateway          │
 │   • GoTrue Auth (PKCE OAuth & JWT Rotation)            │
 │   • PostgREST Data Engine (Direct SQL with RLS)        │
 └─────────────┬────────────────────────────┬─────────────┘
@@ -168,25 +169,25 @@ Visit **[http://localhost:3000](http://localhost:3000)** to begin writing.
 - **True Zero-Knowledge Storage**: A leaked database dump yields nothing but ciphertext — entry titles and bodies are sealed client-side under per-entry AES-256-GCM keys, wrapped for the author's device key and, in circles, for the group (ECDH-sealed CEK). Moods, tags and timestamps stay queryable by design; the words never do.
 - **Key Rotation Without Rewrites**: Circle keys rotate by re-wrapping 32-byte content keys, not re-encrypting bodies — removing a member is instant, and offline authors lose nothing.
 - **Zero Client Key Leakage**: Service roles, OAuth secrets, and AI provider API keys remain strictly confined to the server environment.
-- **Offline-First Developer Experience**: Embedded dev-stack spins up real PostgreSQL, GoTrue, and PostgREST in seconds for fully isolated testing.
+- **Offline-First Developer Experience**: Docker dev-stack spins up real PostgreSQL, GoTrue, and PostgREST in seconds for fully isolated testing.
 
 ---
 
 ## 🛠️ Developer Scripts
 
-| Command                | Action                                                           |
-| :--------------------- | :--------------------------------------------------------------- |
-| `bun run dev`          | Launch Next.js local development server                          |
-| `bun run build`        | Compile standalone production Next.js artifact                   |
-| `bun run lint`         | Run ESLint across code and components                            |
-| `bun run typecheck`    | Validate TypeScript contracts with `tsc --noEmit`                |
-| `bun run format`       | Enforce code formatting with Prettier                            |
-| `bun test`             | Run fast unit test suites (API, agent, webhooks)                 |
-| `bun run stack:start`  | Boot embedded local dev stack (Postgres 17 + GoTrue + PostgREST) |
-| `bun run stack:status` | Check local stack health and port listeners                      |
-| `bun run stack:stop`   | Shut down local stack processes                                  |
-| `bun run db:seed`      | Seed demo accounts, notebooks, and journal entries               |
-| `bun run db:smoke`     | Run OpenAPI 3.1 schema and route contract smoke tests            |
+| Command                | Action                                                             |
+| :--------------------- | :----------------------------------------------------------------- |
+| `bun run dev`          | Launch Next.js local development server                            |
+| `bun run build`        | Compile standalone production Next.js artifact                     |
+| `bun run lint`         | Run ESLint across code and components                              |
+| `bun run typecheck`    | Validate TypeScript contracts with `tsc --noEmit`                  |
+| `bun run format`       | Enforce code formatting with Prettier                              |
+| `bun test`             | Run fast unit test suites (API, agent, webhooks)                   |
+| `bun run stack:start`  | Boot dockerized local dev stack (Postgres 17 + GoTrue + PostgREST) |
+| `bun run stack:status` | Check local stack health and port listeners                        |
+| `bun run stack:stop`   | Shut down local stack processes                                    |
+| `bun run db:seed`      | Seed demo accounts, notebooks, and journal entries                 |
+| `bun run db:smoke`     | Run OpenAPI 3.1 schema and route contract smoke tests              |
 
 ---
 
