@@ -1055,6 +1055,14 @@ function GroupJournalTab({
                 const showDay = !prev || formatDay(prev.created_at) !== formatDay(entry.created_at)
                 const tone = avatarTone(entry.author_id)
                 const name = mine ? 'You' : (authorName(entry.author_id) ?? 'a member')
+                // Encrypted rows store ciphertext in title/body — the bubble
+                // must render the decrypted preview like the list does.
+                // Missing preview = written on another device (or the group
+                // key hasn't reached this device yet).
+                const pv = entry.encrypted ? previews[entry.id] : undefined
+                const locked = entry.encrypted && !pv
+                const shownTitle = entry.encrypted ? (pv?.title ?? '') : entry.title
+                const shownBody = entry.encrypted ? (pv?.bodyPreview ?? '') : entry.body
                 return (
                   <li key={entry.id}>
                     {showDay && (
@@ -1094,19 +1102,31 @@ function GroupJournalTab({
                             {name}
                           </p>
                         )}
-                        {entry.title && (
-                          <p className={`mt-0.5 text-[13.5px] font-semibold leading-snug ${mine ? '' : ''}`}>
-                            {entry.title}
-                          </p>
-                        )}
-                        {entry.body.trim().length > 0 && (
+                        {locked ? (
                           <p
-                            className={`mt-0.5 line-clamp-4 whitespace-pre-wrap text-[13.5px] leading-relaxed ${
-                              mine ? 'text-paper/90' : 'text-ink-soft'
+                            className={`mt-0.5 text-[13px] italic leading-snug ${
+                              mine ? 'text-paper/70' : 'text-ink-faint'
                             }`}
                           >
-                            {excerpt(entry.body, 280)}
+                            An entry from another device
                           </p>
+                        ) : (
+                          <>
+                            {shownTitle && (
+                              <p className={`mt-0.5 text-[13.5px] font-semibold leading-snug ${mine ? '' : ''}`}>
+                                {shownTitle}
+                              </p>
+                            )}
+                            {shownBody.trim().length > 0 && (
+                              <p
+                                className={`mt-0.5 line-clamp-4 whitespace-pre-wrap text-[13.5px] leading-relaxed ${
+                                  mine ? 'text-paper/90' : 'text-ink-soft'
+                                }`}
+                              >
+                                {excerpt(shownBody, 280)}
+                              </p>
+                            )}
+                          </>
                         )}
                         <span
                           className={`mt-1.5 flex items-center gap-2 text-[10.5px] ${
