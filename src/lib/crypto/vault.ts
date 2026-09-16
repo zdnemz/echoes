@@ -2,7 +2,7 @@
 
 import { exportPublicKey, generateDataKey, generateIdentityKeypair, openSealedKey } from './envelope'
 import { loadDeviceKeys, saveDeviceKeys } from './device-store'
-import { api, json } from '@/lib/api/client'
+import { api, getToken, json } from '@/lib/api/client'
 
 export interface UnlockedVault {
   dek: CryptoKey
@@ -65,6 +65,10 @@ async function startKeys(): Promise<void> {
     emit()
     return
   }
+  // No session → nothing to register the device against. Generating a
+  // keypair now would only throw it away (the POST 401s and the keys are
+  // never saved). Keys are provisioned on the first authenticated session.
+  if (!getToken()) return
   const dek = await generateDataKey()
   const identity = await generateIdentityKeypair()
   const identityPublic = await exportPublicKey(identity.publicKey)

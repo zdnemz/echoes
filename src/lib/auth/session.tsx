@@ -123,7 +123,7 @@ export function adoptSession(session: Session): AuthUser {
 export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void restore().then(() => {
-      void ensureKeys()
+      void ensureKeys().catch(() => {})
     })
     const onRefreshed = (event: Event) => {
       const user = (event as CustomEvent<AuthUser>).detail
