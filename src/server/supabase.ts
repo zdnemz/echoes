@@ -48,13 +48,28 @@ export function getServiceClient(): SupabaseClient | null {
 /**
  * Per-request RLS-scoped client. All reads/writes through this client are
  * filtered by the row level security policies defined in the SQL migration.
+ *
+ * Cached per token: building a Supabase client sets up a fetch wrapper, a
+ * GoTrue client and a storage client every time, and every authenticated
+ * request needs one. A bounded map keyed by the jwt reuses it across the
+ * burst of calls a single page load makes. The client is stateless for our
+ * purposes (persistSession false, no channels), so reuse is safe.
  */
+const userClientCache = new Map<string, SupabaseClient>()
+const USER_CLIENT_CACHE_MAX = 128
+
 export function createUserClient(jwt: string): SupabaseClient {
   const config = getSupabaseConfig()
   if (!config) throw new Error('SUPABASE_NOT_CONFIGURED')
 
-  return createClient(config.url, config.anonKey, {
+  const cached = userClientCache.get(jwt)
+  if (cached) return cached
+
+  const client = createClient(config.url, config.anonKey, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   })
+  if (userClientCache.size >= USER_CLIENT_CACHE_MAX) userClientCache.clear()
+  userClientCache.set(jwt, client)
+  return client
 }
