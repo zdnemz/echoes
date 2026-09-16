@@ -68,7 +68,11 @@ export function registerEntryRoutes(app: App) {
 
     let query = c.var.userClient
       .from('entries')
-      .select('*, entry_key_wraps(scope, wrapped_key)', { count: 'exact' })
+      // Planned (EXPLAIN estimate) instead of exact: this endpoint is polled
+      // every 60s under the SSE stream and every list page fetches it, and an
+      // exact count is a separate full scan per request. The estimate drives
+      // only "is there a next page", which it answers accurately enough.
+      .select('*, entry_key_wraps(scope, wrapped_key)', { count: 'planned' })
       .eq('notebook_id', notebookId)
       .order('created_at', { ascending: false })
     if (mood) query = query.eq('mood', mood)

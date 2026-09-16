@@ -467,7 +467,9 @@ export function registerGroupRoutes(app: App) {
       .from('entries')
       .select(
         'id, notebook_id, author_id, title, mood, tags, is_shared, encrypted, created_at, updated_at, body, entry_key_wraps(scope, wrapped_key), notebooks!inner(group_id)',
-        { count: 'exact' },
+        // Polled every 60s while a group journal is open — an exact count is
+        // a separate scan per poll; the estimate only pages the infinite list.
+        { count: 'planned' },
       )
       .eq('notebooks.group_id', id)
     let filtered = query

@@ -41,7 +41,9 @@ export function registerNotebookRoutes(app: App) {
 
     const { data, count, error } = await c.var.userClient
       .from('notebooks')
-      .select('*', { count: 'exact' })
+      // Planned estimate, not an exact count: every journal load and corpus
+      // build lists notebooks, and the total only drives "next page?".
+      .select('*', { count: 'planned' })
       .order('updated_at', { ascending: false })
       .range(from, from + limit - 1)
     if (error) throw fromPostgrestError(error)
