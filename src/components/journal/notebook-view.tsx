@@ -145,7 +145,7 @@ function ShareDialog({ notebook, onClose }: { notebook: Notebook; onClose: () =>
           const { distributeOrRotate } = await import('@/lib/crypto/group-keys')
           await distributeOrRotate(groupId, user?.id ?? '')
         } catch {
-          toast('Members without published keys see entries as sealed until keys are distributed.')
+          toast('Members who have not opened the group yet will see it fill in as soon as they do.')
         }
       }
       setSelected(groupId)

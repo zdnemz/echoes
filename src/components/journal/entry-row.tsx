@@ -88,12 +88,12 @@ export function EntryRow({
         </div>
 
         <h3 className="mt-1.5 font-display text-[19px] leading-snug text-ink transition-colors group-hover:text-clay-ink">
-          {locked ? 'A sealed entry' : title || 'Untitled entry'}
+          {locked ? 'An entry from another device' : title || 'Untitled entry'}
         </h3>
 
         {locked ? (
           <p className="mt-1 flex items-center gap-1.5 font-serif text-[13.5px] italic leading-relaxed text-ink-faint">
-            <LockKey weight="light" className="h-3.5 w-3.5" /> the key for this entry is not in this tab
+            <LockKey weight="light" className="h-3.5 w-3.5" /> written on a different device — open it there to read it
           </p>
         ) : (
           body.trim().length > 0 && (
