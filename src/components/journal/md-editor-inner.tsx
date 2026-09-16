@@ -13,6 +13,11 @@
  */
 
 import { useEffect, useRef } from 'react'
+import '@mdxeditor/editor/style.css'
+// The Paper & Ink overrides live unlayered in globals.css at (0,2,0)
+// specificity — they beat the editor's (0,1,0) regardless of load order, so
+// shipping this stylesheet inside the dynamic chunk costs nothing on routes
+// that never open the editor (landing, login, console…).
 import {
   MDXEditor,
   codeBlockPlugin,
