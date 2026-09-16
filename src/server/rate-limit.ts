@@ -41,6 +41,10 @@ function sweep(now: number) {
   for (const [k, hits] of buckets) {
     if (hits.length === 0 || hits[hits.length - 1] < now - 15 * 60_000) buckets.delete(k)
   }
+  // Expired budget leases are dead weight until the user returns.
+  for (const [k, lease] of budgetLeases) {
+    if (lease.expiresAt <= now) budgetLeases.delete(k)
+  }
 }
 
 // ---------------------------------------------------------------- client identity
@@ -155,6 +159,26 @@ async function pgCount(bucket: string, windowMs: number): Promise<WindowState> {
   const row = (Array.isArray(data) ? data[0] : data) as { hit_count?: number | string; oldest_at?: string } | undefined
   return {
     count: Number(row?.hit_count ?? 0),
+    oldest: row?.oldest_at ? new Date(row.oldest_at).getTime() : undefined,
+  }
+}
+
+/**
+ * Charge several hits in one round trip and report the window they land in.
+ * Used by the per-user budget lease (see assertUserBudget).
+ */
+async function pgCharge(bucket: string, windowMs: number, count: number): Promise<WindowState> {
+  const service = getServiceClient()
+  if (!service) throw new Error('service-role unavailable')
+  const { data, error } = await service.rpc('rate_limit_charge', {
+    p_bucket: bucket,
+    p_window_ms: windowMs,
+    p_count: count,
+  })
+  if (error) throw error
+  const row = (Array.isArray(data) ? data[0] : data) as { hit_count?: number | string; oldest_at?: string } | undefined
+  return {
+    count: Number(row?.hit_count ?? count),
     oldest: row?.oldest_at ? new Date(row.oldest_at).getTime() : undefined,
   }
 }
@@ -371,21 +395,85 @@ export const emailRateLimit = () => rateLimit({ key: 'email', max: 4, windowMs: 
  */
 const USER_RULE: RateLimitOptions = { key: 'user', max: 240, windowMs: 60_000 }
 
-/** Throws 429 when this user is over the shared budget. Called by requireAuth. */
+/**
+ * How long a per-user budget lease is trusted before it is re-synced with
+ * Postgres. A page load bursts several API calls inside one lease, so this
+ * turns N round trips into one — the point of migration 0015.
+ */
+const USER_LEASE_MS = 3_000
+
+interface BudgetLease {
+  expiresAt: number
+  /** Hits Postgres reported when the lease was granted (all flushed already). */
+  synced: number
+  /** Hits seen locally since the grant, not yet charged to Postgres. */
+  pending: number
+  /** Oldest hit in the window at grant time — drives retry-after. */
+  oldest: number | undefined
+}
+const budgetLeases = new Map<string, BudgetLease>()
+
+/**
+ * Throws 429 when this user is over the shared budget. Called by requireAuth
+ * on every authenticated request.
+ *
+ * The lease keeps the authoritative count in Postgres but only consults it
+ * once per USER_LEASE_MS: requests inside a lease charge a local counter and
+ * enforce against (synced + pending). At expiry the pending hits are flushed
+ * in a single bulk call and the window is re-read, so every hit still reaches
+ * the shared store and every instance converges within a lease or two. Until
+ * then, each instance caps only itself — the ceiling can be exceeded by the
+ * number of instances, for at most the lease length, on the way to 429. That
+ * is fine by design: the rule is an abuse ceiling set 4x above real use, not
+ * a meter.
+ */
 export async function assertUserBudget(c: Context, userId: string): Promise<void> {
   const now = Date.now()
   sweep(now)
-  try {
-    await consume(`${USER_RULE.key}:${userId}`, USER_RULE, now)
-  } catch (err) {
-    const hits = buckets.get(`${USER_RULE.key}:${userId}`) ?? []
-    const oldest = hits[0]
-    if (oldest !== undefined) {
-      const retryAfterSec = Math.max(1, Math.ceil((oldest + USER_RULE.windowMs - now) / 1000))
-      c.header('retry-after', String(retryAfterSec))
-    }
-    throw err
+  const bucket = `${USER_RULE.key}:${userId}`
+
+  const lease = budgetLeases.get(bucket)
+  if (lease && lease.expiresAt > now) {
+    lease.pending += 1
+    if (lease.synced + lease.pending > USER_RULE.max) throw budgetExceeded(c, lease.oldest, USER_RULE.windowMs, now)
+    return
   }
+
+  if (hasServiceRole()) {
+    try {
+      // Flush everything accumulated locally (this request included) in one
+      // call, then trust the window it reports for the rest of the lease.
+      const pending = (lease?.pending ?? 0) + 1
+      const state = await pgCharge(bucket, USER_RULE.windowMs, pending)
+      const granted: BudgetLease = {
+        expiresAt: now + USER_LEASE_MS,
+        synced: state.count,
+        pending: 0,
+        oldest: state.oldest,
+      }
+      budgetLeases.set(bucket, granted)
+      if (state.count > USER_RULE.max) throw budgetExceeded(c, state.oldest, USER_RULE.windowMs, now)
+      return
+    } catch (err) {
+      if (err instanceof ApiError) throw err
+      // Store unreachable — degrade to the per-instance map below.
+    }
+  }
+
+  // In-memory fallback (single instance, or Postgres down).
+  const hits = (buckets.get(bucket) ?? []).filter((t) => t > now - USER_RULE.windowMs)
+  if (hits.length >= USER_RULE.max) throw budgetExceeded(c, hits[0], USER_RULE.windowMs, now)
+  hits.push(now)
+  buckets.set(bucket, hits)
+}
+
+function budgetExceeded(c: Context, oldest: number | undefined, windowMs: number, now: number): ApiError {
+  const retryAfterSec =
+    oldest !== undefined ? Math.max(1, Math.ceil((oldest + windowMs - now) / 1000)) : Math.ceil(windowMs / 1000)
+  c.header('retry-after', String(retryAfterSec))
+  return new ApiError(429, 'RATE_LIMITED', `Too many requests — try again in ${retryAfterSec}s`, {
+    retry_after: [`${retryAfterSec}s`],
+  })
 }
 
 /**
