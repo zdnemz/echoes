@@ -326,7 +326,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           body: sealed ? sealed.body : body,
           mood: mood ?? undefined,
           tags,
-          is_shared: groupLinked ? (authorOnly ? false : isShared) : undefined,
+          is_shared: groupLinked ? isShared : undefined,
           ...(sealed ? { encrypted: true, key_wraps: sealed.key_wraps } : {}),
         })
         setDirty(false)
@@ -355,7 +355,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           body: sealed ? sealed.body : body,
           mood,
           tags,
-          ...(groupLinked ? { is_shared: authorOnly ? false : isShared } : {}),
+          ...(groupLinked ? { is_shared: isShared } : {}),
           ...(sealed ? { encrypted: true, key_wraps: keyWraps } : {}),
           ...(keyWraps && !sealed ? { key_wraps: keyWraps } : {}),
         })

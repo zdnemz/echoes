@@ -1,27 +1,73 @@
 'use client'
 
-import { exportPublicKey, generateDataKey, generateIdentityKeypair, openSealedKey } from './envelope'
-import { loadDeviceKeys, saveDeviceKeys } from './device-store'
-import { appLockEnabled } from './app-lock'
+/**
+ * Account-scoped key vault, unlocked by a PIN.
+ *
+ * One key bundle per ACCOUNT (not per device): a random DEK and an ECDH
+ * identity keypair, stored on the profile as opaque blobs — the DEK wrapped
+ * under a KEK derived from the user's PIN (PBKDF2-SHA256), the identity
+ * private key wrapped under the DEK. The PIN never leaves the browser, so the
+ * server cannot decrypt anything.
+ *
+ * Why this beats per-device keys: signing in on a new device used to mint
+ * fresh keys that could never open the account's existing entries. Now the
+ * new device asks for the PIN, re-derives the same KEK, and recovers the exact
+ * same keys — every own entry and every group box opens. The tradeoff is
+ * deliberate and irreversible: forget the PIN and the entries are gone, since
+ * no recovery path exists (that's the price of the server never holding the
+ * KEK).
+ *
+ * The vault lives in memory only. `lock()` drops it; closing the tab drops it.
+ * Nothing key-shaped is written to this device.
+ */
+
+import {
+  PBKDF2_ITERATIONS,
+  deriveKekFromPassword,
+  exportPrivateKey,
+  exportPublicKey,
+  generateDataKey,
+  generateIdentityKeypair,
+  importPrivateKey,
+  openSealedKey,
+  openText,
+  randomSalt,
+  sealText,
+  unwrapKey,
+  wrapKey,
+} from './envelope'
 import { api, getToken, json } from '@/lib/api/client'
+import { getAccountKeys, publishAccountKeys, type GroupKeyWraps } from '@/lib/api/endpoints'
 
 export interface UnlockedVault {
   dek: CryptoKey
   identityPrivate: CryptoKey
   identityPublic: string
-  deviceId: string
 }
 
+/**
+ * `resolving`      — asking the server whether a bundle exists (show a loader,
+ *                    not a gate: flashing "create a PIN" at a returning user
+ *                    would invite them to overwrite their account's keys).
+ * `unprovisioned`  — authenticated but no bundle yet: the UI asks to CREATE a PIN.
+ * `locked`         — a bundle exists but no keys in memory: the UI asks for the PIN.
+ * `unlocked`       — keys are in memory and usable.
+ */
+export type KeyState = 'resolving' | 'unprovisioned' | 'locked' | 'unlocked'
+
 let vault: UnlockedVault | null = null
+let keyState: KeyState = 'resolving'
 const listeners = new Set<() => void>()
 
-function emit() {
+function emit(): void {
   for (const l of listeners) l()
 }
 
 export function onVaultChange(listener: () => void): () => void {
   listeners.add(listener)
-  return () => listeners.delete(listener)
+  return () => {
+    listeners.delete(listener)
+  }
 }
 
 export function getVault(): UnlockedVault | null {
@@ -32,119 +78,171 @@ export function isUnlocked(): boolean {
   return vault !== null
 }
 
+export function getKeyState(): KeyState {
+  return keyState
+}
+
+const hasStatus = (err: unknown, status: number): boolean => (err as { status?: number }).status === status
+
 /**
- * Key setup is automatic and silent: the first time this device runs it
- * generates a DEK + ECDH identity pair, keeps them in IndexedDB and
- * registers only the public key with the server. Nothing here is derived
- * from the password, so signing in on a new device "just works" — and a
- * password reset can never destroy existing entries.
- *
- * The in-flight promise is kept so concurrent callers (session restore,
- * login, first save) share one run instead of racing to register twice.
+ * Resolve the account's key state from the server. This NEVER unlocks —
+ * unlocking needs the PIN, which only the user can type. It only decides
+ * which question the PIN gate asks: "create one" or "enter yours".
  */
 let starting: Promise<void> | null = null
 
 export function ensureKeys(): Promise<void> {
   if (vault) return Promise.resolve()
   if (!starting) {
-    starting = startKeys().finally(() => {
+    starting = resolveKeyState().finally(() => {
       starting = null
     })
   }
   return starting
 }
 
-async function startKeys(): Promise<void> {
-  const stored = await loadDeviceKeys()
-  if (stored) {
-    vault = {
-      dek: stored.dek,
-      identityPrivate: stored.identityPrivate,
-      identityPublic: stored.identityPublic,
-      deviceId: stored.deviceId,
-    }
+async function resolveKeyState(): Promise<void> {
+  if (!getToken()) {
+    keyState = 'unprovisioned'
     emit()
     return
   }
-  // App lock engaged: the raw keys are gone from this device and only a PIN or
-  // passkey can unwrap them. Stay locked — generating a fresh DEK here would
-  // register a device that can never read the entries that already exist.
-  if (appLockEnabled()) return
-  // No session → nothing to register the device against. Generating a
-  // keypair now would only throw it away (the POST 401s and the keys are
-  // never saved). Keys are provisioned on the first authenticated session.
-  if (!getToken()) return
+  try {
+    await getAccountKeys()
+    keyState = 'locked'
+  } catch (err) {
+    // 404 = the account never chose a PIN. 401 = the session is gone; the
+    // auth layer will route to the landing, so the state here is inert.
+    keyState = hasStatus(err, 404) || hasStatus(err, 401) ? 'unprovisioned' : 'locked'
+  }
+  emit()
+}
+/**
+ * First-time provisioning: choose a PIN, mint the account's keys, publish the
+ * wrapped bundle, and unlock in one step. Throws if the server already has a
+ * bundle (the gate won't offer this path once one exists).
+ */
+export async function provisionKeys(pin: string): Promise<void> {
+  if (vault) return
+  if (!/^\d{4,8}$/.test(pin)) throw new Error('A PIN is 4 to 8 digits.')
+
   const dek = await generateDataKey()
   const identity = await generateIdentityKeypair()
   const identityPublic = await exportPublicKey(identity.publicKey)
-  const res = await api<{ id: string }>('/api/me/devices', {
-    method: 'POST',
-    ...json({ public_key: identityPublic }),
+  const salt = randomSalt()
+  const kek = await deriveKekFromPassword(pin, salt)
+
+  await publishAccountKeys({
+    salt,
+    iterations: PBKDF2_ITERATIONS,
+    wrapped_dek: await wrapKey(dek, kek),
+    public_key: identityPublic,
+    // Identity private sits under the DEK, not the KEK, so a PIN change only
+    // has to re-wrap the DEK wrap — the identity wrap is untouched.
+    wrapped_private_key: await sealText(await exportPrivateKey(identity.privateKey), dek),
   })
-  await saveDeviceKeys({
-    deviceId: res.id,
-    dek,
-    identityPrivate: identity.privateKey,
-    identityPublic,
-  })
-  vault = {
-    dek,
-    identityPrivate: identity.privateKey,
-    identityPublic,
-    deviceId: res.id,
-  }
+
+  vault = { dek, identityPrivate: identity.privateKey, identityPublic }
+  keyState = 'unlocked'
   emit()
 }
 
 /**
- * Await this before opening or sealing anything. Key generation is async, so
- * a component that renders before it finishes would otherwise read a locked
- * vault and could show — or worse, overwrite — an entry it simply hasn't
- * had time to decrypt yet.
+ * Unlock with the account PIN on any device. A wrong PIN fails the AES-GCM
+ * auth tag while unwrapping the DEK — no server round-trip, no oracle beyond
+ * the local device.
+ */
+export async function unlockWithPin(pin: string): Promise<void> {
+  if (vault) return
+  const bundle = await getAccountKeys()
+  if (!bundle.salt || !bundle.wrapped_dek || !bundle.wrapped_private_key) {
+    throw new Error('No account keys are set yet.')
+  }
+  const kek = await deriveKekFromPassword(pin, bundle.salt, bundle.iterations ?? PBKDF2_ITERATIONS)
+  const dek = await unwrapKey(bundle.wrapped_dek, kek)
+  const identityPrivate = await importPrivateKey(await openText(bundle.wrapped_private_key, dek))
+  vault = {
+    dek,
+    identityPrivate,
+    identityPublic: bundle.public_key ?? '',
+  }
+  keyState = 'unlocked'
+  emit()
+}
+
+/**
+ * Re-wrap the same DEK under a new PIN. Requires the current PIN (or an
+ * already-unlocked vault) — the server rejects a replace without proof of the
+ * current wrapped DEK, so a second device can't orphan the account's history.
+ */
+export async function changePin(oldPin: string, newPin: string): Promise<void> {
+  if (!/^\d{4,8}$/.test(newPin)) throw new Error('A PIN is 4 to 8 digits.')
+  if (!vault) await unlockWithPin(oldPin)
+
+  const current = await getAccountKeys()
+  if (!current.wrapped_dek || !current.wrapped_private_key) {
+    throw new Error('No account keys are set yet.')
+  }
+  const salt = randomSalt()
+  const kek = await deriveKekFromPassword(newPin, salt)
+  await publishAccountKeys({
+    salt,
+    iterations: PBKDF2_ITERATIONS,
+    wrapped_dek: await wrapKey(vault!.dek, kek),
+    public_key: vault!.identityPublic,
+    wrapped_private_key: current.wrapped_private_key,
+    previous_wrapped_dek: current.wrapped_dek,
+  })
+}
+
+/**
+ * Await this before opening or sealing anything. On a locked vault this
+ * resolves to null — callers should be behind the PIN gate, which is the only
+ * path to an unlocked vault.
  */
 export async function whenReady(): Promise<UnlockedVault | null> {
   await ensureKeys().catch(() => null)
   return vault
 }
 
-const groupCeks = new Map<string, { key: CryptoKey; generation: number }>()
-
 export function lock(): void {
   vault = null
-  // A locked vault must not keep group content keys either: they are derived
-  // from the identity key and would outlive the lock otherwise.
-  groupCeks.clear()
+  keyState = 'locked'
   emit()
+  // Correct to 'unprovisioned' if the account genuinely has no bundle (a
+  // brand-new account that locked before provisioning). On an anonymous
+  // session the state is inert — the auth layer shows the landing.
+  if (getToken()) void ensureKeys().catch(() => null)
 }
 
-/** Restore an unwrapped vault (app-lock unlock path). Memory only — never persisted raw. */
-export function unlockVault(next: UnlockedVault): void {
-  vault = next
-  emit()
-}
+// --------------------------------------------------------------- group CEKs
 
+const groupCeks = new Map<string, { key: CryptoKey; generation: number }>()
+
+/**
+ * This account's sealed box for a group. Every row the route returns is the
+ * caller's own (RLS filters on user_id, one box per (group, member)), so the
+ * first wrap is mine — opened with the account identity key.
+ */
 export async function getGroupCek(groupId: string): Promise<CryptoKey | null> {
   const cached = groupCeks.get(groupId)
   if (cached) return cached.key
   if (!vault) return null
   try {
-    const res = await api<{ wraps: Array<{ device_id: string; generation: number; sealed_box: string }> }>(
-      `/api/groups/${groupId}/key`,
-    )
-    const mine = res.wraps.find((w) => w.device_id === vault!.deviceId)
+    const res = await api<GroupKeyWraps>(`/api/groups/${groupId}/key`)
+    const mine = res.wraps[0]
     if (!mine) return null
     const cek = await openSealedKey(mine.sealed_box, vault.identityPrivate)
     groupCeks.set(groupId, { key: cek, generation: mine.generation })
     return cek
   } catch (err) {
-    const status = (err as { status?: number }).status
-    if (status === 404) return null
+    if (hasStatus(err, 404)) return null
     throw err
   }
 }
 
-export function forgetGroupCek(groupId: string) {
+export function forgetGroupCek(groupId: string): void {
   groupCeks.delete(groupId)
 }
 
-export { distributeOrRotate, ensureDeviceCoverage, tryFirstDistribution, ensureShareableCek } from './group-keys'
+export { distributeOrRotate, ensureMemberCoverage, tryFirstDistribution, ensureShareableCek } from './group-keys'

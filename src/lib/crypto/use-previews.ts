@@ -34,13 +34,7 @@ export function useDecryptedPreviews(
   }, [])
 
   useEffect(() => {
-    // A locked vault must not keep showing plaintext that was decrypted
-    // before the lock — drop every preview the moment keys leave memory.
-    if (!unlocked) {
-      setPreviews({})
-      return
-    }
-    if (entries.length === 0) return
+    if (!unlocked || entries.length === 0) return
     let alive = true
     void (async () => {
       const next: Record<string, EntryPreview | null> = {}

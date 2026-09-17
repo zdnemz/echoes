@@ -638,7 +638,10 @@ function GroupJournalTab({
         notebookId: quickTarget.id,
         title: sealed.title,
         body: sealed.body,
-        is_shared: sealed.shareState !== 'author-only',
+        // A group message that landed author-only (the key hadn't reached
+        // this account yet) still opts in: members see a locked row that
+        // opens once a holder back-fills the group wrap.
+        is_shared: true,
         encrypted: true,
         key_wraps: sealed.key_wraps,
       })
@@ -1463,7 +1466,7 @@ export function GroupsView({
     if (!selectedGroupId || !user || coveredFor.current === selectedGroupId) return
     coveredFor.current = selectedGroupId
     void import('@/lib/crypto/group-keys')
-      .then(({ ensureDeviceCoverage }) => ensureDeviceCoverage(selectedGroupId, user.id))
+      .then(({ ensureMemberCoverage }) => ensureMemberCoverage(selectedGroupId, user.id))
       .catch(() => {
         coveredFor.current = null // retry on the next visit
       })

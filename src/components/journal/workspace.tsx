@@ -25,14 +25,12 @@ import { ReflectView } from './reflect-view'
 import { SearchView } from './search-view'
 import { SettingsView } from './settings-view'
 import { UserMenu } from './user-menu'
-import { LockScreen } from './lock-screen'
+import { PinGate } from './pin-gate'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useSession } from '@/lib/auth/session'
+import { useKeyState } from '@/lib/crypto/use-vault'
 import { useCreateNotebook, useNotebooks } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
-import { appLockEnabled, lock } from '@/lib/crypto/app-lock'
-import { useAppLockLocked } from '@/lib/crypto/use-vault'
-import { getAutoLock } from '@/lib/prefs'
 
 export type View =
   | { kind: 'notebook'; notebookId: string }
@@ -164,19 +162,8 @@ export function Workspace() {
   const searchParams = useSearchParams()
   const params = useParams<{ slug?: string[] }>()
   const { status: sessionStatus } = useSession()
-  const locked = useAppLockLocked()
+  const keyState = useKeyState()
   const [railOpen, setRailOpen] = useState(false)
-
-  // ---- app lock: re-seal the journal when this tab is hidden (opt-in pref).
-  // Only meaningful with a configured lock — otherwise `lock()` is a no-op the
-  // next `ensureKeys()` immediately undoes.
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden' && getAutoLock() && appLockEnabled()) lock()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [])
 
   // ---- session gate
   useEffect(() => {
@@ -234,9 +221,11 @@ export function Workspace() {
 
   if (sessionStatus === 'restoring') return <RestoreSkeleton />
   if (sessionStatus !== 'authenticated') return <SignedOutGate />
-  // The lock screen overlays the whole surface; views stay mounted underneath
-  // so an unsaved draft survives the lock, while the vault holds no keys.
-  if (locked) return <LockScreen />
+
+  // The journal stays behind the PIN gate: keys are wrapped under it, so
+  // nothing in here is readable (or sealable) until the vault unlocks.
+  if (keyState === 'resolving') return <RestoreSkeleton />
+  if (keyState !== 'unlocked') return <PinGate />
 
   const search = (q: string) => {
     if (q.trim()) navigate({ kind: 'search', q: q.trim() })

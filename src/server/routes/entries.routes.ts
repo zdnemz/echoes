@@ -301,11 +301,21 @@ export function registerEntryRoutes(app: App) {
     if (patchInput.is_shared !== undefined) patch.is_shared = patchInput.is_shared
     if (patchInput.encrypted !== undefined) patch.encrypted = patchInput.encrypted
 
-    const { data, error } = await c.var.userClient.from('entries').update(patch).eq('id', id).select('*').single()
-    if (error) throw fromPostgrestError(error)
-    if (!data) throw Errors.notFound('Entry not found')
-
-    const row = data as unknown as EntryRow
+    // A key_wraps-only patch (adding the group wrap to an author-only entry
+    // during catch-up) leaves the text untouched. An empty UPDATE matches no
+    // row through .single(), so read the row back instead of "updating" it.
+    let row: EntryRow
+    if (Object.keys(patch).length > 0) {
+      const { data, error } = await c.var.userClient.from('entries').update(patch).eq('id', id).select('*').single()
+      if (error) throw fromPostgrestError(error)
+      if (!data) throw Errors.notFound('Entry not found')
+      row = data as unknown as EntryRow
+    } else {
+      const { data, error } = await c.var.userClient.from('entries').select('*').eq('id', id).single()
+      if (error) throw fromPostgrestError(error)
+      if (!data) throw Errors.notFound('Entry not found')
+      row = data as unknown as EntryRow
+    }
 
     // Toggling sharing replaces the key wraps wholesale: un-sharing drops
     // the group scope; re-sharing re-adds it. RLS gates each write.
