@@ -172,6 +172,21 @@ async function tryRefreshSession(): Promise<boolean> {
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  // Offline: fail fast as a NETWORK drop rather than issuing a fetch the
+  // browser will reject anyway. This is the one place every caller funnels
+  // through, so it kills the whole family of redundant offline traffic at
+  // once — the health/status polls and group refetchIntervals that would
+  // otherwise hammer a dead interface on every tick, and the session restore
+  // that would sit on its skeleton until each one times out. Every caller
+  // already routes NETWORK drops to the offline layer: session falls back to
+  // the stored user, the key bundle to its cache, and writes to the outbox.
+  // Strict false: non-browser runtimes (Bun's test runner, the e2e scripts)
+  // expose `navigator` without `onLine`, and an undefined there must not be
+  // read as "offline".
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new ApiError(0, 'NETWORK', 'Could not reach the server', 'offline')
+  }
+
   let token = getToken()
   const headers = new Headers(init?.headers)
   if (!headers.has('content-type') && init?.body) headers.set('content-type', 'application/json')

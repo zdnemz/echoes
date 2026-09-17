@@ -21,9 +21,14 @@ function useAuthed() {
   return useSession().status === 'authenticated'
 }
 
-/** Don't retry unconfigured/auth errors — surface them immediately. */
+/**
+ * Don't retry unconfigured/auth errors — surface them immediately. A network
+ * drop is here too: it's a connectivity problem, not a transient server fault,
+ * so an immediate retry can't help and only delays the offline UI. react-query
+ * refetches on reconnect by default, which is the actual recovery trigger.
+ */
 const retryPolicy = (failureCount: number, error: unknown) => {
-  if (isUnconfigured(error) || isUnauthorized(error)) return false
+  if (isUnconfigured(error) || isUnauthorized(error) || isNetworkDrop(error)) return false
   return failureCount < 1
 }
 
