@@ -166,7 +166,7 @@ function UnlockPin() {
   return (
     <Shell
       title="Enter your PIN"
-      blurb="This unlocks your journal on this device. Nothing is stored until you type it."
+      blurb="Unlocks this browser and remembers it for 30 days — Lock now in the menu forgets it again."
     >
       <form onSubmit={submit} noValidate className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">

@@ -38,6 +38,10 @@ import {
 } from './envelope'
 import { api, getToken, json } from '@/lib/api/client'
 import { getAccountKeys, publishAccountKeys, type GroupKeyWraps } from '@/lib/api/endpoints'
+import { clearSessionKek, loadSessionKek, saveSessionKek } from './session-store'
+
+/** A remembered browser re-asks the PIN only after 30 idle days. */
+const REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 export interface UnlockedVault {
   dek: CryptoKey
@@ -108,7 +112,29 @@ async function resolveKeyState(): Promise<void> {
     return
   }
   try {
-    await getAccountKeys()
+    const bundle = await getAccountKeys()
+    if (!bundle.salt || !bundle.wrapped_dek || !bundle.wrapped_private_key) {
+      keyState = 'unprovisioned'
+      emit()
+      return
+    }
+    // Remembered browser? The stored KEK opens the bundle with no PBKDF2
+    // and no prompt. A stale KEK (PIN changed on another device) fails the
+    // auth tag — wipe it and fall through to the gate.
+    const remembered = await loadSessionKek()
+    if (remembered) {
+      try {
+        const dek = await unwrapKey(bundle.wrapped_dek, remembered)
+        const identityPrivate = await importPrivateKey(await openText(bundle.wrapped_private_key, dek))
+        vault = { dek, identityPrivate, identityPublic: bundle.public_key ?? '' }
+        keyState = 'unlocked'
+        emit()
+        void saveSessionKek(remembered, REMEMBER_TTL_MS)
+        return
+      } catch {
+        await clearSessionKek()
+      }
+    }
     keyState = 'locked'
   } catch (err) {
     // 404 = the account never chose a PIN. 401 = the session is gone; the
@@ -145,6 +171,7 @@ export async function provisionKeys(pin: string): Promise<void> {
   vault = { dek, identityPrivate: identity.privateKey, identityPublic }
   keyState = 'unlocked'
   emit()
+  await saveSessionKek(kek, REMEMBER_TTL_MS)
 }
 
 /**
@@ -168,6 +195,7 @@ export async function unlockWithPin(pin: string): Promise<void> {
   }
   keyState = 'unlocked'
   emit()
+  await saveSessionKek(kek, REMEMBER_TTL_MS)
 }
 
 /**
@@ -193,6 +221,9 @@ export async function changePin(oldPin: string, newPin: string): Promise<void> {
     wrapped_private_key: current.wrapped_private_key,
     previous_wrapped_dek: current.wrapped_dek,
   })
+  // The changed device stays remembered under the new PIN; remembered KEKs
+  // elsewhere die on their next restore.
+  await saveSessionKek(kek, REMEMBER_TTL_MS)
 }
 
 /**
@@ -208,6 +239,9 @@ export async function whenReady(): Promise<UnlockedVault | null> {
 export function lock(): void {
   vault = null
   keyState = 'locked'
+  // Forgetting the remembered KEK is what makes "lock" real — the next
+  // visit asks for the PIN again.
+  void clearSessionKek()
   emit()
   // Correct to 'unprovisioned' if the account genuinely has no bundle (a
   // brand-new account that locked before provisioning). On an anonymous
