@@ -21,6 +21,7 @@ import { useCopy } from '@/hooks/use-copy'
 import { useRovingSelection } from '@/hooks/use-roving-selection'
 import { useSession } from '@/lib/auth/session'
 import { InstallAppSection } from '@/components/pwa/install-app-section'
+import { usePendingCount } from '@/lib/offline/use-outbox-sync'
 import { getDefaultMood, getGroupLayout, setDefaultMood, setGroupLayout, type GroupLayout } from '@/lib/prefs'
 
 /** Explicit "none" first: a radiogroup must always have a checked member. */
@@ -83,6 +84,18 @@ function PrivacyStatus() {
         it. Moods, tags and timestamps stay searchable.
       </p>
     </>
+  )
+}
+
+function SyncStatus() {
+  const pending = usePendingCount()
+  if (pending === 0) return null
+  return (
+    <Row label="Offline changes">
+      <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-clay">
+        <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> {pending} waiting for a connection
+      </span>
+    </Row>
   )
 }
 
@@ -566,6 +579,7 @@ export function SettingsView() {
 
         {/* ------------------------------------------------ app */}
         <Section title="App">
+          <SyncStatus />
           <Row label="Backend">
             <span
               role="status"

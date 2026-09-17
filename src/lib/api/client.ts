@@ -44,6 +44,14 @@ export function isUnauthorized(err: unknown): boolean {
   return err instanceof ApiError && (err.status === 401 || err.code === 'UNAUTHORIZED')
 }
 
+/**
+ * True when the request never reached the server — offline, DNS, dropped
+ * connection. Callers route these to the offline outbox instead of failing.
+ */
+export function isNetworkDrop(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 0 || err.code === 'NETWORK')
+}
+
 // ---------------------------------------------------------------- token store
 // Module-level token cache, persisted to localStorage. Read lazily and only
 // from event handlers / effects (client), so first paint never depends on it.

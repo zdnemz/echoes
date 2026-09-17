@@ -355,6 +355,8 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
         }
         await update.mutateAsync({
           id: entry.id,
+          notebookId: entry.notebook_id,
+          baseUpdatedAt: entry.updated_at,
           title: sealed ? sealed.title : t,
           body: sealed ? sealed.body : body,
           mood,

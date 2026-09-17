@@ -8,10 +8,11 @@
 
 import { useMutation, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as api from './endpoints'
-import type { Entry, Group, GroupDetail, Paginated } from './types'
+import type { Entry, EntryKeyWrap, Group, GroupDetail, Paginated } from './types'
 import type { Mood } from '@/components/mood/glyphs'
 import { useSession } from '@/lib/auth/session'
-import { ApiError, isUnconfigured, isUnauthorized } from './client'
+import { ApiError, isNetworkDrop, isUnconfigured, isUnauthorized } from './client'
+import { createLocalEntryId, enqueueOp, findQueuedCreate, isLocalId } from '@/lib/offline/outbox'
 
 // ---------------------------------------------------------------- helpers
 
@@ -104,9 +105,22 @@ export function useEntries(notebookId: string | null, mood?: Mood) {
 
 export function useEntry(id: string | null) {
   const enabled = useAuthed() && id !== null
+  const { user } = useSession()
   return useQuery({
     queryKey: ['entry', id],
-    queryFn: () => api.getEntry(id as string),
+    queryFn: async () => {
+      const entryId = id as string
+      // An entry created offline: it lives only in the outbox until sync. Serve
+      // the queued (sealed) payload so the writer can keep reading and editing.
+      if (isLocalId(entryId)) {
+        const op = await findQueuedCreate(entryId)
+        if (op) {
+          return placeholderEntry(entryId, op.notebookId ?? '', user?.id ?? '', op.payload as unknown as EntrySeed)
+        }
+        throw new ApiError(404, 'NOT_FOUND', 'This entry has not synced yet.')
+      }
+      return api.getEntry(entryId)
+    },
     enabled,
     retry: retryPolicy,
   })
@@ -114,9 +128,23 @@ export function useEntry(id: string | null) {
 
 export function useCreateEntry() {
   const qc = useQueryClient()
+  const { user } = useSession()
   return useMutation({
-    mutationFn: ({ notebookId, ...input }: { notebookId: string } & Parameters<typeof api.createEntry>[1]) =>
-      api.createEntry(notebookId, input),
+    mutationFn: async ({ notebookId, ...input }: { notebookId: string } & Parameters<typeof api.createEntry>[1]) => {
+      try {
+        return await api.createEntry(notebookId, input)
+      } catch (err) {
+        // Offline: seal is already done (the editor seals before mutating), so
+        // the queued payload is ciphertext. Hand back a local placeholder so the
+        // editor can navigate to the not-yet-real entry and keep writing.
+        if (isNetworkDrop(err)) {
+          const id = createLocalEntryId()
+          await enqueueOp({ kind: 'create-entry', notebookId, entryId: id, payload: input })
+          return placeholderEntry(id, notebookId, user?.id ?? '', input)
+        }
+        throw err
+      }
+    },
     onSuccess: (entry) => {
       qc.invalidateQueries({ queryKey: ['entries', entry.notebook_id] })
       qc.invalidateQueries({ queryKey: ['group-entries'] })
@@ -127,9 +155,26 @@ export function useCreateEntry() {
 
 export function useUpdateEntry() {
   const qc = useQueryClient()
+  const { user } = useSession()
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: string } & Parameters<typeof api.updateEntry>[1]) =>
-      api.updateEntry(id, input),
+    mutationFn: async ({
+      id,
+      notebookId,
+      baseUpdatedAt,
+      ...input
+    }: { id: string; notebookId?: string; baseUpdatedAt?: string } & Parameters<typeof api.updateEntry>[1]) => {
+      try {
+        return await api.updateEntry(id, input)
+      } catch (err) {
+        // baseUpdatedAt is the version the user started from; the staleness
+        // guard compares it on replay so a circle member's edit isn't clobbered.
+        if (isNetworkDrop(err)) {
+          await enqueueOp({ kind: 'update-entry', entryId: id, payload: input, baseUpdatedAt })
+          return placeholderEntry(id, notebookId ?? '', user?.id ?? '', input)
+        }
+        throw err
+      }
+    },
     onSuccess: (entry) => {
       qc.setQueryData(['entry', entry.id], entry)
       qc.invalidateQueries({ queryKey: ['entries', entry.notebook_id] })
@@ -142,7 +187,18 @@ export function useUpdateEntry() {
 export function useDeleteEntry() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: api.deleteEntry,
+    mutationFn: async (id: string) => {
+      try {
+        await api.deleteEntry(id)
+      } catch (err) {
+        if (isNetworkDrop(err)) {
+          // enqueueOp drops the queued create entirely when id is a local one.
+          await enqueueOp({ kind: 'delete-entry', entryId: id, payload: {} })
+          return
+        }
+        throw err
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['entries'] })
       qc.invalidateQueries({ queryKey: ['group-entries'] })
@@ -150,6 +206,39 @@ export function useDeleteEntry() {
       qc.invalidateQueries({ queryKey: ['search'] })
     },
   })
+}
+
+/**
+ * Stand-in for an entry that only exists in the outbox. Fields the UI reads
+ * (id, notebook, timestamps) are real; title/body carry the sealed ciphertext
+ * the server will store, so nothing here is ever plaintext.
+ */
+interface EntrySeed {
+  title?: string
+  body?: string
+  mood?: Mood | null
+  tags?: string[]
+  is_shared?: boolean
+  encrypted?: boolean
+  key_wraps?: EntryKeyWrap[]
+}
+
+function placeholderEntry(id: string, notebookId: string, authorId: string, input: EntrySeed): Entry {
+  const now = new Date().toISOString()
+  return {
+    id,
+    notebook_id: notebookId,
+    author_id: authorId,
+    title: input.title ?? '',
+    body: input.body ?? '',
+    mood: input.mood ?? null,
+    tags: input.tags ?? [],
+    is_shared: input.is_shared ?? false,
+    encrypted: input.encrypted ?? false,
+    created_at: now,
+    updated_at: now,
+    key_wraps: input.key_wraps,
+  }
 }
 
 // ---------------------------------------------------------------- group journal
