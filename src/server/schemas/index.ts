@@ -147,23 +147,6 @@ export const KeyMaterialSchema = z
   })
   .openapi('KeyMaterial')
 
-export const RegisterDeviceSchema = z
-  .object({
-    public_key: z.string().min(1).max(1024),
-    label: z.string().max(120).optional(),
-  })
-  .strict()
-
-export const DeviceView = z
-  .object({
-    id: UuidSchema,
-    user_id: UuidSchema,
-    public_key: z.string(),
-    label: z.string().nullable(),
-    created_at: TimestampSchema,
-  })
-  .openapi('Device')
-
 export const DistributeGroupKeysSchema = z
   .object({
     generation: z.coerce
@@ -177,14 +160,14 @@ export const DistributeGroupKeysSchema = z
       .array(
         z
           .object({
-            device_id: UuidSchema,
-            sealed_box: z.string().min(1).max(8192).openapi({ description: 'CEK sealed for this device' }),
+            user_id: UuidSchema,
+            sealed_box: z.string().min(1).max(8192).openapi({ description: 'CEK sealed for this member' }),
           })
           .strict(),
       )
       .min(1)
       .max(200)
-      .openapi({ description: 'One sealed box per device' }),
+      .openapi({ description: 'One sealed box per member' }),
   })
   .strict()
 
@@ -192,7 +175,7 @@ export const GroupKeyWrapsView = z
   .object({
     wraps: z.array(
       z.object({
-        device_id: UuidSchema,
+        user_id: UuidSchema,
         generation: z.number().int(),
         sealed_box: z.string(),
       }),
@@ -200,14 +183,19 @@ export const GroupKeyWrapsView = z
   })
   .openapi('GroupKeyWraps')
 
-export const GroupDeviceView = z
+export interface GroupMember {
+  user_id: string
+  public_key: string | null
+  has_wrap: boolean
+}
+
+export const GroupMemberView = z
   .object({
     user_id: UuidSchema,
-    device_id: UuidSchema,
-    public_key: z.string(),
+    public_key: z.string().nullable(),
     has_wrap: z.boolean(),
   })
-  .openapi('GroupDevice')
+  .openapi('GroupMember')
 
 export const EncryptMigrationSchema = z
   .object({
