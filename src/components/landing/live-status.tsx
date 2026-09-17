@@ -21,13 +21,8 @@ export const LiveStatusDot = memo(function LiveStatusDot() {
   const apiOk = data?.status === 'ok'
 
   return (
-    <span className="inline-flex items-center gap-2 font-mono text-[10.5px] text-ink-faint">
-      <span className="relative flex h-2 w-2 items-center justify-center">
-        <span
-          className={`absolute h-2 w-2 rounded-full ${apiOk ? 'bg-sage opacity-60 animate-breathe' : 'bg-ember opacity-50'}`}
-        />
-        <span className={`h-2 w-2 rounded-full ${apiOk ? 'bg-sage' : 'bg-ember'}`} />
-      </span>
+    <span className="inline-flex items-center gap-2 font-mono text-[10.5px] font-bold uppercase text-background/80">
+      <span className={`h-2 w-2 ${apiOk ? 'bg-accent' : 'bg-destructive'}`} />
       {apiOk ? 'api live' : 'api unreachable'}
     </span>
   )

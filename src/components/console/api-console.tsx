@@ -51,11 +51,11 @@ interface OperationInfo {
 }
 
 const METHOD_COLORS: Record<string, string> = {
-  GET: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-  POST: 'bg-amber-100 text-amber-800 border-amber-200',
-  PATCH: 'bg-orange-100 text-orange-800 border-orange-200',
-  PUT: 'bg-orange-100 text-orange-800 border-orange-200',
-  DELETE: 'bg-red-100 text-red-800 border-red-200',
+  GET: 'bg-background text-foreground border-2 border-foreground font-black',
+  POST: 'bg-foreground text-background border-2 border-foreground font-black',
+  PATCH: 'bg-muted text-foreground border-2 border-foreground font-black',
+  PUT: 'bg-muted text-foreground border-2 border-foreground font-black',
+  DELETE: 'bg-accent text-background border-2 border-foreground font-black',
 }
 
 const TAG_META: Record<string, { label: string; icon: typeof ShieldCheck }> = {
@@ -157,26 +157,26 @@ export function ApiConsole() {
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       {/* ------------------------------------------------ header */}
-      <header className="border-b bg-paper/85 backdrop-blur sticky top-0 z-10">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+      <header className="sticky top-0 z-10 border-b-[3px] border-foreground bg-background">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3">
             <div
-              className="flex h-10 w-10 items-center justify-center rounded-lg bg-clay-deep text-[#fdf8f2] shrink-0"
+              className="flex h-10 w-10 shrink-0 items-center justify-center border-2 border-foreground bg-accent text-background"
               aria-hidden
             >
-              <BookOpen className="h-5 w-5" />
+              <BookOpen className="h-5 w-5" weight="bold" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-lg font-semibold leading-tight truncate">Journaling API · Developer Console</h1>
-              <p className="text-xs text-muted-foreground truncate">
-                Hono + Zod + OpenAPI 3.1 · Supabase Postgres/Auth/RLS
-              </p>
+              <h1 className="font-display truncate text-lg uppercase leading-tight">
+                Journaling API · Developer Console
+              </h1>
+              <p className="truncate text-xs font-bold">Hono + Zod + OpenAPI 3.1 · Supabase Postgres/Auth/RLS</p>
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Badge
               variant={health?.status === 'ok' ? 'default' : 'secondary'}
-              className={health?.status === 'ok' ? 'bg-sage' : 'bg-amber-500'}
+              className={health?.status === 'ok' ? 'bg-accent text-background' : 'bg-muted'}
             >
               {healthLoading && !health ? 'checking…' : health ? `api ${health.status}` : 'api unreachable'}
             </Badge>
@@ -376,18 +376,26 @@ export function ApiConsole() {
       </main>
 
       {/* ------------------------------------------------ footer (sticky) */}
-      <footer className="border-t mt-auto">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      <footer className="mt-auto border-t-[3px] border-foreground bg-background">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-4 sm:px-6 lg:px-8 text-xs font-bold">
           <span>
             Journaling API · OpenAPI 3.1 · Scalar reference at{' '}
-            <a className="underline" href="/api/docs" target="_blank" rel="noreferrer">
+            <a
+              className="underline decoration-accent underline-offset-2"
+              href="/api/docs"
+              target="_blank"
+              rel="noreferrer"
+            >
               /api/docs
             </a>
           </span>
-          <span className="ml-auto flex items-center gap-3">
+          <span className="ml-auto flex items-center gap-3 font-mono">
             <span>visibility enforced by Postgres RLS</span>
             <span aria-hidden>·</span>
-            <button onClick={refreshHealth} className="underline underline-offset-2 inline-flex items-center gap-1">
+            <button
+              onClick={refreshHealth}
+              className="inline-flex items-center gap-1 underline decoration-accent underline-offset-2"
+            >
               <ArrowClockwise className="h-3 w-3" /> refresh health
             </button>
           </span>

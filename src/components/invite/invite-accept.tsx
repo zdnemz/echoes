@@ -14,7 +14,6 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { CircleNotch, LinkSimple } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
-import { Grain } from '@/components/grain'
 import { Wordmark } from '@/components/brand'
 import { UnconfiguredNotice } from '@/components/unconfigured'
 import { useSession } from '@/lib/auth/session'
@@ -97,18 +96,19 @@ export function InviteAccept({ token }: { token: string | null }) {
   // --------------------------------------------------------------- frames
 
   const frame = (children: React.ReactNode) => (
-    <div className="relative flex min-h-[100dvh] flex-col bg-paper text-ink">
-      <Grain />
-      <header className="border-b border-line">
+    <div className="relative flex min-h-[100dvh] flex-col bg-background font-mono text-foreground">
+      <header className="border-b-[3px] border-foreground">
         <div className="mx-auto flex h-16 max-w-5xl items-center px-4 sm:px-6">
           <Link href="/" aria-label="Echoes — home">
             <Wordmark className="text-lg" />
           </Link>
         </div>
       </header>
-      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-4 py-14 sm:px-6">{children}</main>
-      <footer className="border-t border-line">
-        <div className="mx-auto max-w-5xl px-4 py-4 font-mono text-[10.5px] text-ink-faint sm:px-6">
+      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-4 py-14 sm:px-6">
+        <div className="border-2 border-foreground bg-background p-6 shadow-brutal sm:p-8">{children}</div>
+      </main>
+      <footer className="border-t-[3px] border-foreground">
+        <div className="mx-auto max-w-5xl px-4 py-4 font-mono text-[10.5px] font-bold uppercase sm:px-6">
           the link is the invite — the owner can revoke it any time
         </div>
       </footer>

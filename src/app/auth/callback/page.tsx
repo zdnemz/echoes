@@ -15,7 +15,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Grain } from '@/components/grain'
 import { Wordmark } from '@/components/brand'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, CircleNotch } from '@phosphor-icons/react/dist/ssr'
@@ -91,31 +90,30 @@ export default function AuthCallbackPage() {
   }, [router])
 
   return (
-    <div className="relative flex min-h-[100dvh] flex-col bg-paper text-ink">
-      <Grain />
+    <div className="relative flex min-h-[100dvh] flex-col bg-background font-mono text-foreground">
       <main className="flex flex-1 items-center justify-center px-4 py-16">
         <div className="w-full max-w-md">
-          <div className="rounded-xl border border-line bg-paper-raised p-8 shadow-lift">
+          <div className="border-2 border-foreground bg-background p-8 shadow-brutal">
             <Wordmark className="text-lg" />
 
             {phase === 'reading' || phase === 'exchanging' ? (
               <div className="mt-6 flex items-center gap-3" role="status">
-                <CircleNotch weight="bold" className="h-4 w-4 animate-spin text-clay" />
-                <p className="text-[13.5px] text-ink-soft">Finishing the sign-in…</p>
+                <CircleNotch weight="bold" className="h-4 w-4 animate-spin text-accent" />
+                <p className="text-[13.5px] font-bold">Finishing the sign-in…</p>
               </div>
             ) : phase === 'unconfigured' ? (
               <div className="mt-6">
-                <p className="text-[13.5px] text-ink-soft">Almost there — this deployment needs its backend keys.</p>
+                <p className="text-[13.5px] font-bold">Almost there — this deployment needs its backend keys.</p>
                 <div className="mt-4">
                   <UnconfiguredNotice />
                 </div>
               </div>
             ) : phase === 'noop' ? (
               <div className="mt-6">
-                <p className="text-[13.5px] leading-relaxed text-ink-soft">
+                <p className="text-[13.5px] font-bold leading-relaxed">
                   This page completes a Google sign-in. If you were looking to start one, begin from the sign-in page.
                 </p>
-                <Button asChild variant="outline" className="press mt-5 h-10 gap-2">
+                <Button asChild variant="outline" className="mt-5 h-10 gap-2">
                   <Link href="/login">
                     <ArrowLeft weight="bold" className="h-4 w-4" /> Back to sign in
                   </Link>
@@ -123,14 +121,14 @@ export default function AuthCallbackPage() {
               </div>
             ) : (
               <div className="mt-6">
-                <p className="font-display text-lg text-ink">That didn’t land.</p>
-                <p className="mt-2 text-[13px] leading-relaxed text-ember">
+                <p className="font-display text-lg uppercase">That didn’t land.</p>
+                <p className="mt-2 border-2 border-destructive px-3 py-2 text-[13px] font-bold text-destructive">
                   {message ?? 'The sign-in could not be completed.'}
                 </p>
-                <p className="mt-3 text-[12.5px] leading-relaxed text-ink-faint">
+                <p className="mt-3 text-[12.5px] font-bold leading-relaxed">
                   One-time codes expire quickly — starting again usually fixes it.
                 </p>
-                <Button asChild variant="outline" className="press mt-5 h-10 gap-2">
+                <Button asChild variant="outline" className="mt-5 h-10 gap-2">
                   <Link href="/login">
                     <ArrowLeft weight="bold" className="h-4 w-4" /> Try again
                   </Link>
