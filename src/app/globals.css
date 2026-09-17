@@ -3,301 +3,225 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ============================================================================
-   ECHOES — design tokens · "Paper & Ink"
-   ----------------------------------------------------------------------------
-   Three layers:
-     1. Primitives (:root)     — paper/ink/line/clay/mood scales, one warm hue
-     2. Semantic  (:root)      — shadcn-compatible surface/role mapping
-     3. Theme     (@theme)     — exposes every token as a Tailwind utility
-   Rules honored: one accent (clay), saturation < 80%, no pure black, no
-   purple/neon, hairlines over heavy borders, shadows tinted to the paper hue.
-   ========================================================================== */
-
 :root {
-  /* ---------------------------------------------------------- primitives */
-  --paper: #faf6ee; /* page canvas — warm cream */
-  --paper-raised: #fffdf7; /* cards, popovers — one step brighter */
-  --paper-deep: #f2ecdf; /* wells, code, hover fills */
-  --paper-sink: #eae2d0; /* pressed states, deepest well */
+  --bg: #ffffff;
+  --fg: #0a0a0a;
+  --accent: #ff3b00;
+  --muted: #f0f0f0;
 
-  --ink: #272219; /* primary text — warm near-black, never #000 */
-  --ink-soft: #5f5746; /* secondary text */
-  --ink-faint: #9a8f78; /* tertiary/meta text */
-  --ink-ghost: #c8bfa9; /* disabled, placeholder rules */
+  --paper: var(--bg);
+  --paper-raised: var(--bg);
+  --paper-deep: var(--muted);
+  --paper-sink: var(--muted);
 
-  --line: #e4dbc8; /* hairline borders */
-  --line-strong: #d3c7ae; /* emphasized hairlines, input borders */
+  --ink: var(--fg);
+  --ink-soft: #333333;
+  --ink-faint: #666666;
+  --ink-ghost: #999999;
 
-  --clay: #b85c3e; /* the single accent — muted terracotta */
-  --clay-deep: #9d4a2e; /* hover / pressed */
-  --clay-ink: #7c3a22; /* accent text on tint */
-  --clay-soft: #d9a38c; /* rings, quiet highlights */
-  --clay-tint: #f3e4dc; /* tint fills, chips, banners */
+  --line: var(--fg);
+  --line-strong: var(--fg);
 
-  --mood-great: #bd8f34; /* ochre gold */
-  --mood-good: #7c8e5a; /* sage */
-  --mood-okay: #a29a89; /* warm stone */
-  --mood-low: #b08676; /* dusty clay rose */
-  --mood-rough: #6f5246; /* deep umber */
+  --clay: var(--accent);
+  --clay-deep: #cc2f00;
+  --clay-ink: var(--accent);
+  --clay-soft: var(--accent);
+  --clay-tint: #fff0eb;
 
-  --sage: #6f7d51; /* success — quiet, desaturated */
-  --sage-tint: #e9eddd;
-  --ember: #a83f2a; /* destructive — warm red, not neon */
-  --ember-tint: #f6e2da;
+  --mood-great: var(--accent);
+  --mood-good: var(--fg);
+  --mood-okay: #666666;
+  --mood-low: #333333;
+  --mood-rough: var(--fg);
 
-  /* ---------------------------------------------------------- semantic */
-  --background: var(--paper);
-  --foreground: var(--ink);
-  --card: var(--paper-raised);
-  --card-foreground: var(--ink);
-  --popover: var(--paper-raised);
-  --popover-foreground: var(--ink);
-  --primary: var(--clay-deep);
-  --primary-foreground: #fdf8f2;
-  --secondary: var(--paper-deep);
-  --secondary-foreground: var(--ink);
-  --muted: var(--paper-deep);
-  --muted-foreground: var(--ink-soft);
-  --accent: var(--clay-tint);
-  --accent-foreground: var(--clay-ink);
-  --destructive: var(--ember);
-  --border: var(--line);
-  --input: var(--line-strong);
-  --ring: var(--clay-soft);
-  --chart-1: var(--clay);
-  --chart-2: var(--mood-good);
-  --chart-3: var(--mood-great);
-  --chart-4: var(--mood-low);
-  --chart-5: var(--mood-rough);
-  --sidebar: var(--paper-raised);
-  --sidebar-foreground: var(--ink);
-  --sidebar-primary: var(--clay-deep);
-  --sidebar-primary-foreground: #fdf8f2;
-  --sidebar-accent: var(--paper-deep);
-  --sidebar-accent-foreground: var(--ink);
-  --sidebar-border: var(--line);
-  --sidebar-ring: var(--clay-soft);
+  --sage: var(--fg);
+  --sage-tint: var(--muted);
+  --ember: var(--accent);
+  --ember-tint: #fff0eb;
 
-  --radius: 0.5rem;
+  --background: var(--bg);
+  --foreground: var(--fg);
+  --card: var(--bg);
+  --card-foreground: var(--fg);
+  --popover: var(--bg);
+  --popover-foreground: var(--fg);
+  --primary: var(--fg);
+  --primary-foreground: var(--bg);
+  --secondary: var(--muted);
+  --secondary-foreground: var(--fg);
+  --muted-color: var(--muted);
+  --muted-foreground: #666666;
+  --accent-color: var(--accent);
+  --accent-foreground: var(--bg);
+  --destructive: var(--accent);
+  --border: var(--fg);
+  --input: var(--fg);
+  --ring: var(--accent);
+  --chart-1: var(--accent);
+  --chart-2: var(--fg);
+  --chart-3: #666666;
+  --chart-4: #333333;
+  --chart-5: var(--fg);
+  --sidebar: var(--bg);
+  --sidebar-foreground: var(--fg);
+  --sidebar-primary: var(--fg);
+  --sidebar-primary-foreground: var(--bg);
+  --sidebar-accent: var(--muted);
+  --sidebar-accent-foreground: var(--fg);
+  --sidebar-border: var(--fg);
+  --sidebar-ring: var(--accent);
 
-  /* ---------------------------------------------------------- motion */
-  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --radius: 0px;
 }
 
 @theme inline {
-  /* ---------------------------------------------------------- fonts */
   --font-sans: var(--font-geist-sans), 'Geist', ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-newsreader), 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-serif: var(--font-geist-sans), 'Geist', ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), 'Geist Mono', ui-monospace, 'SF Mono', monospace;
 
-  /* ---------------------------------------------------------- palette */
-  --color-paper: var(--paper);
-  --color-paper-raised: var(--paper-raised);
-  --color-paper-deep: var(--paper-deep);
-  --color-paper-sink: var(--paper-sink);
-  --color-ink: var(--ink);
-  --color-ink-soft: var(--ink-soft);
-  --color-ink-faint: var(--ink-faint);
-  --color-ink-ghost: var(--ink-ghost);
-  --color-line: var(--line);
-  --color-line-strong: var(--line-strong);
-  --color-clay: var(--clay);
-  --color-clay-deep: var(--clay-deep);
-  --color-clay-ink: var(--clay-ink);
-  --color-clay-soft: var(--clay-soft);
-  --color-clay-tint: var(--clay-tint);
-  --color-mood-great: var(--mood-great);
-  --color-mood-good: var(--mood-good);
-  --color-mood-okay: var(--mood-okay);
-  --color-mood-low: var(--mood-low);
-  --color-mood-rough: var(--mood-rough);
-  --color-sage: var(--sage);
-  --color-sage-tint: var(--sage-tint);
-  --color-ember: var(--ember);
-  --color-ember-tint: var(--ember-tint);
+  --color-paper: var(--bg);
+  --color-paper-raised: var(--bg);
+  --color-paper-deep: var(--muted);
+  --color-paper-sink: var(--muted);
+  --color-ink: var(--fg);
+  --color-ink-soft: #333333;
+  --color-ink-faint: #666666;
+  --color-ink-ghost: #999999;
+  --color-line: var(--fg);
+  --color-line-strong: var(--fg);
+  --color-clay: var(--accent);
+  --color-clay-deep: #cc2f00;
+  --color-clay-ink: var(--accent);
+  --color-clay-soft: var(--accent);
+  --color-clay-tint: #fff0eb;
+  --color-mood-great: var(--accent);
+  --color-mood-good: var(--fg);
+  --color-mood-okay: #666666;
+  --color-mood-low: #333333;
+  --color-mood-rough: var(--fg);
+  --color-sage: var(--fg);
+  --color-sage-tint: var(--muted);
+  --color-ember: var(--accent);
+  --color-ember-tint: #fff0eb;
 
-  /* ---------------------------------------------------------- semantic */
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-card: var(--bg);
+  --color-card-foreground: var(--fg);
+  --color-popover: var(--bg);
+  --color-popover-foreground: var(--fg);
+  --color-primary: var(--fg);
+  --color-primary-foreground: var(--bg);
+  --color-secondary: var(--muted);
+  --color-secondary-foreground: var(--fg);
   --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
+  --color-muted-foreground: #666666;
   --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+  --color-accent-foreground: var(--bg);
+  --color-destructive: var(--accent);
+  --color-border: var(--fg);
+  --color-input: var(--fg);
+  --color-ring: var(--accent);
+  --color-chart-1: var(--accent);
+  --color-chart-2: var(--fg);
+  --color-chart-3: #666666;
+  --color-chart-4: #333333;
+  --color-chart-5: var(--fg);
+  --color-sidebar: var(--bg);
+  --color-sidebar-foreground: var(--fg);
+  --color-sidebar-primary: var(--fg);
+  --color-sidebar-primary-foreground: var(--bg);
+  --color-sidebar-accent: var(--muted);
+  --color-sidebar-accent-foreground: var(--fg);
+  --color-sidebar-border: var(--fg);
+  --color-sidebar-ring: var(--accent);
 
-  /* ---------------------------------------------------------- radii */
-  --radius-sm: calc(var(--radius) - 2px);
-  --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 4px);
-  --radius-xl: calc(var(--radius) + 10px);
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
 
-  /* ---------------------------------------------------------- motion */
   --animate-marquee: marquee 46s linear infinite;
-  --animate-float-soft: float-soft 7s ease-in-out infinite;
-  --animate-breathe: breathe 2.6s ease-in-out infinite;
-  --animate-shimmer: shimmer 2.2s ease-in-out infinite;
-  --animate-rise: rise 0.7s var(--ease-out-soft) both;
 
   @keyframes marquee {
     to {
       transform: translateX(-50%);
     }
   }
-  @keyframes float-soft {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-7px);
-    }
-  }
-  @keyframes breathe {
-    0%,
-    100% {
-      opacity: 0.55;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1.25);
-    }
-  }
-  @keyframes shimmer {
-    0% {
-      opacity: 0.45;
-    }
-    50% {
-      opacity: 0.9;
-    }
-    100% {
-      opacity: 0.45;
-    }
-  }
-  @keyframes rise {
-    from {
-      opacity: 0;
-      transform: translateY(14px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
-  }
-
-  html {
-    scroll-behavior: smooth;
+    @apply border-border;
   }
 
   body {
-    @apply bg-background text-foreground font-sans;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-    /* Backstop for absolutely-positioned flourishes (hero chips, washes) on
-       narrow screens. `clip` — not `hidden` — so sticky bars keep working. */
-    overflow-x: clip;
+    @apply bg-background text-foreground font-mono;
   }
 
   ::selection {
-    background: color-mix(in srgb, var(--clay) 22%, transparent);
-    color: var(--ink);
+    background: var(--accent);
+    color: var(--bg);
   }
 
-  /* Paper-toned scrollbars — thin, warm, unobtrusive */
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--line-strong) transparent;
+    scrollbar-color: var(--fg) var(--bg);
   }
   *::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
   *::-webkit-scrollbar-thumb {
-    background: var(--line-strong);
-    border-radius: 8px;
+    background: var(--fg);
+    border-radius: 0;
   }
   *::-webkit-scrollbar-track {
-    background: transparent;
+    background: var(--bg);
   }
 }
 
 @layer components {
-  /* Serif display type — editorial headline voice */
   .font-display {
-    font-family: var(--font-serif);
-    font-weight: 500;
-    letter-spacing: -0.015em;
-    font-variation-settings: 'opsz' 40;
+    font-family: var(--font-geist-mono), 'Geist Mono', ui-monospace, monospace;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
   }
 
-  /* Tactile press for every interactive element */
   .press {
     transition:
-      transform 0.15s var(--ease-out-soft),
-      box-shadow 0.2s var(--ease-out-soft),
-      background-color 0.2s var(--ease-out-soft),
-      color 0.2s var(--ease-out-soft),
-      border-color 0.2s var(--ease-out-soft);
+      transform 0.1s,
+      box-shadow 0.1s;
   }
   .press:active {
-    transform: scale(0.97) translateY(1px);
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 var(--fg) !important;
   }
 
-  /* Diffusion shadow — depth without clutter, tinted to the page hue */
-  .shadow-diffuse {
-    box-shadow:
-      0 1px 2px rgba(39, 34, 25, 0.04),
-      0 18px 40px -18px rgba(39, 34, 25, 0.14);
+  .shadow-brutal {
+    box-shadow: 4px 4px 0 var(--fg);
   }
-  .shadow-lift {
-    box-shadow:
-      0 1px 2px rgba(39, 34, 25, 0.05),
-      0 28px 60px -24px rgba(39, 34, 25, 0.22);
+  .shadow-brutal-sm {
+    box-shadow: 2px 2px 0 var(--fg);
   }
-  .shadow-ink {
-    box-shadow: 0 10px 30px -14px rgba(157, 74, 46, 0.38);
+  .shadow-brutal-accent {
+    box-shadow: 4px 4px 0 var(--accent);
   }
 
-  /* The reading measure — journal text breathes at ~64ch */
   .measure {
     max-width: 64ch;
   }
 
-  /* Skeleton shimmer block */
   .skeleton-line {
-    @apply rounded-sm bg-paper-deep;
-    animation: var(--animate-shimmer);
+    @apply bg-muted;
+  }
+
+  .border-brutal {
+    border: 2px solid var(--fg);
+  }
+  .border-brutal-thick {
+    border: 3px solid var(--fg);
   }
 }
 
