@@ -4,6 +4,7 @@ node_modules
 out
 dist
 *.log
+strix_runs
 
 # env & secrets
 .env
