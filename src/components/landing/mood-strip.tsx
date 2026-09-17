@@ -1,8 +1,3 @@
-/**
- * The five moods + a slow kinetic tag marquee. Server component — the
- * marquee is a pure CSS transform loop (no JS), paused on hover.
- */
-
 import { MOOD_META, MOODS, MoodGlyph } from '@/components/mood/glyphs'
 
 const TAGS = [
@@ -26,7 +21,7 @@ function TagMarqueeRow({ ariaHidden = false }: { ariaHidden?: boolean }) {
       {TAGS.map((tag) => (
         <span
           key={tag}
-          className="whitespace-nowrap rounded-full border border-line bg-paper-raised px-3.5 py-1.5 font-mono text-[11px] text-ink-soft"
+          className="whitespace-nowrap border-2 border-background px-3 py-1.5 font-mono text-[11px] font-bold text-background"
         >
           {tag}
         </span>
@@ -37,34 +32,34 @@ function TagMarqueeRow({ ariaHidden = false }: { ariaHidden?: boolean }) {
 
 export function MoodStrip() {
   return (
-    <section id="moods" className="scroll-mt-16 border-y border-line bg-paper-deep">
+    <section id="moods" className="scroll-mt-16 border-y-[3px] border-foreground bg-foreground text-background">
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 md:py-16">
         <div className="grid gap-8 lg:grid-cols-12">
           <div className="lg:col-span-5">
-            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-clay">02 — The five moods</p>
-            <h2 className="font-display mt-4 max-w-[16ch] text-3xl leading-tight tracking-tight text-ink md:text-4xl">
+            <p className="inline-block bg-accent px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-background">
+              02 — The five moods
+            </p>
+            <h2 className="font-display mt-4 max-w-[16ch] text-3xl uppercase md:text-4xl">
               Every entry lands with a mood.
             </h2>
-            <p className="mt-5 max-w-[46ch] text-[13.5px] leading-relaxed text-ink-soft">
-              One ink-drawn mark per entry — a small weather report of the day. Filter a whole notebook down to its
-              rough patches, or trace a run of radiant weeks.
+            <p className="mt-5 max-w-[46ch] border-l-4 border-accent pl-4 text-[13.5px] font-bold leading-relaxed text-background/80">
+              One mark per entry — a small weather report of the day. Filter a whole notebook down to its rough patches,
+              or trace a run of radiant weeks.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-5 lg:col-span-7 lg:self-end">
-            {MOODS.map((mood, i) => {
+          <div className="grid grid-cols-2 gap-px border-2 border-background bg-background sm:grid-cols-5 lg:col-span-7 lg:self-end">
+            {MOODS.map((mood) => {
               const meta = MOOD_META[mood]
+              const hot = mood === 'great'
               return (
-                <div key={mood} className="animate-rise" style={{ animationDelay: `${i * 90}ms` }}>
-                  <span style={{ color: meta.color }}>
-                    <MoodGlyph mood={mood} className="h-7 w-7" />
-                  </span>
-                  <p className="mt-3 text-[13px] font-medium text-ink">{meta.label}</p>
-                  <p className="mt-1 text-[11px] leading-snug text-ink-faint">{meta.note}</p>
-                  <span
-                    className="mt-3 block h-[2px] w-8 rounded-full"
-                    style={{ background: meta.color, opacity: 0.55 }}
-                  />
+                <div
+                  key={mood}
+                  className={`p-4 ${hot ? 'bg-accent text-background' : 'bg-foreground text-background'}`}
+                >
+                  <MoodGlyph mood={mood} className="h-7 w-7" />
+                  <p className="mt-3 font-mono text-[13px] font-black uppercase">{meta.label}</p>
+                  <p className="mt-1 text-[11px] font-bold leading-snug text-background/60">{meta.note}</p>
                 </div>
               )
             })}

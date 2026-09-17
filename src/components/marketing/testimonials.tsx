@@ -1,8 +1,3 @@
-/**
- * Three quiet testimonials — editorial pull-quote treatment, no star ratings,
- no stock-photo avatars. Server component.
- */
-
 const QUOTES = [
   {
     quote:
@@ -25,20 +20,44 @@ const QUOTES = [
 ]
 
 export function Testimonials() {
+  const [lead, ...rest] = QUOTES
   return (
-    <section className="border-t border-line bg-paper">
+    <section className="border-t-[3px] border-foreground">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 md:py-24">
-        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-clay">04 — In their words</p>
-        <div className="mt-10 grid gap-10 md:grid-cols-3">
-          {QUOTES.map((q) => (
-            <figure key={q.name} className="flex flex-col border-l-2 border-clay/40 pl-5">
-              <blockquote className="font-serif text-[15px] leading-relaxed text-ink">“{q.quote}”</blockquote>
-              <figcaption className="mt-auto pt-5">
-                <p className="text-[12.5px] font-medium text-ink">{q.name}</p>
-                <p className="mt-0.5 font-mono text-[10.5px] text-ink-faint">{q.context}</p>
-              </figcaption>
-            </figure>
-          ))}
+        <p className="inline-block border-2 border-foreground bg-foreground px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-background">
+          04 — In their words
+        </p>
+        <div className="mt-10 grid gap-6 lg:grid-cols-12">
+          <figure
+            key={lead.name}
+            className="flex flex-col border-2 border-foreground bg-accent p-7 text-background shadow-brutal lg:col-span-7"
+          >
+            <blockquote className="font-mono text-xl font-black uppercase leading-snug md:text-2xl">
+              "{lead.quote}"
+            </blockquote>
+            <figcaption className="mt-auto pt-6">
+              <p className="inline-block bg-foreground px-2 py-1 font-mono text-[12.5px] font-bold uppercase text-background">
+                {lead.name}
+              </p>
+              <p className="mt-2 font-mono text-[10.5px] font-bold uppercase tracking-widest">{lead.context}</p>
+            </figcaption>
+          </figure>
+          <div className="grid gap-6 lg:col-span-5">
+            {rest.map((q) => (
+              <figure
+                key={q.name}
+                className="flex flex-col border-2 border-foreground bg-background p-6 shadow-brutal-sm"
+              >
+                <blockquote className="text-[15px] font-bold leading-relaxed">"{q.quote}"</blockquote>
+                <figcaption className="mt-auto pt-5">
+                  <p className="text-[12.5px] font-black uppercase">{q.name}</p>
+                  <p className="mt-0.5 border-l-4 border-accent pl-2 font-mono text-[10.5px] font-bold uppercase">
+                    {q.context}
+                  </p>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
         </div>
       </div>
     </section>

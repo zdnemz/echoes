@@ -1,10 +1,4 @@
-/**
- * Feature stories — three asymmetric two-column rows (zig-zag), each with a
- * hand-composed artifact instead of a generic screenshot. Server component:
- * pure markup, reveal via CSS cascade (animation-delay), zero client JS.
- */
-
-import { MOOD_META, MOODS, MoodGlyph } from '@/components/mood/glyphs'
+import { MOODS, MoodGlyph } from '@/components/mood/glyphs'
 import { MarkdownView } from '@/components/markdown/markdown-view'
 import { Eye, EyeSlash, LinkSimple } from '@phosphor-icons/react/dist/ssr'
 
@@ -20,29 +14,29 @@ function SectionHead({
   aside: string
 }) {
   return (
-    <div className="grid gap-8 border-t border-line pt-14 lg:grid-cols-12">
+    <div className="grid gap-8 border-t-[3px] border-foreground pt-14 lg:grid-cols-12">
       <div className="lg:col-span-7">
-        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-clay">
+        <p className="inline-block border-2 border-foreground bg-foreground px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-background">
           {index} — {eyebrow}
         </p>
-        <h2 className="font-display mt-4 max-w-[20ch] text-3xl leading-tight tracking-tight text-ink md:text-4xl">
-          {title}
-        </h2>
+        <h2 className="font-display mt-4 max-w-[20ch] text-3xl uppercase md:text-4xl">{title}</h2>
       </div>
-      <p className="self-end text-[13.5px] leading-relaxed text-ink-soft lg:col-span-5">{aside}</p>
+      <p className="self-end border-2 border-foreground bg-muted p-4 text-[13.5px] font-bold leading-relaxed lg:col-span-5">
+        {aside}
+      </p>
     </div>
   )
 }
 
 function FeatureList({ items }: { items: Array<{ label: string; desc: string }> }) {
   return (
-    <ul className="mt-8 divide-y divide-line border-y border-line">
-      {items.map((item) => (
-        <li key={item.label} className="flex gap-5 py-4">
-          <span className="w-28 shrink-0 pt-0.5 font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-faint">
+    <ul className="mt-8 border-2 border-foreground shadow-brutal">
+      {items.map((item, i) => (
+        <li key={item.label} className={`flex gap-5 p-4 ${i > 0 ? 'border-t-2 border-foreground' : ''}`}>
+          <span className="h-fit shrink-0 bg-foreground px-2 py-1 font-mono text-[10.5px] font-bold uppercase tracking-[0.12em] text-background">
             {item.label}
           </span>
-          <span className="text-[13.5px] leading-relaxed text-ink-soft">{item.desc}</span>
+          <span className="text-[13.5px] font-bold leading-relaxed">{item.desc}</span>
         </li>
       ))}
     </ul>
@@ -54,35 +48,31 @@ function FeatureList({ items }: { items: Array<{ label: string; desc: string }> 
 function EditorArtifact() {
   return (
     <figure>
-      <div className="overflow-hidden rounded-lg border border-line bg-paper-raised shadow-diffuse">
-        <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">Entry · draft</span>
+      <div className="overflow-hidden border-2 border-foreground bg-background shadow-brutal">
+        <div className="flex items-center justify-between border-b-2 border-foreground px-4 py-2.5">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em]">Entry · draft</span>
           <div className="flex items-center gap-3" aria-hidden="true">
             {MOODS.map((m, i) => (
-              <span
-                key={m}
-                className={i === 2 ? 'opacity-100' : 'opacity-30'}
-                style={i === 2 ? { color: MOOD_META[m].color } : undefined}
-              >
+              <span key={m} className={i === 2 ? 'text-accent opacity-100' : 'opacity-30'}>
                 <MoodGlyph mood={m} className="h-4 w-4" />
               </span>
             ))}
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2">
-          <div className="border-line p-4 font-mono text-[12px] leading-6 text-ink-soft sm:border-r">
+          <div className="border-foreground p-4 font-mono text-[12px] leading-6 sm:border-r-2">
             <p># A slow morning</p>
             <p>&nbsp;</p>
             <p>Woke before the alarm. The</p>
             <p>
               coffee was **excellent** —
-              <span className="ml-0.5 inline-block h-3.5 w-[7px] animate-pulse bg-clay/70 align-middle" />
+              <span className="ml-0.5 inline-block h-3.5 w-[7px] animate-pulse bg-accent align-middle" />
             </p>
             <p>&nbsp;</p>
             <p>&gt; write it down before</p>
             <p>&gt; it becomes yesterday</p>
           </div>
-          <div className="bg-paper/60 p-4">
+          <div className="bg-muted p-4">
             <MarkdownView className="text-[13px]">
               {`# A slow morning
 
@@ -93,7 +83,7 @@ Woke before the alarm. The coffee was **excellent** — first try, no bitter edg
           </div>
         </div>
       </div>
-      <figcaption className="mt-3 font-mono text-[10px] text-ink-faint">
+      <figcaption className="mt-3 border-l-4 border-accent pl-3 font-mono text-[11px] font-bold uppercase">
         The editor, mid-sentence — raw on the left, typeset as you go.
       </figcaption>
     </figure>
@@ -103,56 +93,53 @@ Woke before the alarm. The coffee was **excellent** — first try, no bitter edg
 function SharingArtifact() {
   return (
     <figure>
-      <div className="overflow-hidden rounded-lg border border-line bg-paper-raised shadow-diffuse">
-        <div className="flex items-center gap-3 border-b border-line px-4 py-3">
-          <span className="font-display text-[15px] text-ink">Kitchen Table</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-clay-tint px-2.5 py-0.5 font-mono text-[10px] text-clay-ink">
+      <div className="overflow-hidden border-2 border-foreground bg-background shadow-brutal">
+        <div className="flex items-center gap-3 border-b-2 border-foreground px-4 py-3">
+          <span className="font-mono text-[15px] font-black uppercase">Kitchen Table</span>
+          <span className="inline-flex items-center gap-1.5 border-2 border-foreground bg-accent px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-background">
             <LinkSimple weight="bold" className="h-3 w-3" /> shared · 2 members
           </span>
-          <span className="ml-auto flex -space-x-1.5" aria-hidden="true">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-clay/15 font-mono text-[9px] font-semibold text-clay-ink ring-2 ring-paper-raised">
+          <span className="ml-auto flex" aria-hidden="true">
+            <span className="flex h-6 w-6 items-center justify-center border-2 border-foreground bg-foreground font-mono text-[9px] font-bold text-background">
               ML
             </span>
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-mood-good/20 font-mono text-[9px] font-semibold text-[#5c6a3f] ring-2 ring-paper-raised">
+            <span className="-ml-0.5 flex h-6 w-6 items-center justify-center border-2 border-foreground bg-background font-mono text-[9px] font-bold">
               JA
             </span>
           </span>
         </div>
-        <ul className="divide-y divide-line">
-          <li className="flex items-center gap-3 px-4 py-3">
-            <span className="font-mono text-[10px] text-ink-faint">06:41</span>
-            <span className="text-[13px] text-ink">The market at six a.m.</span>
-            <span className="ml-auto text-mood-great">
+        <ul>
+          <li className="flex items-center gap-3 border-b-2 border-foreground px-4 py-3">
+            <span className="font-mono text-[10px] font-bold">06:41</span>
+            <span className="text-[13px] font-bold">The market at six a.m.</span>
+            <span className="ml-auto text-accent">
               <MoodGlyph mood="great" className="h-4 w-4" />
             </span>
           </li>
-          <li className="flex items-center gap-3 px-4 py-3">
-            <span className="font-mono text-[10px] text-ink-faint">Mar 3</span>
-            <span className="text-[13px] text-ink">Overnight notes</span>
-            <span className="ml-auto text-mood-low">
+          <li className="flex items-center gap-3 border-b-2 border-foreground px-4 py-3">
+            <span className="font-mono text-[10px] font-bold">Mar 3</span>
+            <span className="text-[13px] font-bold">Overnight notes</span>
+            <span className="ml-auto">
               <MoodGlyph mood="low" className="h-4 w-4" />
             </span>
           </li>
-          <li className="flex items-center gap-3 bg-paper/60 px-4 py-3 opacity-60">
-            <span className="font-mono text-[10px] text-ink-faint">03:12</span>
-            <span className="text-[13px] text-ink-soft line-through decoration-ink-ghost/60">The 3 a.m. page</span>
-            <span className="ml-auto inline-flex items-center gap-1 font-mono text-[10px] text-ink-faint">
-              <EyeSlash weight="light" className="h-3.5 w-3.5" /> kept private
+          <li className="flex items-center gap-3 bg-muted px-4 py-3 opacity-70">
+            <span className="font-mono text-[10px] font-bold">03:12</span>
+            <span className="text-[13px] font-bold line-through">The 3 a.m. page</span>
+            <span className="ml-auto inline-flex items-center gap-1 border-2 border-foreground bg-background px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase">
+              <EyeSlash weight="bold" className="h-3.5 w-3.5" /> kept private
             </span>
           </li>
         </ul>
-        <div className="flex items-center gap-2 border-t border-line px-4 py-2.5">
-          <span className="relative flex h-3.5 w-3.5 items-center justify-center">
-            <span className="absolute h-1.5 w-1.5 rounded-full bg-sage opacity-60 animate-breathe" />
-            <span className="h-1.5 w-1.5 rounded-full bg-sage" />
-          </span>
-          <span className="font-mono text-[10px] text-ink-soft">Shared with Jonas</span>
-          <span className="ml-auto inline-flex items-center gap-1 font-mono text-[10px] text-clay">
-            <Eye weight="light" className="h-3.5 w-3.5" /> shared
+        <div className="flex items-center gap-2 border-t-2 border-foreground px-4 py-2.5">
+          <span className="h-2 w-2 bg-foreground" aria-hidden="true" />
+          <span className="font-mono text-[10px] font-bold uppercase">Shared with Jonas</span>
+          <span className="ml-auto inline-flex items-center gap-1 font-mono text-[10px] font-bold uppercase text-accent">
+            <Eye weight="bold" className="h-3.5 w-3.5" /> shared
           </span>
         </div>
       </div>
-      <figcaption className="mt-3 font-mono text-[10px] text-ink-faint">
+      <figcaption className="mt-3 border-l-4 border-accent pl-3 font-mono text-[11px] font-bold uppercase">
         Shared notebook — and the 3 a.m. page, opted out per-entry.
       </figcaption>
     </figure>
@@ -162,41 +149,45 @@ function SharingArtifact() {
 function PolicyArtifact() {
   return (
     <figure>
-      <div className="overflow-hidden rounded-lg border border-line bg-paper-raised shadow-diffuse">
-        <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+      <div className="overflow-hidden border-2 border-foreground bg-foreground text-background shadow-brutal-accent">
+        <div className="flex items-center justify-between border-b-2 border-background px-4 py-2.5">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em]">
             supabase/migrations/0001_init.sql
           </span>
-          <span className="font-mono text-[10px] text-ink-faint">postgres</span>
+          <span className="border-2 border-background bg-accent px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase">
+            postgres
+          </span>
         </div>
-        <pre className="overflow-x-auto bg-paper-deep p-4 font-mono text-[11px] leading-[1.7] text-ink-soft">
+        <pre className="overflow-x-auto p-4 font-mono text-[11px] leading-[1.7]">
           <code>
-            <span className="text-clay-ink">create policy</span>{' '}
-            <span className="text-[#5c6a3f]">"entries: group members read shared"</span>
-            {'\n'} <span className="text-clay-ink">on</span> entries{' '}
-            <span className="text-clay-ink">for select using</span> ({'\n'}
+            <span className="text-accent">create policy</span>{' '}
+            <span className="font-bold underline decoration-accent underline-offset-2">
+              "entries: group members read shared"
+            </span>
+            {'\n'} <span className="text-accent">on</span> entries <span className="text-accent">for select using</span>{' '}
+            ({'\n'}
             {'    '}author_id = auth.uid(){'\n'}
             {'    '}
-            <span className="text-clay-ink">or exists</span> ({'\n'}
+            <span className="text-accent">or exists</span> ({'\n'}
             {'      '}
-            <span className="text-clay-ink">select</span> 1 <span className="text-clay-ink">from</span> notebooks nb
+            <span className="text-accent">select</span> 1 <span className="text-accent">from</span> notebooks nb
             {'\n'}
             {'      '}
-            <span className="text-clay-ink">join</span> group_members gm{'\n'}
+            <span className="text-accent">join</span> group_members gm{'\n'}
             {'        '}
-            <span className="text-clay-ink">on</span> gm.group_id = nb.group_id{'\n'}
+            <span className="text-accent">on</span> gm.group_id = nb.group_id{'\n'}
             {'      '}
-            <span className="text-clay-ink">where</span> nb.id = entries.notebook_id{'\n'}
+            <span className="text-accent">where</span> nb.id = entries.notebook_id{'\n'}
             {'        '}
-            <span className="text-clay-ink">and</span> gm.user_id = auth.uid(){'\n'}
+            <span className="text-accent">and</span> gm.user_id = auth.uid(){'\n'}
             {'        '}
-            <span className="text-clay-ink">and</span> entries.is_shared{'\n'}
+            <span className="text-accent">and</span> entries.is_shared{'\n'}
             {'    '}){'\n'}
             {');'}
           </code>
         </pre>
       </div>
-      <figcaption className="mt-3 font-mono text-[10px] text-ink-faint">
+      <figcaption className="mt-3 border-l-4 border-accent pl-3 font-mono text-[11px] font-bold uppercase">
         An actual policy from this deployment — visibility enforced in the database, not in the interface.
       </figcaption>
     </figure>
@@ -217,9 +208,9 @@ export function FeatureStories() {
         />
 
         <div className="mt-14 grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
-          <div className="animate-rise" style={{ animationDelay: '0ms' }}>
-            <h3 className="font-display text-2xl tracking-tight text-ink">Write in markdown, read in newsprint</h3>
-            <p className="mt-4 max-w-[52ch] text-[14.5px] leading-relaxed text-ink-soft">
+          <div>
+            <h3 className="font-display text-2xl uppercase">Write in markdown, read in newsprint</h3>
+            <p className="mt-4 max-w-[52ch] text-[14.5px] font-bold leading-relaxed">
               The split view typesets your entry while you type — headings, quotes and lists rendered the moment you
               make them. No mode switch, no refresh.
             </p>
@@ -240,15 +231,13 @@ export function FeatureStories() {
               ]}
             />
           </div>
-          <div className="animate-rise" style={{ animationDelay: '120ms' }}>
-            <EditorArtifact />
-          </div>
+          <EditorArtifact />
         </div>
 
         <div className="mt-20 grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
-          <div className="animate-rise order-last lg:order-first" style={{ animationDelay: '0ms' }}>
-            <h3 className="font-display text-2xl tracking-tight text-ink">Share one notebook, not your whole life</h3>
-            <p className="mt-4 max-w-[52ch] text-[14.5px] leading-relaxed text-ink-soft">
+          <div className="order-last lg:order-first">
+            <h3 className="font-display text-2xl uppercase">Share one notebook, not your whole life</h3>
+            <p className="mt-4 max-w-[52ch] text-[14.5px] font-bold leading-relaxed">
               Link a notebook to a small group — family, a partner, two friends. Entries stream to their screens the
               moment you save. The rest of your notebooks never leave your account.
             </p>
@@ -269,15 +258,15 @@ export function FeatureStories() {
               ]}
             />
           </div>
-          <div className="animate-rise order-first lg:order-last" style={{ animationDelay: '120ms' }}>
+          <div className="order-first lg:order-last">
             <SharingArtifact />
           </div>
         </div>
 
         <div className="mt-20 grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
-          <div className="animate-rise" style={{ animationDelay: '0ms' }}>
-            <h3 className="font-display text-2xl tracking-tight text-ink">Private where it counts — in the database</h3>
-            <p className="mt-4 max-w-[52ch] text-[14.5px] leading-relaxed text-ink-soft">
+          <div>
+            <h3 className="font-display text-2xl uppercase">Private where it counts — in the database</h3>
+            <p className="mt-4 max-w-[52ch] text-[14.5px] font-bold leading-relaxed">
               Privacy here is not a promise the interface makes and forgets. Every query runs through Postgres row-level
               security against your own session — if a row should not reach you, the database itself declines to return
               it.
@@ -299,9 +288,7 @@ export function FeatureStories() {
               ]}
             />
           </div>
-          <div className="animate-rise" style={{ animationDelay: '120ms' }}>
-            <PolicyArtifact />
-          </div>
+          <PolicyArtifact />
         </div>
       </div>
     </section>
