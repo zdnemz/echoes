@@ -1,6 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi'
 import { isSupabaseConfigured, hasServiceRole } from '../env'
 import { getAuthClient } from '../supabase'
+import { reflectCacheBackend } from '../cache'
 import { errorResponses, type App } from './helpers'
 
 export function registerHealthRoutes(app: App) {
@@ -27,6 +28,9 @@ export function registerHealthRoutes(app: App) {
                   .boolean()
                   .nullable()
                   .openapi({ description: 'null = not checked; false = migrations not applied yet' }),
+              }),
+              reflect_cache: z.enum(['redis', 'postgres', 'memory']).openapi({
+                description: 'Store used for cached Reflect replies (redis requires REDIS_URL)',
               }),
               version: z.string(),
             }),
@@ -63,6 +67,7 @@ export function registerHealthRoutes(app: App) {
         reachable,
         schema_ready: schemaReady,
       },
+      reflect_cache: reflectCacheBackend(),
       version: '1.0.0',
     })
   })
