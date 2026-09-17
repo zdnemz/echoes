@@ -215,22 +215,37 @@ export const reflectChat = (input: {
 
 // ----------------------------------------------------------------- encryption (E2EE)
 
-export interface Device {
-  id: string
-  user_id: string
-  public_key: string
-  label: string | null
-  created_at: string
+export interface AccountKeyBundle {
+  salt: string | null
+  iterations: number | null
+  wrapped_dek: string | null
+  public_key: string | null
+  wrapped_private_key: string | null
 }
 
-export const registerDevice = (input: { public_key: string; label?: string }) =>
-  api<Device>('/api/me/devices', { method: 'POST', ...json(input) })
+export const getAccountKeys = () => api<AccountKeyBundle>('/api/me/keys')
 
-export const listDevices = () => api<Device[]>('/api/me/devices')
+export const publishAccountKeys = (input: {
+  salt: string
+  iterations: number
+  wrapped_dek: string
+  public_key: string
+  wrapped_private_key: string
+  previous_wrapped_dek?: string
+}) => api<AccountKeyBundle>('/api/me/keys', { method: 'PUT', ...json(input) })
 
 export interface GroupKeyWraps {
-  wraps: Array<{ device_id: string; generation: number; sealed_box: string }>
+  wraps: Array<{ user_id: string; generation: number; sealed_box: string }>
 }
+
+export interface GroupMemberKeys {
+  user_id: string
+  public_key: string | null
+  has_wrap: boolean
+}
+
+export const listGroupMembers = (groupId: string) =>
+  api<{ members: GroupMemberKeys[] }>(`/api/groups/${groupId}/member-keys`).then((r) => r.members)
 
 export const encryptMigrate = (input: { entries: Array<{ id: string; title_cipher: string; body_cipher: string }> }) =>
   api<{ migrated: number; remaining: number }>('/api/me/encrypt-migrate', { method: 'POST', ...json(input) })

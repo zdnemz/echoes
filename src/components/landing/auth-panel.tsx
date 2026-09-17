@@ -99,6 +99,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [pin, setPin] = useState('')
   const [displayName, setDisplayName] = useState('')
 
   const [magicEmail, setMagicEmail] = useState('')
@@ -190,6 +191,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
     if (displayName.length > 80) return setError('Display name is too long.')
     if (!email.includes('@')) return setError("That doesn't look like an email address.")
     if (password.length < 8) return setError('Passwords need at least 8 characters.')
+    if (!/^\d{4,8}$/.test(pin)) return setError('A PIN of 4 to 8 digits keeps your notes readable on a new device.')
     setBusy(true)
     try {
       const fresh = await signup(email, password, displayName || undefined)
@@ -198,6 +200,10 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
         setTab('signin')
         return
       }
+      // The account's encryption keys are minted now, wrapped under this PIN.
+      // Nothing leaves the browser but the wrapped blobs.
+      const { provisionKeys } = await import('@/lib/crypto/vault')
+      await provisionKeys(pin)
       // Nameless accounts finish onboarding first — the stash (if any)
       // waits in storage for the welcome page to consume.
       if (!(fresh.display_name ?? '').trim()) {
@@ -397,6 +403,23 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
                   onChange={(e) => setPassword(e.target.value)}
                   className="h-10 bg-paper focus-visible:ring-clay-soft"
                   placeholder="a phrase you'll remember"
+                  required
+                />
+              </Field>
+              <Field
+                id="signup-pin"
+                label="Encryption PIN"
+                helper="4–8 digits. Unlocks your notes on any new device — there is no recovery without it, so pick something you'll remember."
+              >
+                <Input
+                  id="signup-pin"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  className="h-10 bg-paper focus-visible:ring-clay-soft"
+                  placeholder="4 to 8 digits"
                   required
                 />
               </Field>

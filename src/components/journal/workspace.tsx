@@ -25,8 +25,10 @@ import { ReflectView } from './reflect-view'
 import { SearchView } from './search-view'
 import { SettingsView } from './settings-view'
 import { UserMenu } from './user-menu'
+import { PinGate } from './pin-gate'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useSession } from '@/lib/auth/session'
+import { useKeyState } from '@/lib/crypto/use-vault'
 import { useCreateNotebook, useNotebooks } from '@/lib/api/hooks'
 import { isUnconfigured } from '@/lib/api/client'
 
@@ -160,6 +162,7 @@ export function Workspace() {
   const searchParams = useSearchParams()
   const params = useParams<{ slug?: string[] }>()
   const { status: sessionStatus } = useSession()
+  const keyState = useKeyState()
   const [railOpen, setRailOpen] = useState(false)
 
   // ---- session gate
@@ -218,6 +221,11 @@ export function Workspace() {
 
   if (sessionStatus === 'restoring') return <RestoreSkeleton />
   if (sessionStatus !== 'authenticated') return <SignedOutGate />
+
+  // The journal stays behind the PIN gate: keys are wrapped under it, so
+  // nothing in here is readable (or sealable) until the vault unlocks.
+  if (keyState === 'resolving') return <RestoreSkeleton />
+  if (keyState !== 'unlocked') return <PinGate />
 
   const search = (q: string) => {
     if (q.trim()) navigate({ kind: 'search', q: q.trim() })

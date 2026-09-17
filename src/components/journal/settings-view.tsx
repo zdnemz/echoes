@@ -27,6 +27,7 @@ const MOOD_OPTIONS: Array<Mood | null> = [null, ...MOODS]
 import { useHealth } from '@/lib/api/hooks'
 import { updatePassword, updateProfile } from '@/lib/api/endpoints'
 import { useEncryptMigration } from '@/lib/crypto/migrate'
+import { lock as lockVault } from '@/lib/crypto/vault'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -97,6 +98,10 @@ export function SettingsView() {
   const [pw2, setPw2] = useState('')
   const [savingPw, setSavingPw] = useState(false)
 
+  const [oldPin, setOldPin] = useState('')
+  const [newPin, setNewPin] = useState('')
+  const [savingPin, setSavingPin] = useState(false)
+
   // ---- preferences (local-only; state mirrors localStorage)
   const [defaultMood, setDefaultMoodState] = useState<Mood | null>(() => getDefaultMood())
   const [groupLayout, setGroupLayoutState] = useState<GroupLayout>(() => getGroupLayout())
@@ -159,6 +164,23 @@ export function SettingsView() {
   }
 
   const backendOk = health.data?.status === 'ok'
+
+  const changePin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!/^\d{4,8}$/.test(newPin)) return toast.error('A PIN is 4 to 8 digits.')
+    setSavingPin(true)
+    try {
+      const { changePin: change } = await import('@/lib/crypto/vault')
+      await change(oldPin, newPin)
+      setOldPin('')
+      setNewPin('')
+      toast.success('PIN updated — your entries re-wrapped under the new one.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't change the PIN — check the current PIN.")
+    } finally {
+      setSavingPin(false)
+    }
+  }
 
   return (
     <div className="mx-4 max-w-2xl lg:mx-0">
@@ -282,6 +304,74 @@ export function SettingsView() {
               className="press h-9 gap-1.5 text-ember hover:text-ember"
             >
               Sign out of this device
+            </Button>
+          </div>
+        </Section>
+
+        {/* ------------------------------------------------ encryption PIN */}
+        <Section title="Encryption PIN">
+          <p className="text-[13px] font-medium text-ink">This PIN unlocks your journal on every device</p>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-ink-faint">
+            Your entries are sealed in the browser before they are stored; the key opens only with this PIN. Signing in
+            somewhere new asks for it — that is what lets a second device read everything the first one wrote. There is
+            no recovery path: forget it and the entries stay sealed forever, even from us.
+          </p>
+          <form onSubmit={changePin} className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
+            <p className="text-[13px] font-medium text-ink">Change PIN</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="settings-old-pin" className="text-[12.5px]">
+                  Current PIN
+                </Label>
+                <Input
+                  id="settings-old-pin"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={oldPin}
+                  onChange={(e) => setOldPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  className="h-10 bg-paper"
+                  placeholder="required to change"
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="settings-new-pin" className="text-[12.5px]">
+                  New PIN
+                </Label>
+                <Input
+                  id="settings-new-pin"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={newPin}
+                  onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  className="h-10 bg-paper"
+                  placeholder="4 to 8 digits"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={savingPin}
+                className="press h-9 gap-1.5 border-line bg-paper"
+              >
+                {savingPin ? (
+                  <>
+                    <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> Re-wrapping…
+                  </>
+                ) : (
+                  'Update PIN'
+                )}
+              </Button>
+            </div>
+          </form>
+          <div className="mt-2 border-t border-line pt-4">
+            <Button type="button" variant="ghost" onClick={() => lockVault()} className="press h-9 gap-1.5">
+              Lock the journal now
             </Button>
           </div>
         </Section>
