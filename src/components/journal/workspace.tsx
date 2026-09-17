@@ -29,7 +29,7 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useSession } from '@/lib/auth/session'
 import { useKeyState } from '@/lib/crypto/use-vault'
 import { useCreateNotebook, useNotebooks } from '@/lib/api/hooks'
-import { isUnconfigured } from '@/lib/api/client'
+import { isNetworkDrop, isUnconfigured } from '@/lib/api/client'
 
 export type View =
   | { kind: 'notebook'; notebookId: string }
@@ -369,9 +369,11 @@ function FirstRunGate({ onNavigate }: { onNavigate: (v: View) => void }) {
       setError(
         isUnconfigured(err)
           ? "The journal backend isn't connected on this deployment, so a notebook can't be created yet."
-          : err instanceof Error
-            ? err.message
-            : "Couldn't create the notebook.",
+          : isNetworkDrop(err)
+            ? 'Creating a new notebook requires an initial connection.'
+            : err instanceof Error
+              ? err.message
+              : "Couldn't create the notebook.",
       )
     } finally {
       setCreating(false)

@@ -12,12 +12,15 @@
  *                          be both stale-prone and a privacy regression.
  */
 
-const VERSION = 'v1'
+const VERSION = 'v2'
 const SHELL_CACHE = `echoes-shell-${VERSION}`
 const ASSET_CACHE = `echoes-assets-${VERSION}`
 const IMG_CACHE = `echoes-img-${VERSION}`
 
-const CORE_URLS = ['/', '/journal', '/offline']
+// Only unauthenticated public shells are precached. Gated routes like /journal
+// are cached dynamically when visited while signed in, avoiding caching a 307
+// redirect to /login during initial install.
+const CORE_URLS = ['/', '/offline']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -50,6 +53,9 @@ self.addEventListener('fetch', (event) => {
 
   // Never touch the API or auth — those must always hit the network.
   if (url.pathname.startsWith('/api/')) return
+
+  // Bypass dev HMR and eventsource
+  if (url.pathname.includes('/_next/webpack-hmr') || url.pathname.includes('/_next/hmr')) return
 
   // Same-origin only; cross-origin (fonts, Supabase) stays out of our caches.
   if (url.origin !== self.location.origin) return
@@ -94,16 +100,25 @@ async function staleWhileRevalidate(request, cacheName) {
 
 async function networkFirstNavigation(request) {
   const cache = await caches.open(SHELL_CACHE)
+  const url = new URL(request.url)
   try {
     const response = await fetch(request)
-    if (response.ok) cache.put(request, response.clone())
+    if (response.ok && !response.redirected) {
+      cache.put(request, response.clone())
+      if (url.pathname.startsWith('/journal')) {
+        cache.put('/journal', response.clone())
+      }
+    }
     return response
   } catch {
     const cached = await cache.match(request)
     if (cached) return cached
-    // Nothing for this exact URL yet — the shell HTML is shared, so any
-    // cached navigation document can boot the app and let the router resolve.
+    // If requesting any journal sub-route offline, serve the shared /journal shell
+    if (url.pathname.startsWith('/journal')) {
+      const journalShell = await cache.match('/journal')
+      if (journalShell) return journalShell
+    }
     const anyShell = await cache.match('/journal')
-    return anyShell || (await cache.match('/offline')) || Response.error()
+    return anyShell || (await cache.match('/offline')) || (await cache.match('/')) || Response.error()
   }
 }

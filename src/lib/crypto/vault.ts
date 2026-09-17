@@ -206,14 +206,7 @@ export async function unlockWithPin(pin: string): Promise<void> {
     throw new Error('No account keys are set yet.')
   }
   const kek = await deriveKekFromPassword(pin, bundle.salt, bundle.iterations ?? PBKDF2_ITERATIONS)
-  try {
-    await applyBundle(bundle, kek)
-  } catch (err) {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      throw new Error('That PIN didn’t open the saved keys — reconnect to check for a newer one, or try again.')
-    }
-    throw err
-  }
+  await applyBundle(bundle, kek)
 }
 
 /**
@@ -229,7 +222,12 @@ async function applyBundle(bundle: AccountKeyBundle, kek: CryptoKey): Promise<vo
   if (!bundle.wrapped_dek || !bundle.wrapped_private_key) {
     throw new Error('No account keys are set yet.')
   }
-  const dek = await unwrapKey(bundle.wrapped_dek, kek)
+  let dek: CryptoKey
+  try {
+    dek = await unwrapKey(bundle.wrapped_dek, kek)
+  } catch {
+    throw new Error('That PIN isn’t right — try again.')
+  }
   const identityPrivate = await importPrivateKey(await openText(bundle.wrapped_private_key, dek))
   vault = {
     dek,

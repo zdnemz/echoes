@@ -60,7 +60,16 @@ async function restore(): Promise<void> {
     } else if (stored) {
       setState({ status: 'authenticated' })
     } else {
-      setState({ status: 'anonymous' })
+      // Offline fallback: token is present, so don't drop to anonymous just
+      // because the network is unreachable. Keep authenticated with a fallback
+      // user so the journal remains accessible offline.
+      const fallbackUser: AuthUser = {
+        id: 'offline-user',
+        email: null,
+        display_name: null,
+        created_at: new Date().toISOString(),
+      }
+      setState({ user: fallbackUser, status: 'authenticated' })
     }
   }
 }

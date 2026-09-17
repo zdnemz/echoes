@@ -7,35 +7,33 @@
  */
 
 import { useState, type ReactNode } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { persistQueryClient } from '@tanstack/react-query-persist-client'
+import { QueryClient } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { Toaster } from 'sonner'
 import { SessionProvider } from '@/lib/auth/session'
 import { OutboxSyncBridge } from '@/components/pwa/outbox-sync-bridge'
 import { idbPersister } from '@/lib/offline/query-persister'
 
 export function Providers({ children }: { children: ReactNode }) {
-  const [queryClient] = useState(() => {
-    const qc = new QueryClient({
-      defaultOptions: {
-        queries: {
-          retry: 1,
-          refetchOnWindowFocus: false,
-          staleTime: 30_000,
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: 1,
+            refetchOnWindowFocus: false,
+            staleTime: 30_000,
+            networkMode: 'offlineFirst',
+          },
+          mutations: {
+            networkMode: 'offlineFirst',
+          },
         },
-      },
-    })
-    // Restore the persisted (ciphertext) cache before the tree mounts — offline
-    // reads depend on it being present at first paint, so this can't wait for
-    // an effect. Client-only: IndexedDB doesn't exist during SSR.
-    if (typeof window !== 'undefined') {
-      persistQueryClient({ queryClient: qc, persister: idbPersister, maxAge: Infinity })
-    }
-    return qc
-  })
+      }),
+  )
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: idbPersister, maxAge: Infinity }}>
       <SessionProvider>
         <OutboxSyncBridge />
         {children}
@@ -54,6 +52,6 @@ export function Providers({ children }: { children: ReactNode }) {
           }}
         />
       </SessionProvider>
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   )
 }

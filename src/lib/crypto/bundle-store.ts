@@ -112,6 +112,7 @@ export async function getBundle(): Promise<AccountKeyBundle> {
     if (isNetworkDrop(err)) {
       const cached = await loadBundle()
       if (cached) return cached
+      throw new Error('This device needs to connect once to load your account keys before it can unlock offline.')
     }
     throw err
   }
