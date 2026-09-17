@@ -7,6 +7,7 @@ import { getAppUrl } from '../env'
 import { bearerAuth, errorResponses, jsonBody, type App } from './helpers'
 import { escapePostgrestValue } from './search.routes'
 import { runAgentLoop, type AgentMessage, type ToolDef } from '../reflect/agent'
+import { getCachedReflection, reflectCacheKey, setCachedReflection, type CacheContextEntry } from '../cache'
 
 /**
  * Reflect — a journaling companion with a small tool loop.
@@ -505,7 +506,15 @@ export function registerReflectRoutes(app: App) {
         description: 'Companion reply with the tools it consulted',
         content: {
           'application/json': {
-            schema: z.object({ reply: z.string(), tools_used: z.array(z.string()), model: z.string() }),
+            schema: z.object({
+              reply: z.string(),
+              tools_used: z.array(z.string()),
+              model: z.string(),
+              cached: z
+                .boolean()
+                .default(false)
+                .openapi({ description: 'True when the reply was served from cache without a model call' }),
+            }),
           },
         },
       },
@@ -552,6 +561,19 @@ export function registerReflectRoutes(app: App) {
       for (const e of context) if (valid.has(e.id)) ctxByEntry.set(e.id, e)
     }
 
+    // Cache lookup happens after the scope checks so a cached reply is only
+    // ever served to a caller who proved they own these notebooks.
+    const cacheKey = reflectCacheKey(me, notebook_ids, messages, context)
+    const cached = await getCachedReflection(me, cacheKey)
+    if (cached) {
+      return c.json({
+        reply: cached.reply,
+        tools_used: [...new Set(cached.toolsUsed)],
+        model: cached.model,
+        cached: true,
+      })
+    }
+
     const today = new Date().toISOString().slice(0, 10)
     const thread: AgentMessage[] = [
       {
@@ -574,6 +596,10 @@ export function registerReflectRoutes(app: App) {
 
     const tools = buildTools(c.var.userClient, ownedIds, ctxByEntry)
     const { reply, toolsUsed } = await runAgentLoop((msgs, ts) => providerChat(cfg, msgs, ts), tools, thread)
-    return c.json({ reply, tools_used: [...new Set(toolsUsed)], model: cfg.model })
+
+    // Best-effort: a failed write only costs the next request a model call.
+    void setCachedReflection(me, cacheKey, { reply, toolsUsed, model: cfg.model })
+
+    return c.json({ reply, tools_used: [...new Set(toolsUsed)], model: cfg.model, cached: false })
   })
 }
