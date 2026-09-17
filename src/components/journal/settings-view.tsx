@@ -10,9 +10,17 @@
  */
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useSyncExternalStore, useState } from 'react'
 import { toast } from 'sonner'
-import { ArrowSquareOut, Check, CircleNotch, Copy } from '@phosphor-icons/react/dist/ssr'
+import {
+  ArrowSquareOut,
+  Check,
+  CircleNotch,
+  Copy,
+  Fingerprint,
+  LockKey,
+  LockOpen,
+} from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,13 +28,31 @@ import { MOODS, MOOD_META, MoodGlyph, type Mood } from '@/components/mood/glyphs
 import { useCopy } from '@/hooks/use-copy'
 import { useRovingSelection } from '@/hooks/use-roving-selection'
 import { useSession } from '@/lib/auth/session'
-import { getDefaultMood, getGroupLayout, setDefaultMood, setGroupLayout, type GroupLayout } from '@/lib/prefs'
+import {
+  getDefaultMood,
+  getGroupLayout,
+  setDefaultMood,
+  setGroupLayout,
+  getAutoLock,
+  setAutoLock,
+  type GroupLayout,
+} from '@/lib/prefs'
 
 /** Explicit "none" first: a radiogroup must always have a checked member. */
 const MOOD_OPTIONS: Array<Mood | null> = [null, ...MOODS]
 import { useHealth } from '@/lib/api/hooks'
 import { updatePassword, updateProfile } from '@/lib/api/endpoints'
 import { useEncryptMigration } from '@/lib/crypto/migrate'
+import { useVault } from '@/lib/crypto/use-vault'
+import {
+  disableAppLock,
+  enablePasskey,
+  enablePin,
+  getAppLockMethods,
+  lock,
+  onAppLockChange,
+  setPin,
+} from '@/lib/crypto/app-lock'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -81,6 +107,368 @@ function PrivacyStatus() {
         it. Moods, tags and timestamps stay searchable.
       </p>
     </>
+  )
+}
+
+const NO_METHODS = { pin: false, passkey: false }
+
+/**
+ * App lock — wraps this device's keys under a PIN and/or passkey so a locked
+ * journal can't be read. Everything here runs while unlocked; enabling a PIN
+ * locks immediately, other changes take effect on the next lock.
+ */
+function AppLockSection() {
+  const { user } = useSession()
+  const vault = useVault()
+  const methods = useSyncExternalStore(
+    (l) => onAppLockChange(l),
+    getAppLockMethods,
+    () => NO_METHODS,
+  )
+  const [stage, setStage] = useState<'idle' | 'pin'>('idle')
+  const [pin1, setPin1] = useState('')
+  const [pin2, setPin2] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [autoLock, setAutoLockState] = useState(() => getAutoLock())
+
+  const on = methods.pin || methods.passkey
+  // Keys must be unwrapped in memory before they can be (re-)wrapped.
+  const ready = !!vault
+
+  const addPasskey = async () => {
+    setError(null)
+    setBusy(true)
+    try {
+      await enablePasskey(user!)
+      toast.success('Passkey added — it unlocks the journal now.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't add the passkey.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const confirmPin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    if (!/^\d{4,8}$/.test(pin1)) return setError('A PIN is 4 to 8 digits.')
+    if (pin1 !== pin2) return setError('The two PINs do not match.')
+    setBusy(true)
+    try {
+      if (methods.pin) {
+        await setPin(pin1)
+        toast.success('PIN changed.')
+      } else {
+        await enablePin(pin1)
+        toast.success('Locked — use this PIN to open the journal.')
+      }
+      setStage('idle')
+      setPin1('')
+      setPin2('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't set the PIN.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async () => {
+    setBusy(true)
+    try {
+      await disableAppLock()
+      setAutoLock(false)
+      setAutoLockState(false)
+      toast.success('App lock removed.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't remove the lock.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Section title="App lock">
+      {!ready ? (
+        <p className="text-[12px] leading-relaxed text-ink-faint">Unlock the journal to manage its lock.</p>
+      ) : !on ? (
+        <>
+          <p className="text-[13px] leading-relaxed text-ink-soft">
+            Require a PIN or a passkey to read your notebooks on this device. When locked, the keys that decrypt your
+            entries are gone from storage until you provide one.
+          </p>
+          {stage === 'pin' ? (
+            <form onSubmit={confirmPin} className="mt-4 flex flex-col gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="lock-pin1" className="text-[12.5px]">
+                    Choose a PIN
+                  </Label>
+                  <Input
+                    id="lock-pin1"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="\d*"
+                    autoComplete="new-password"
+                    maxLength={8}
+                    value={pin1}
+                    onChange={(e) => setPin1(e.target.value.replace(/\D/g, ''))}
+                    className="h-10 bg-paper font-mono tracking-[0.2em]"
+                    placeholder="4–8 digits"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="lock-pin2" className="text-[12.5px]">
+                    Repeat it
+                  </Label>
+                  <Input
+                    id="lock-pin2"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="\d*"
+                    autoComplete="new-password"
+                    maxLength={8}
+                    value={pin2}
+                    onChange={(e) => setPin2(e.target.value.replace(/\D/g, ''))}
+                    className="h-10 bg-paper font-mono tracking-[0.2em]"
+                    placeholder="same as above"
+                  />
+                </div>
+              </div>
+              {error && (
+                <p role="alert" className="text-[11.5px] text-ember">
+                  {error}
+                </p>
+              )}
+              <div className="flex items-center gap-2">
+                <Button type="submit" disabled={busy} className="press h-9 gap-1.5 shadow-ink">
+                  {busy ? (
+                    <>
+                      <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> Locking…
+                    </>
+                  ) : (
+                    'Turn on the lock'
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setStage('idle')
+                    setPin1('')
+                    setPin2('')
+                    setError(null)
+                  }}
+                  className="press h-9"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => setStage('pin')}
+                disabled={busy}
+                className="press h-9 gap-1.5 shadow-ink"
+              >
+                <LockKey weight="bold" className="h-3.5 w-3.5" /> Set up a PIN
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addPasskey}
+                disabled={busy}
+                className="press h-9 gap-1.5 border-line bg-paper"
+              >
+                {busy ? (
+                  <>
+                    <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> Waiting for passkey…
+                  </>
+                ) : (
+                  <>
+                    <Fingerprint weight="bold" className="h-3.5 w-3.5" /> Use a passkey
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <Row label="Status">
+            <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-sage">
+              <Check weight="bold" className="h-3.5 w-3.5" /> locked with{' '}
+              {[methods.pin && 'PIN', methods.passkey && 'passkey'].filter(Boolean).join(' + ')}
+            </span>
+          </Row>
+
+          {stage === 'pin' ? (
+            <form onSubmit={confirmPin} className="mt-2 flex flex-col gap-3 border-t border-line pt-4">
+              <p className="text-[13px] font-medium text-ink">Change the PIN</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="lock-pin1" className="text-[12.5px]">
+                    New PIN
+                  </Label>
+                  <Input
+                    id="lock-pin1"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="\d*"
+                    autoComplete="new-password"
+                    maxLength={8}
+                    value={pin1}
+                    onChange={(e) => setPin1(e.target.value.replace(/\D/g, ''))}
+                    className="h-10 bg-paper font-mono tracking-[0.2em]"
+                    placeholder="4–8 digits"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="lock-pin2" className="text-[12.5px]">
+                    Repeat it
+                  </Label>
+                  <Input
+                    id="lock-pin2"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="\d*"
+                    autoComplete="new-password"
+                    maxLength={8}
+                    value={pin2}
+                    onChange={(e) => setPin2(e.target.value.replace(/\D/g, ''))}
+                    className="h-10 bg-paper font-mono tracking-[0.2em]"
+                    placeholder="same as above"
+                  />
+                </div>
+              </div>
+              {error && (
+                <p role="alert" className="text-[11.5px] text-ember">
+                  {error}
+                </p>
+              )}
+              <div className="flex items-center gap-2">
+                <Button type="submit" disabled={busy} className="press h-9 gap-1.5 shadow-ink">
+                  {busy ? (
+                    <>
+                      <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> Saving…
+                    </>
+                  ) : (
+                    'Save the new PIN'
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setStage('idle')
+                    setPin1('')
+                    setPin2('')
+                    setError(null)
+                  }}
+                  className="press h-9"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+              {methods.pin ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStage('pin')}
+                  disabled={busy}
+                  className="press h-9 gap-1.5 border-line bg-paper"
+                >
+                  <LockKey weight="bold" className="h-3.5 w-3.5" /> Change PIN
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStage('pin')}
+                  disabled={busy}
+                  className="press h-9 gap-1.5 border-line bg-paper"
+                >
+                  <LockKey weight="bold" className="h-3.5 w-3.5" /> Add a PIN
+                </Button>
+              )}
+              {!methods.passkey && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addPasskey}
+                  disabled={busy}
+                  className="press h-9 gap-1.5 border-line bg-paper"
+                >
+                  {busy ? (
+                    <>
+                      <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> Waiting for passkey…
+                    </>
+                  ) : (
+                    <>
+                      <Fingerprint weight="bold" className="h-3.5 w-3.5" /> Add a passkey
+                    </>
+                  )}
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => lock()}
+                disabled={busy}
+                className="press h-9 gap-1.5 border-line bg-paper"
+              >
+                <LockOpen weight="bold" className="h-3.5 w-3.5" /> Lock now
+              </Button>
+            </div>
+          )}
+
+          <div className="mt-2 border-t border-line pt-4">
+            <Row label="Lock when I switch tabs">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoLock}
+                onClick={() => {
+                  const next = !autoLock
+                  setAutoLock(next)
+                  setAutoLockState(next)
+                }}
+                aria-label="Lock when I switch tabs"
+                className={`press relative h-6 w-11 rounded-full border transition-colors ${
+                  autoLock ? 'border-clay-soft bg-clay-tint' : 'border-line bg-paper-deep'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-4.5 w-4.5 rounded-full bg-paper-raised shadow transition-transform ${
+                    autoLock ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </Row>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-ink-faint">
+              Re-seals the journal the moment this tab is hidden, the way a native app locks when you swipe away.
+            </p>
+          </div>
+
+          <div className="mt-2 border-t border-line pt-4">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={remove}
+              disabled={busy}
+              className="press h-9 gap-1.5 text-ember hover:text-ember"
+            >
+              Remove the lock
+            </Button>
+          </div>
+        </>
+      )}
+    </Section>
   )
 }
 
@@ -202,6 +590,9 @@ export function SettingsView() {
         <Section title="Privacy">
           <PrivacyStatus />
         </Section>
+
+        {/* ------------------------------------------------ app lock */}
+        <AppLockSection />
 
         {/* ------------------------------------------------ account */}
         <Section title="Account">

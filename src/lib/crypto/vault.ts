@@ -2,6 +2,7 @@
 
 import { exportPublicKey, generateDataKey, generateIdentityKeypair, openSealedKey } from './envelope'
 import { loadDeviceKeys, saveDeviceKeys } from './device-store'
+import { appLockEnabled } from './app-lock'
 import { api, getToken, json } from '@/lib/api/client'
 
 export interface UnlockedVault {
@@ -65,6 +66,10 @@ async function startKeys(): Promise<void> {
     emit()
     return
   }
+  // App lock engaged: the raw keys are gone from this device and only a PIN or
+  // passkey can unwrap them. Stay locked — generating a fresh DEK here would
+  // register a device that can never read the entries that already exist.
+  if (appLockEnabled()) return
   // No session → nothing to register the device against. Generating a
   // keypair now would only throw it away (the POST 401s and the keys are
   // never saved). Keys are provisioned on the first authenticated session.
@@ -102,12 +107,21 @@ export async function whenReady(): Promise<UnlockedVault | null> {
   return vault
 }
 
+const groupCeks = new Map<string, { key: CryptoKey; generation: number }>()
+
 export function lock(): void {
   vault = null
+  // A locked vault must not keep group content keys either: they are derived
+  // from the identity key and would outlive the lock otherwise.
+  groupCeks.clear()
   emit()
 }
 
-const groupCeks = new Map<string, { key: CryptoKey; generation: number }>()
+/** Restore an unwrapped vault (app-lock unlock path). Memory only — never persisted raw. */
+export function unlockVault(next: UnlockedVault): void {
+  vault = next
+  emit()
+}
 
 export async function getGroupCek(groupId: string): Promise<CryptoKey | null> {
   const cached = groupCeks.get(groupId)

@@ -38,3 +38,17 @@ export function setGroupLayout(layout: GroupLayout): void {
   if (layout === 'list') window.localStorage.removeItem(GROUP_LAYOUT_KEY)
   else window.localStorage.setItem(GROUP_LAYOUT_KEY, layout)
 }
+
+const AUTOLOCK_KEY = 'echoes.prefs.autolock'
+
+/** Re-lock the journal whenever this tab is hidden (app-lock must be set up). */
+export function getAutoLock(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.localStorage.getItem(AUTOLOCK_KEY) === '1'
+}
+
+export function setAutoLock(on: boolean): void {
+  if (typeof window === 'undefined') return
+  if (on) window.localStorage.setItem(AUTOLOCK_KEY, '1')
+  else window.localStorage.removeItem(AUTOLOCK_KEY)
+}

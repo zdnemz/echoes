@@ -5,9 +5,10 @@
  * Profile editing lives in the settings view; this menu only navigates.
  */
 
-import { GearSix, SignOut } from '@phosphor-icons/react/dist/ssr'
+import { GearSix, LockOpen, SignOut } from '@phosphor-icons/react/dist/ssr'
 import { useSession } from '@/lib/auth/session'
 import { avatarTone, initials } from '@/lib/format'
+import { appLockEnabled, lock } from '@/lib/crypto/app-lock'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +52,11 @@ export function UserMenu({ onNavigate }: { onNavigate: (v: View) => void }) {
         <DropdownMenuItem onClick={() => onNavigate({ kind: 'settings' })} className="gap-2 text-[13px]">
           <GearSix className="h-3.5 w-3.5" /> Settings
         </DropdownMenuItem>
+        {appLockEnabled() && (
+          <DropdownMenuItem onClick={() => lock()} className="gap-2 text-[13px]">
+            <LockOpen className="h-3.5 w-3.5" /> Lock now
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator className="bg-line" />
         <DropdownMenuItem onClick={() => logout()} className="gap-2 text-[13px] text-ember focus:text-ember">
           <SignOut className="h-3.5 w-3.5" /> Sign out
