@@ -39,6 +39,7 @@ import {
 import { api, getToken, json } from '@/lib/api/client'
 import { getAccountKeys, publishAccountKeys, type AccountKeyBundle, type GroupKeyWraps } from '@/lib/api/endpoints'
 import { clearSessionKek, loadSessionKek, saveSessionKek } from './session-store'
+import { getBundle, saveBundle } from './bundle-store'
 
 /** A remembered browser re-asks the PIN only after 30 idle days. */
 const REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -112,7 +113,10 @@ async function resolveKeyState(): Promise<void> {
     return
   }
   try {
-    const bundle = await getAccountKeys()
+    // Resilient read: online this is always fresh; offline it falls back to
+    // the on-device bundle cache, so a remembered browser unlocks silently
+    // and the PIN gate can open without a connection.
+    const bundle = await getBundle()
     if (!bundle.salt || !bundle.wrapped_dek || !bundle.wrapped_private_key) {
       keyState = 'unprovisioned'
       emit()
@@ -157,15 +161,26 @@ export async function provisionKeys(pin: string): Promise<void> {
   const identityPublic = await exportPublicKey(identity.publicKey)
   const salt = randomSalt()
   const kek = await deriveKekFromPassword(pin, salt)
+  const wrappedDek = await wrapKey(dek, kek)
+  const wrappedPrivateKey = await sealText(await exportPrivateKey(identity.privateKey), dek)
 
   await publishAccountKeys({
     salt,
     iterations: PBKDF2_ITERATIONS,
-    wrapped_dek: await wrapKey(dek, kek),
+    wrapped_dek: wrappedDek,
     public_key: identityPublic,
     // Identity private sits under the DEK, not the KEK, so a PIN change only
     // has to re-wrap the DEK wrap — the identity wrap is untouched.
-    wrapped_private_key: await sealText(await exportPrivateKey(identity.privateKey), dek),
+    wrapped_private_key: wrappedPrivateKey,
+  })
+  // Cache from birth: this device can unlock offline before any refetch.
+  await saveBundle({
+    salt,
+    iterations: PBKDF2_ITERATIONS,
+    wrapped_dek: wrappedDek,
+    public_key: identityPublic,
+    wrapped_private_key: wrappedPrivateKey,
+    passkey: null,
   })
 
   vault = { dek, identityPrivate: identity.privateKey, identityPublic }
@@ -178,15 +193,27 @@ export async function provisionKeys(pin: string): Promise<void> {
  * Unlock with the account PIN on any device. A wrong PIN fails the AES-GCM
  * auth tag while unwrapping the DEK — no server round-trip, no oracle beyond
  * the local device.
+ *
+ * Offline the bundle comes from the on-device cache, so the gate opens with
+ * no connection. A cached bundle can predate a PIN change elsewhere; then the
+ * auth tag fails exactly like a wrong PIN, and only a reconnect tells them
+ * apart — hence the offline-specific message.
  */
 export async function unlockWithPin(pin: string): Promise<void> {
   if (vault) return
-  const bundle = await getAccountKeys()
+  const bundle = await getBundle()
   if (!bundle.salt || !bundle.wrapped_dek || !bundle.wrapped_private_key) {
     throw new Error('No account keys are set yet.')
   }
   const kek = await deriveKekFromPassword(pin, bundle.salt, bundle.iterations ?? PBKDF2_ITERATIONS)
-  await applyBundle(bundle, kek)
+  try {
+    await applyBundle(bundle, kek)
+  } catch (err) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('That PIN didn’t open the saved keys — reconnect to check for a newer one, or try again.')
+    }
+    throw err
+  }
 }
 
 /**
@@ -195,7 +222,7 @@ export async function unlockWithPin(pin: string): Promise<void> {
  */
 export async function unlockWithKek(kek: CryptoKey): Promise<void> {
   if (vault) return
-  await applyBundle(await getAccountKeys(), kek)
+  await applyBundle(await getBundle(), kek)
 }
 
 async function applyBundle(bundle: AccountKeyBundle, kek: CryptoKey): Promise<void> {

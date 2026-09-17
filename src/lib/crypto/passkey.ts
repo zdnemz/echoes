@@ -16,7 +16,8 @@
 
 import { getVault, unlockWithKek } from './vault'
 import { wrapKey } from './envelope'
-import { clearAccountPasskey, getAccountKeys, setAccountPasskey } from '@/lib/api/endpoints'
+import { clearAccountPasskey, setAccountPasskey } from '@/lib/api/endpoints'
+import { getBundle } from './bundle-store'
 import type { AuthUser } from '@/lib/api/types'
 
 function randomBytes(n: number): Uint8Array<ArrayBuffer> {
@@ -102,7 +103,9 @@ export async function registerPasskey(user: AuthUser): Promise<void> {
  * throws when none is registered or the browser can't do PRF.
  */
 export async function unlockWithPasskey(): Promise<void> {
-  const bundle = await getAccountKeys()
+  // Resilient read like the PIN path: the salt and credential id are public,
+  // so a cached bundle opens offline and the authenticator does the rest.
+  const bundle = await getBundle()
   const pk = bundle.passkey
   if (!pk) throw new Error('No passkey is set on this account.')
   if (!passkeySupported()) throw new Error('This browser can’t unlock with a passkey. Use the PIN.')

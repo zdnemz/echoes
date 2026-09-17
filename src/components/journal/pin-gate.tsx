@@ -148,8 +148,10 @@ function UnlockPin() {
 
   useEffect(() => {
     let alive = true
-    void import('@/lib/api/endpoints')
-      .then(({ getAccountKeys }) => getAccountKeys())
+    // Resilient read: offline the cached bundle still reports whether a
+    // passkey exists, so the offer doesn't vanish without a connection.
+    void import('@/lib/crypto/bundle-store')
+      .then(({ getBundle }) => getBundle())
       .then((bundle) => {
         if (alive) setPasskeyOffer(Boolean(bundle.passkey))
       })

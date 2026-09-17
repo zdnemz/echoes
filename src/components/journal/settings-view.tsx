@@ -122,8 +122,8 @@ export function SettingsView() {
   // Declared before the early return below: hooks must run on every render.
   useEffect(() => {
     let alive = true
-    void import('@/lib/api/endpoints')
-      .then(({ getAccountKeys }) => getAccountKeys())
+    void import('@/lib/crypto/bundle-store')
+      .then(({ getBundle }) => getBundle())
       .then((bundle) => {
         if (alive) setPasskeySet(Boolean(bundle.passkey))
       })
