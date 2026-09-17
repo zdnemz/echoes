@@ -85,6 +85,7 @@ const {
   ensureMemberCoverage,
   distributeOrRotate,
   ensureShareableCek,
+  coverMyGroups,
 } = await import('@/lib/crypto/vault')
 const { sealForStorage, openFromStorage } = await import('@/lib/crypto/entry-codec')
 const { createEntry, getEntry } = await import('@/lib/api/endpoints')
@@ -308,6 +309,45 @@ async function main() {
   const healed = await full(raced.id)
   const alexReadsRaced = await openFromStorage(healed, alexId, group!.id)
   check('alex reads sam’s raced entry after the heal', alexReadsRaced.body === racedBody)
+
+  // =====================================================================
+  console.log('\nC. Proactive coverage (the UI gap)')
+  // Sam's box is dropped again. Nobody visits the group view; alex simply
+  // signs back in — the unlock path covers every group, resealing sam's box.
+  await db.from('group_key_wraps').delete().eq('group_id', group!.id).eq('user_id', samId)
+  await asUser(alexToken, '1234', 'alex')
+  await coverMyGroups(alexId)
+  const { data: samBox2 } = await db
+    .from('group_key_wraps')
+    .select('user_id')
+    .eq('group_id', group!.id)
+    .eq('user_id', samId)
+    .maybeSingle()
+  check('unlock-time coverage resealed sam’s box', Boolean(samBox2))
+
+  // And the save path covers too: drop the box once more, alex saves (the
+  // editor now tops up boxes for missing members after securing the CEK),
+  // and a freshly-switched sam reads the new entry with no manual coverage.
+  await db.from('group_key_wraps').delete().eq('group_id', group!.id).eq('user_id', samId)
+  await asUser(alexToken, '1234', 'alex')
+  const lateCek = await ensureShareableCek(group!.id, alexId)
+  if (lateCek) await ensureMemberCoverage(group!.id, alexId)
+  const lateBody = `Alex's late note ${RUN}`
+  const sealedLate = await sealForStorage('Late', lateBody, group!.id, true)
+  const late = await full(
+    (
+      await createEntry(nb!.id, {
+        title: sealedLate.title,
+        body: sealedLate.body,
+        is_shared: true,
+        encrypted: true,
+        key_wraps: sealedLate.key_wraps,
+      })
+    ).id,
+  )
+  await asUser(samToken, '5678', 'sam')
+  const samReadsLate = await openFromStorage(late, samId, group!.id)
+  check('sam reads an entry saved after save-time coverage', samReadsLate.body === lateBody)
 
   // =====================================================================
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`)

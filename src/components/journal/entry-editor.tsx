@@ -311,8 +311,12 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
       // on its own the next time any key-holding device is around.
       const wantsGroupShare = groupLinked ? isShared : false
       if (entryGroupId && wantsGroupShare && !sealedError) {
-        const { ensureShareableCek } = await import('@/lib/crypto/vault')
-        await ensureShareableCek(entryGroupId, user?.id ?? '').catch(() => null)
+        const { ensureShareableCek, ensureMemberCoverage } = await import('@/lib/crypto/vault')
+        const cek = await ensureShareableCek(entryGroupId, user?.id ?? '').catch(() => null)
+        // The author is the holder now: seal a box for any member still
+        // missing one so this save is readable group-wide without waiting
+        // for a holder to visit the group view. Best-effort, backgrounded.
+        if (cek) void ensureMemberCoverage(entryGroupId, user?.id ?? '').catch(() => null)
       }
       const sealed = sealedError ? null : await sealForStorage(t, body, entryGroupId, wantsGroupShare)
       const authorOnly = sealed?.shareState === 'author-only'

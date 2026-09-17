@@ -245,4 +245,10 @@ export function forgetGroupCek(groupId: string): void {
   groupCeks.delete(groupId)
 }
 
-export { distributeOrRotate, ensureMemberCoverage, tryFirstDistribution, ensureShareableCek } from './group-keys'
+export {
+  distributeOrRotate,
+  ensureMemberCoverage,
+  tryFirstDistribution,
+  ensureShareableCek,
+  coverMyGroups,
+} from './group-keys'

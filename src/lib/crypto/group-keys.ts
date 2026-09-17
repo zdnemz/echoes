@@ -229,3 +229,16 @@ export async function ensureShareableCek(groupId: string, me: string): Promise<C
   if (existing) return existing
   return tryFirstDistribution(groupId, me)
 }
+
+/**
+ * Bring every group this account belongs to up to date. Called after an
+ * unlock: a returning holder is the most reliable healer of a group where
+ * someone joined (or provisioned) after the last distribution. Best-effort
+ * and never awaited by the unlock itself — it must not delay the journal.
+ */
+export async function coverMyGroups(me: string): Promise<void> {
+  if (!getVault()) return
+  const { listGroups } = await import('@/lib/api/endpoints')
+  const groups = await listGroups().catch(() => [])
+  await Promise.all(groups.map((g) => ensureMemberCoverage(g.id, me).catch(() => null)))
+}

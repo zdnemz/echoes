@@ -22,7 +22,9 @@ import { CircleNotch, LockKey, LockOpen } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useSession } from '@/lib/auth/session'
 import { useKeyState } from '@/lib/crypto/use-vault'
+import { coverMyGroups } from '@/lib/crypto/vault'
 
 function sanitize(pin: string): string {
   return pin.replace(/\D/g, '').slice(0, 8)
@@ -53,6 +55,7 @@ function Shell({ title, blurb, children }: { title: string; blurb: string; child
 }
 
 function CreatePin() {
+  const { user } = useSession()
   const [pin, setPin] = useState('')
   const [confirm, setConfirm] = useState('')
   const [busy, setBusy] = useState(false)
@@ -67,6 +70,9 @@ function CreatePin() {
     try {
       const { provisionKeys } = await import('@/lib/crypto/vault')
       await provisionKeys(pin)
+      // A fresh account may be joining a group that distributed its key
+      // before this profile published one — heal those boxes now.
+      void coverMyGroups(user?.id ?? '').catch(() => null)
       toast.success('Your journal is locked to this PIN.')
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : "Couldn't save the PIN — try again.")
@@ -133,6 +139,7 @@ function CreatePin() {
 }
 
 function UnlockPin() {
+  const { user } = useSession()
   const [pin, setPin] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -144,6 +151,9 @@ function UnlockPin() {
     try {
       const { unlockWithPin } = await import('@/lib/crypto/vault')
       await unlockWithPin(pin)
+      // A returning holder is the most reliable way a group's missing boxes
+      // get sealed — heal them in the background, never blocking the journal.
+      void coverMyGroups(user?.id ?? '').catch(() => null)
       // The vault store emits; the gate dissolves on the next render.
     } catch (err) {
       // A wrong PIN fails the AES-GCM auth tag while unwrapping.
