@@ -137,6 +137,17 @@ export const PublishKeysSchema = z
   })
   .strict()
 
+export const PasskeyBundleSchema = z
+  .object({
+    salt: z.string().min(1).max(128).openapi({ description: 'WebAuthn PRF salt (base64, public by design)' }),
+    credential_id: z.string().min(1).max(1024).openapi({ description: 'Passkey credential id (base64)' }),
+    wrapped_dek: z.string().min(1).max(4096).openapi({ description: 'Data key sealed under the PRF-derived KEK' }),
+  })
+  .strict()
+  .openapi('PasskeyBundle')
+
+export const PublishPasskeySchema = PasskeyBundleSchema
+
 export const KeyMaterialSchema = z
   .object({
     salt: z.string().nullable(),
@@ -144,6 +155,9 @@ export const KeyMaterialSchema = z
     wrapped_dek: z.string().nullable(),
     public_key: z.string().nullable(),
     wrapped_private_key: z.string().nullable(),
+    passkey: PasskeyBundleSchema.nullable().openapi({
+      description: 'Second unlock factor bound to one authenticator; null when none is registered',
+    }),
   })
   .openapi('KeyMaterial')
 

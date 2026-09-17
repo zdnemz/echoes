@@ -10,7 +10,7 @@
  */
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { ArrowSquareOut, Check, CircleNotch, Copy } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
@@ -102,6 +102,25 @@ export function SettingsView() {
   const [newPin, setNewPin] = useState('')
   const [savingPin, setSavingPin] = useState(false)
 
+  const [passkeySet, setPasskeySet] = useState<boolean | null>(null)
+  const [savingPasskey, setSavingPasskey] = useState(false)
+
+  // Declared before the early return below: hooks must run on every render.
+  useEffect(() => {
+    let alive = true
+    void import('@/lib/api/endpoints')
+      .then(({ getAccountKeys }) => getAccountKeys())
+      .then((bundle) => {
+        if (alive) setPasskeySet(Boolean(bundle.passkey))
+      })
+      .catch(() => {
+        if (alive) setPasskeySet(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
   // ---- preferences (local-only; state mirrors localStorage)
   const [defaultMood, setDefaultMoodState] = useState<Mood | null>(() => getDefaultMood())
   const [groupLayout, setGroupLayoutState] = useState<GroupLayout>(() => getGroupLayout())
@@ -179,6 +198,35 @@ export function SettingsView() {
       toast.error(err instanceof Error ? err.message : "Couldn't change the PIN — check the current PIN.")
     } finally {
       setSavingPin(false)
+    }
+  }
+
+  const addPasskey = async () => {
+    if (!user) return
+    setSavingPasskey(true)
+    try {
+      const { registerPasskey } = await import('@/lib/crypto/passkey')
+      await registerPasskey(user)
+      setPasskeySet(true)
+      toast.success('Passkey added — this browser can unlock without the PIN.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't add the passkey.")
+    } finally {
+      setSavingPasskey(false)
+    }
+  }
+
+  const dropPasskey = async () => {
+    setSavingPasskey(true)
+    try {
+      const { removePasskey } = await import('@/lib/crypto/passkey')
+      await removePasskey()
+      setPasskeySet(false)
+      toast.success('Passkey removed — the PIN still opens the account everywhere.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't remove the passkey.")
+    } finally {
+      setSavingPasskey(false)
     }
   }
 
@@ -373,6 +421,50 @@ export function SettingsView() {
             <Button type="button" variant="ghost" onClick={() => lockVault()} className="press h-9 gap-1.5">
               Lock the journal now
             </Button>
+          </div>
+        </Section>
+
+        {/* ------------------------------------------------ passkey */}
+        <Section title="Passkey">
+          <p className="text-[13px] font-medium text-ink">Unlock this browser without typing the PIN</p>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-ink-faint">
+            A passkey is bound to this browser only — lose it and nothing happens, the PIN still opens the account
+            everywhere. It never replaces the PIN, it just skips typing it here.
+          </p>
+          <div className="mt-4 border-t border-line pt-4">
+            {passkeySet ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={savingPasskey}
+                onClick={() => void dropPasskey()}
+                className="press h-9 gap-1.5 border-line bg-paper"
+              >
+                {savingPasskey ? (
+                  <>
+                    <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> Removing…
+                  </>
+                ) : (
+                  'Remove this passkey'
+                )}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={savingPasskey}
+                onClick={() => void addPasskey()}
+                className="press h-9 gap-1.5 border-line bg-paper"
+              >
+                {savingPasskey ? (
+                  <>
+                    <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> Waiting for your passkey…
+                  </>
+                ) : (
+                  'Add a passkey on this browser'
+                )}
+              </Button>
+            )}
           </div>
         </Section>
 

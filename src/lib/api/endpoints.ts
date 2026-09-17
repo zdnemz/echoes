@@ -215,12 +215,19 @@ export const reflectChat = (input: {
 
 // ----------------------------------------------------------------- encryption (E2EE)
 
+export interface AccountPasskey {
+  salt: string
+  credential_id: string
+  wrapped_dek: string
+}
+
 export interface AccountKeyBundle {
   salt: string | null
   iterations: number | null
   wrapped_dek: string | null
   public_key: string | null
   wrapped_private_key: string | null
+  passkey: AccountPasskey | null
 }
 
 export const getAccountKeys = () => api<AccountKeyBundle>('/api/me/keys')
@@ -233,6 +240,11 @@ export const publishAccountKeys = (input: {
   wrapped_private_key: string
   previous_wrapped_dek?: string
 }) => api<AccountKeyBundle>('/api/me/keys', { method: 'PUT', ...json(input) })
+
+export const setAccountPasskey = (input: { salt: string; credential_id: string; wrapped_dek: string }) =>
+  api<AccountPasskey>('/api/me/keys/passkey', { method: 'PUT', ...json(input) })
+
+export const clearAccountPasskey = () => api<{ removed: boolean }>('/api/me/keys/passkey', { method: 'DELETE' })
 
 export interface GroupKeyWraps {
   wraps: Array<{ user_id: string; generation: number; sealed_box: string }>

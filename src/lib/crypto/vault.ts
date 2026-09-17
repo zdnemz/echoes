@@ -37,7 +37,7 @@ import {
   wrapKey,
 } from './envelope'
 import { api, getToken, json } from '@/lib/api/client'
-import { getAccountKeys, publishAccountKeys, type GroupKeyWraps } from '@/lib/api/endpoints'
+import { getAccountKeys, publishAccountKeys, type AccountKeyBundle, type GroupKeyWraps } from '@/lib/api/endpoints'
 import { clearSessionKek, loadSessionKek, saveSessionKek } from './session-store'
 
 /** A remembered browser re-asks the PIN only after 30 idle days. */
@@ -186,6 +186,22 @@ export async function unlockWithPin(pin: string): Promise<void> {
     throw new Error('No account keys are set yet.')
   }
   const kek = await deriveKekFromPassword(pin, bundle.salt, bundle.iterations ?? PBKDF2_ITERATIONS)
+  await applyBundle(bundle, kek)
+}
+
+/**
+ * Unlock with a KEK from any source (PIN derivation, passkey PRF, tests).
+ * The KEK itself is the credential — callers must have earned it.
+ */
+export async function unlockWithKek(kek: CryptoKey): Promise<void> {
+  if (vault) return
+  await applyBundle(await getAccountKeys(), kek)
+}
+
+async function applyBundle(bundle: AccountKeyBundle, kek: CryptoKey): Promise<void> {
+  if (!bundle.wrapped_dek || !bundle.wrapped_private_key) {
+    throw new Error('No account keys are set yet.')
+  }
   const dek = await unwrapKey(bundle.wrapped_dek, kek)
   const identityPrivate = await importPrivateKey(await openText(bundle.wrapped_private_key, dek))
   vault = {

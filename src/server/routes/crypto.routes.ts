@@ -6,7 +6,9 @@ import {
   GroupKeyWrapsView,
   GroupMemberView,
   KeyMaterialSchema,
+  PasskeyBundleSchema,
   PublishKeysSchema,
+  PublishPasskeySchema,
   UuidSchema,
 } from '../schemas'
 import { Errors, fromPostgrestError } from '../errors'
@@ -16,6 +18,21 @@ import { bearerAuth, errorResponses, jsonBody, requireGroupOwner, requireGroupVi
 const GroupIdParam = z.object({
   id: UuidSchema.openapi({ param: { name: 'id', in: 'path' } }),
 })
+
+interface PasskeyRow {
+  enc_passkey_salt: string | null
+  enc_passkey_credential_id: string | null
+  enc_passkey_wrapped_dek: string | null
+}
+
+function passkeyOf(row: PasskeyRow | null): z.infer<typeof PasskeyBundleSchema> | null {
+  if (!row || !row.enc_passkey_salt || !row.enc_passkey_credential_id || !row.enc_passkey_wrapped_dek) return null
+  return {
+    salt: row.enc_passkey_salt,
+    credential_id: row.enc_passkey_credential_id,
+    wrapped_dek: row.enc_passkey_wrapped_dek,
+  }
+}
 
 export function registerCryptoRoutes(app: App) {
   // --------------------------------------------------------------- account keys
@@ -40,17 +57,27 @@ export function registerCryptoRoutes(app: App) {
   app.openapi(getKeys, async (c) => {
     const { data, error } = await c.var.userClient
       .from('profiles')
-      .select('enc_salt, enc_iterations, enc_wrapped_dek, enc_public_key, enc_wrapped_private_key')
+      .select(
+        'enc_salt, enc_iterations, enc_wrapped_dek, enc_public_key, enc_wrapped_private_key, enc_passkey_salt, enc_passkey_credential_id, enc_passkey_wrapped_dek',
+      )
       .eq('id', c.var.user.id)
       .maybeSingle()
     if (error) throw fromPostgrestError(error)
     if (!data || !data.enc_wrapped_dek) throw Errors.notFound('No account keys yet')
+    const row = data as {
+      enc_salt: string | null
+      enc_iterations: number | null
+      enc_wrapped_dek: string | null
+      enc_public_key: string | null
+      enc_wrapped_private_key: string | null
+    } & PasskeyRow
     return c.json({
-      salt: data.enc_salt,
-      iterations: data.enc_iterations,
-      wrapped_dek: data.enc_wrapped_dek,
-      public_key: data.enc_public_key,
-      wrapped_private_key: data.enc_wrapped_private_key,
+      salt: row.enc_salt,
+      iterations: row.enc_iterations,
+      wrapped_dek: row.enc_wrapped_dek,
+      public_key: row.enc_public_key,
+      wrapped_private_key: row.enc_wrapped_private_key,
+      passkey: passkeyOf(row),
     })
   })
 
@@ -75,7 +102,7 @@ export function registerCryptoRoutes(app: App) {
 
     const { data: existing, error: readErr } = await c.var.userClient
       .from('profiles')
-      .select('enc_wrapped_dek')
+      .select('enc_wrapped_dek, enc_passkey_salt, enc_passkey_credential_id, enc_passkey_wrapped_dek')
       .eq('id', me)
       .maybeSingle()
     if (readErr) throw fromPostgrestError(readErr)
@@ -106,7 +133,76 @@ export function registerCryptoRoutes(app: App) {
       wrapped_dek: body.wrapped_dek,
       public_key: body.public_key,
       wrapped_private_key: body.wrapped_private_key,
+      passkey: passkeyOf(existing as PasskeyRow | null),
     })
+  })
+
+  // --------------------------------------------------------------- passkey unlock
+  // A second way to open the same DEK, bound to one authenticator on one
+  // browser. Registering needs the unlocked vault (the DEK is in memory);
+  // the PIN stays the portable path and is never weakened by this.
+  const setPasskey = createRoute({
+    method: 'put',
+    path: '/me/keys/passkey',
+    tags: ['Encryption'],
+    summary: 'Register or replace your passkey unlock',
+    security: [bearerAuth],
+    middleware: [requireAuth],
+    request: { body: jsonBody(PublishPasskeySchema) },
+    responses: {
+      ...errorResponses(400, 401, 404, 503),
+      200: { description: 'Passkey stored', content: { 'application/json': { schema: PasskeyBundleSchema } } },
+    },
+  })
+  app.openapi(setPasskey, async (c) => {
+    const body = c.req.valid('json')
+    const me = c.var.user.id
+
+    const { data: existing, error: readErr } = await c.var.userClient
+      .from('profiles')
+      .select('enc_wrapped_dek')
+      .eq('id', me)
+      .maybeSingle()
+    if (readErr) throw fromPostgrestError(readErr)
+    if (!(existing as { enc_wrapped_dek: string | null } | null)?.enc_wrapped_dek) {
+      throw Errors.notFound('No account keys yet — choose a PIN first')
+    }
+
+    const { error } = await c.var.userClient
+      .from('profiles')
+      .update({
+        enc_passkey_salt: body.salt,
+        enc_passkey_credential_id: body.credential_id,
+        enc_passkey_wrapped_dek: body.wrapped_dek,
+      })
+      .eq('id', me)
+    if (error) throw fromPostgrestError(error)
+
+    return c.json({ salt: body.salt, credential_id: body.credential_id, wrapped_dek: body.wrapped_dek })
+  })
+
+  const clearPasskey = createRoute({
+    method: 'delete',
+    path: '/me/keys/passkey',
+    tags: ['Encryption'],
+    summary: 'Remove your passkey unlock',
+    security: [bearerAuth],
+    middleware: [requireAuth],
+    responses: {
+      ...errorResponses(401, 503),
+      200: {
+        description: 'Passkey removed',
+        content: { 'application/json': { schema: z.object({ removed: z.boolean() }) } },
+      },
+    },
+  })
+  app.openapi(clearPasskey, async (c) => {
+    const { error } = await c.var.userClient
+      .from('profiles')
+      .update({ enc_passkey_salt: null, enc_passkey_credential_id: null, enc_passkey_wrapped_dek: null })
+      .eq('id', c.var.user.id)
+    if (error) throw fromPostgrestError(error)
+    return c.json({ removed: true })
   })
 
   // --------------------------------------------------------------- group CEK boxes

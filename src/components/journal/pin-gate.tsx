@@ -16,7 +16,7 @@
  * instead of offering false hope.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { CircleNotch, LockKey, LockOpen } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
@@ -142,7 +142,23 @@ function UnlockPin() {
   const { user } = useSession()
   const [pin, setPin] = useState('')
   const [busy, setBusy] = useState(false)
+  const [passkeyBusy, setPasskeyBusy] = useState(false)
+  const [passkeyOffer, setPasskeyOffer] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // A registered passkey is discovered from the bundle — never assumed.
+  useEffect(() => {
+    let alive = true
+    void import('@/lib/api/endpoints')
+      .then(({ getAccountKeys }) => getAccountKeys())
+      .then((bundle) => {
+        if (alive) setPasskeyOffer(Boolean(bundle.passkey))
+      })
+      .catch(() => null)
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -160,6 +176,22 @@ function UnlockPin() {
       setError(err instanceof Error && err.message ? err.message : 'That PIN isn’t right — try again.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const unlockViaPasskey = async () => {
+    setError(null)
+    setPasskeyBusy(true)
+    try {
+      const { unlockWithPasskey } = await import('@/lib/crypto/passkey')
+      await unlockWithPasskey()
+      void coverMyGroups(user?.id ?? '').catch(() => null)
+    } catch (err) {
+      // A cancelled OS prompt resolves silently inside unlockWithPasskey —
+      // only real failures (no passkey, unsupported browser) land here.
+      setError(err instanceof Error && err.message ? err.message : 'That didn’t unlock — try the PIN.')
+    } finally {
+      setPasskeyBusy(false)
     }
   }
 
@@ -187,7 +219,7 @@ function UnlockPin() {
           />
         </div>
         {error && <p className="text-[12px] text-ember">{error}</p>}
-        <Button type="submit" disabled={busy} className="press h-10 gap-2 shadow-ink">
+        <Button type="submit" disabled={busy || passkeyBusy} className="press h-10 gap-2 shadow-ink">
           {busy ? (
             <>
               <CircleNotch weight="bold" className="h-4 w-4 animate-spin" /> Unlocking…
@@ -198,6 +230,23 @@ function UnlockPin() {
             </>
           )}
         </Button>
+        {passkeyOffer && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || passkeyBusy}
+            onClick={() => void unlockViaPasskey()}
+            className="press h-10 gap-2 border-line bg-paper"
+          >
+            {passkeyBusy ? (
+              <>
+                <CircleNotch weight="bold" className="h-4 w-4 animate-spin" /> Waiting for your passkey…
+              </>
+            ) : (
+              'Use a passkey instead'
+            )}
+          </Button>
+        )}
         <p className="text-[11.5px] leading-snug text-ink-faint">
           Forgot it? Your entries stay sealed permanently — we can’t reset a PIN we never see.
         </p>
