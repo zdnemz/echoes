@@ -35,39 +35,39 @@ function openDb(): Promise<IDBDatabase> | null {
   return dbPromise
 }
 
-function read(): Promise<string | null> {
+function read(key: string): Promise<string | null> {
   const db = openDb()
   if (!db) return Promise.resolve(null)
   return db.then(
     (d) =>
       new Promise((resolve) => {
-        const req = d.transaction(STORE, 'readonly').objectStore(STORE).get(KEY)
+        const req = d.transaction(STORE, 'readonly').objectStore(STORE).get(key)
         req.onsuccess = () => resolve((req.result as string | undefined) ?? null)
         req.onerror = () => resolve(null)
       }),
   )
 }
 
-function write(value: string): Promise<void> {
+function write(key: string, value: string): Promise<void> {
   const db = openDb()
   if (!db) return Promise.resolve()
   return db.then(
     (d) =>
       new Promise((resolve) => {
-        const req = d.transaction(STORE, 'readwrite').objectStore(STORE).put(value, KEY)
+        const req = d.transaction(STORE, 'readwrite').objectStore(STORE).put(value, key)
         req.onsuccess = () => resolve()
         req.onerror = () => resolve() // A full quota or lock never breaks the app.
       }),
   )
 }
 
-function clear(): Promise<void> {
+function clear(key: string): Promise<void> {
   const db = openDb()
   if (!db) return Promise.resolve()
   return db.then(
     (d) =>
       new Promise((resolve) => {
-        const req = d.transaction(STORE, 'readwrite').objectStore(STORE).delete(KEY)
+        const req = d.transaction(STORE, 'readwrite').objectStore(STORE).delete(key)
         req.onsuccess = () => resolve()
         req.onerror = () => resolve()
       }),
@@ -76,9 +76,12 @@ function clear(): Promise<void> {
 
 export const idbPersister = createAsyncStoragePersister({
   storage: {
-    getItem: read,
-    setItem: write,
-    removeItem: clear,
+    // NOTE: AsyncStorage is (key, value) — an earlier revision aliased
+    // single-arg functions here, which stored the KEY as the value and broke
+    // every restore with a JSON.parse error. The signatures below are load-bearing.
+    getItem: (key) => read(key),
+    setItem: (key, value) => write(key, value),
+    removeItem: (key) => clear(key),
   },
   key: KEY,
   // Writes are coalesced — the editor autosaves, so an unthrottled persister
