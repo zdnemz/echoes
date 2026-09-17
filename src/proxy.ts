@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server'
 const COOKIE = 'echoes.session.token'
 const PUBLIC = ['/login', '/register', '/auth/callback', '/api', '/_next', '/favicon', '/logo', '/icons', '/manifest']
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
   if (PUBLIC.some((p) => pathname.startsWith(p))) return NextResponse.next()
 
