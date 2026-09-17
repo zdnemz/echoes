@@ -49,14 +49,16 @@ export function EntryRow({
       <button
         type="button"
         onClick={() => onOpen(entry)}
-        className={`press group block w-full rounded-md px-3 py-4 text-left transition-colors sm:px-4 ${
-          flash ? 'bg-clay-tint/60' : 'hover:bg-paper-deep/50'
+        className={`press group block w-full border-2 px-3 py-4 text-left transition-colors sm:px-4 ${
+          flash ? 'border-accent bg-muted' : 'border-transparent hover:border-foreground hover:bg-muted'
         }`}
       >
         <div className="flex items-baseline gap-3">
-          <span className="shrink-0 font-mono text-[10.5px] text-ink-faint">{formatStamp(entry.created_at)}</span>
+          <span className="shrink-0 bg-foreground px-1.5 py-0.5 font-mono text-[10.5px] font-bold text-background">
+            {formatStamp(entry.created_at)}
+          </span>
           {notebookTitle && (
-            <span className="shrink-0 rounded-full bg-paper-deep px-2 py-0.5 font-mono text-[9.5px] text-ink-faint">
+            <span className="shrink-0 border border-foreground px-1.5 py-0.5 font-mono text-[9.5px] font-bold uppercase">
               {notebookTitle}
             </span>
           )}
@@ -71,49 +73,48 @@ export function EntryRow({
             {sealed && (
               <span
                 title="Encrypted on this device — only you and your circle hold the key"
-                className="inline-flex items-center gap-1 font-mono text-[9.5px] text-ink-faint"
+                className="inline-flex items-center gap-1 font-mono text-[9.5px] font-bold uppercase"
               >
-                <LockKey weight="light" className="h-3.5 w-3.5" /> sealed
+                <LockKey weight="bold" className="h-3.5 w-3.5" /> sealed
               </span>
             )}
             {showPrivate && !entry.is_shared && (
               <span
                 title="Kept private from the group"
-                className="inline-flex items-center gap-1 font-mono text-[9.5px] text-ink-faint"
+                className="inline-flex items-center gap-1 border border-foreground bg-background px-1.5 py-0.5 font-mono text-[9.5px] font-bold uppercase text-accent"
               >
-                <EyeSlash weight="light" className="h-3.5 w-3.5" /> private
+                <EyeSlash weight="bold" className="h-3.5 w-3.5" /> private
               </span>
             )}
           </span>
         </div>
 
-        <h3 className="mt-1.5 font-display text-[19px] leading-snug text-ink transition-colors group-hover:text-clay-ink">
+        <h3 className="font-display mt-1.5 text-[19px] uppercase underline-offset-4 group-hover:underline group-hover:decoration-accent group-hover:decoration-[3px]">
           {locked ? 'An entry from another device' : title || 'Untitled entry'}
         </h3>
 
         {locked ? (
-          <p className="mt-1 flex items-center gap-1.5 font-serif text-[13.5px] italic leading-relaxed text-ink-faint">
-            <LockKey weight="light" className="h-3.5 w-3.5" /> written on a different device — open it there to read it
+          <p className="mt-1 flex items-center gap-1.5 text-[13.5px] font-bold italic leading-relaxed">
+            <LockKey weight="bold" className="h-3.5 w-3.5" /> written on a different device — open it there to read it
           </p>
         ) : (
           body.trim().length > 0 && (
-            <p className="mt-1 line-clamp-2 max-w-[70ch] font-serif text-[14px] leading-relaxed text-ink-soft">
-              {excerpt(body, 150)}
-            </p>
+            <p className="mt-1 line-clamp-2 max-w-[70ch] text-[14px] font-bold leading-relaxed">{excerpt(body, 150)}</p>
           )
         )}
 
         {(entry.tags.length > 0 || authorName) && (
           <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
             {entry.tags.slice(0, 5).map((t) => (
-              <span key={t} className="font-mono text-[10.5px] text-ink-faint">
-                #{t}
+              <span key={t} className="font-mono text-[10.5px] font-bold">
+                <span className="text-accent">#</span>
+                {t}
               </span>
             ))}
             {entry.tags.length > 5 && (
-              <span className="font-mono text-[10.5px] text-ink-ghost">+{entry.tags.length - 5}</span>
+              <span className="font-mono text-[10.5px] font-bold">+{entry.tags.length - 5}</span>
             )}
-            {authorName && <span className="ml-auto font-mono text-[10.5px] text-ink-faint">by {authorName}</span>}
+            {authorName && <span className="ml-auto font-mono text-[10.5px] font-bold">by {authorName}</span>}
           </div>
         )}
       </button>

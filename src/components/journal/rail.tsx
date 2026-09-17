@@ -37,9 +37,11 @@ import type { View } from './workspace'
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="px-2 pb-2 pt-5 font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint first:pt-0">
-      {children}
-    </p>
+    <div className="pb-2 pt-5 first:pt-0">
+      <p className="inline-block bg-foreground px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-background">
+        {children}
+      </p>
+    </div>
   )
 }
 
@@ -69,33 +71,33 @@ function NewNotebookDialog({ open, onOpenChange }: { open: boolean; onOpenChange
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm border-line bg-paper-raised">
+      <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle className="font-display text-lg text-ink">A new notebook</DialogTitle>
-          <DialogDescription className="text-[12.5px] text-ink-soft">
-            Private until you decide otherwise.
-          </DialogDescription>
+          <DialogTitle className="text-lg">A new notebook</DialogTitle>
+          <DialogDescription className="text-[12.5px] font-bold">Private until you decide otherwise.</DialogDescription>
         </DialogHeader>
         <form id="new-notebook-form" onSubmit={submit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="nb-title" className="text-[12.5px]">
-              Name
-            </Label>
+            <Label htmlFor="nb-title">Name</Label>
             <Input
               id="nb-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Morning pages"
               autoFocus
-              className="h-10 bg-paper"
+              className="h-10"
             />
-            {error && <p className="text-[11.5px] text-ember">{error}</p>}
+            {error && (
+              <p className="border-2 border-destructive px-2.5 py-1.5 text-[11.5px] font-bold text-destructive">
+                {error}
+              </p>
+            )}
           </div>
           <DialogFooter className="mt-1 gap-2">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="press h-9">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="h-9">
               Not now
             </Button>
-            <Button type="submit" disabled={create.isPending} className="press h-9 shadow-ink">
+            <Button type="submit" disabled={create.isPending} className="h-9">
               {create.isPending ? 'Creating…' : 'Create notebook'}
             </Button>
           </DialogFooter>
@@ -130,33 +132,35 @@ function NewGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm border-line bg-paper-raised">
+      <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle className="font-display text-lg text-ink">A small group</DialogTitle>
-          <DialogDescription className="text-[12.5px] text-ink-soft">
+          <DialogTitle className="text-lg">A small group</DialogTitle>
+          <DialogDescription className="text-[12.5px] font-bold">
             Family, a partner, two friends. You can invite them by email next.
           </DialogDescription>
         </DialogHeader>
         <form id="new-group-form" onSubmit={submit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="grp-name" className="text-[12.5px]">
-              Name
-            </Label>
+            <Label htmlFor="grp-name">Name</Label>
             <Input
               id="grp-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Kitchen Table"
               autoFocus
-              className="h-10 bg-paper"
+              className="h-10"
             />
-            {error && <p className="text-[11.5px] text-ember">{error}</p>}
+            {error && (
+              <p className="border-2 border-destructive px-2.5 py-1.5 text-[11.5px] font-bold text-destructive">
+                {error}
+              </p>
+            )}
           </div>
           <DialogFooter className="mt-1 gap-2">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="press h-9">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="h-9">
               Not now
             </Button>
-            <Button type="submit" disabled={create.isPending} className="press h-9 shadow-ink">
+            <Button type="submit" disabled={create.isPending} className="h-9">
               {create.isPending ? 'Creating…' : 'Create group'}
             </Button>
           </DialogFooter>
@@ -206,27 +210,21 @@ export function Rail({
     const gname = groupName(nb.group_id)
     const isShared = nb.owner_id !== user?.id
     return (
-      <li key={nb.id} className="relative">
+      <li key={nb.id}>
         <button
           type="button"
           onClick={() => onNavigate({ kind: 'notebook', notebookId: nb.id })}
           aria-current={active ? 'page' : undefined}
-          className={`press group flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[13.5px] transition-colors ${
-            active ? 'bg-paper-deep text-ink' : 'text-ink-soft hover:bg-paper-deep/60 hover:text-ink'
+          className={`press group flex w-full items-center gap-2.5 border-2 px-2.5 py-2 text-left text-[13.5px] font-bold transition-colors ${
+            active ? 'border-foreground bg-muted shadow-brutal-sm' : 'border-transparent hover:border-foreground'
           }`}
         >
-          {active && (
-            <span
-              aria-hidden="true"
-              className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-clay"
-            />
-          )}
-          <BookOpen weight={active ? 'fill' : 'regular'} className="h-4 w-4 shrink-0 text-ink-faint" />
+          <BookOpen weight={active ? 'fill' : 'regular'} className="h-4 w-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{nb.title}</span>
           {gname && !isShared && (
             <span
               title={`Shared with ${gname}`}
-              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-clay-tint px-1.5 py-0.5 font-mono text-[9px] text-clay-ink"
+              className="inline-flex shrink-0 items-center gap-1 border border-foreground bg-accent px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-background"
             >
               <LinkSimple weight="bold" className="h-2.5 w-2.5" />
               {gname.length > 10 ? `${gname.slice(0, 9)}…` : gname}
@@ -235,7 +233,7 @@ export function Rail({
           {isShared && (
             <span
               title={`Shared with you by ${gname ?? 'the group'}`}
-              className="shrink-0 font-mono text-[9px] uppercase tracking-wide text-ink-faint"
+              className="shrink-0 bg-foreground px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wide text-background"
             >
               with you
             </span>
@@ -249,14 +247,17 @@ export function Rail({
     <nav aria-label="Journal navigation" className={`text-[13.5px] ${embedded ? '' : ''}`}>
       {/* filter — satu kolom cari untuk notebook + group */}
       <div className="relative mb-1">
-        <MagnifyingGlass className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
+        <MagnifyingGlass
+          weight="bold"
+          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
+        />
         <input
           type="search"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter notebooks & groups…"
+          placeholder="FILTER NOTEBOOKS & GROUPS…"
           aria-label="Filter notebooks and groups"
-          className="h-9 w-full rounded-md border border-line bg-paper-raised pl-8 pr-3 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-clay-soft focus:outline-none focus:ring-2 focus:ring-clay-soft/40"
+          className="h-9 w-full border-2 border-foreground bg-background pl-8 pr-3 text-[12.5px] font-bold placeholder:text-muted-foreground focus:border-accent focus:outline-none"
         />
       </div>
       {/* ------------------------------------------------ notebooks */}
@@ -267,7 +268,7 @@ export function Rail({
         <button
           type="button"
           onClick={() => setNbDialog(true)}
-          className="press -mr-1 rounded-md p-1.5 text-ink-faint transition-colors hover:bg-paper-deep hover:text-ink"
+          className="press border-2 border-transparent p-1 transition-colors hover:border-foreground hover:bg-muted"
           aria-label="New notebook"
           title="New notebook"
         >
@@ -298,7 +299,7 @@ export function Rail({
         <button
           type="button"
           onClick={() => setGrpDialog(true)}
-          className="press -mr-1 rounded-md p-1.5 text-ink-faint transition-colors hover:bg-paper-deep hover:text-ink"
+          className="press border-2 border-transparent p-1 transition-colors hover:border-foreground hover:bg-muted"
           aria-label="New group"
           title="New group"
         >
@@ -311,27 +312,22 @@ export function Rail({
             const active = view?.kind === 'groups' || (view?.kind === 'group' && view.groupId === g.id)
             const selected = view?.kind === 'group' && view.groupId === g.id
             return (
-              <li key={g.id} className="relative">
+              <li key={g.id}>
                 <button
                   type="button"
                   onClick={() => onNavigate(selected ? { kind: 'groups' } : { kind: 'group', groupId: g.id })}
                   aria-current={selected ? 'page' : undefined}
-                  className={`press flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[13.5px] transition-colors ${
-                    selected ? 'bg-paper-deep text-ink' : 'text-ink-soft hover:bg-paper-deep/60 hover:text-ink'
+                  className={`press flex w-full items-center gap-2.5 border-2 px-2.5 py-2 text-left text-[13.5px] font-bold transition-colors ${
+                    selected
+                      ? 'border-foreground bg-muted shadow-brutal-sm'
+                      : 'border-transparent hover:border-foreground'
                   }`}
                 >
-                  {selected && (
-                    <span
-                      aria-hidden="true"
-                      className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-clay"
-                    />
-                  )}
-                  <UsersThree
-                    weight={g.my_role === 'owner' ? 'fill' : 'regular'}
-                    className={`h-4 w-4 shrink-0 ${g.my_role === 'owner' ? 'text-clay' : 'text-ink-faint'}`}
-                  />
+                  <UsersThree weight={g.my_role === 'owner' ? 'fill' : 'regular'} className="h-4 w-4 shrink-0" />
                   <span className="min-w-0 flex-1 truncate">{g.name}</span>
-                  <span className="shrink-0 font-mono text-[10px] text-ink-faint">×{g.member_count}</span>
+                  <span className="shrink-0 bg-foreground px-1.5 py-0.5 font-mono text-[10px] font-bold text-background">
+                    ×{g.member_count}
+                  </span>
                 </button>
               </li>
             )
@@ -344,50 +340,42 @@ export function Rail({
       )}
 
       {/* ------------------------------------------------ reflect + settings */}
-      <div className="mt-6 space-y-0.5 border-t border-line pt-3">
+      <div className="mt-6 space-y-1 border-t-[3px] border-foreground pt-3">
         <button
           type="button"
           onClick={() => onNavigate({ kind: 'reflect' })}
           aria-current={view?.kind === 'reflect' ? 'page' : undefined}
-          className={`press relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[13.5px] transition-colors ${
-            view?.kind === 'reflect' ? 'bg-paper-deep text-ink' : 'text-ink-soft hover:bg-paper-deep/60 hover:text-ink'
+          className={`press flex w-full items-center gap-2.5 border-2 px-2.5 py-2 text-left text-[13.5px] font-bold transition-colors ${
+            view?.kind === 'reflect'
+              ? 'border-foreground bg-muted shadow-brutal-sm'
+              : 'border-transparent hover:border-foreground'
           }`}
         >
-          {view?.kind === 'reflect' && (
-            <span
-              aria-hidden="true"
-              className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-clay"
-            />
-          )}
-          <Sparkle weight="regular" className="h-4 w-4 shrink-0 text-ink-faint" />
+          <Sparkle weight="regular" className="h-4 w-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate">Reflect</span>
         </button>
         <button
           type="button"
           onClick={() => onNavigate({ kind: 'settings' })}
           aria-current={view?.kind === 'settings' ? 'page' : undefined}
-          className={`press relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[13.5px] transition-colors ${
-            view?.kind === 'settings' ? 'bg-paper-deep text-ink' : 'text-ink-soft hover:bg-paper-deep/60 hover:text-ink'
+          className={`press flex w-full items-center gap-2.5 border-2 px-2.5 py-2 text-left text-[13.5px] font-bold transition-colors ${
+            view?.kind === 'settings'
+              ? 'border-foreground bg-muted shadow-brutal-sm'
+              : 'border-transparent hover:border-foreground'
           }`}
         >
-          {view?.kind === 'settings' && (
-            <span
-              aria-hidden="true"
-              className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-clay"
-            />
-          )}
-          <GearSix weight="regular" className="h-4 w-4 shrink-0 text-ink-faint" />
+          <GearSix weight="regular" className="h-4 w-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate">Settings</span>
         </button>
       </div>
 
       {/* ------------------------------------------------ who */}
-      <div className="mt-8 border-t border-line pt-4">
-        <p className="px-2.5 font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">Signed in as</p>
-        <p className="mt-1.5 truncate px-2.5 text-[13px] text-ink">
+      <div className="mt-8 border-2 border-foreground bg-muted p-3">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em]">Signed in as</p>
+        <p className="mt-1.5 truncate text-[13px] font-black uppercase">
           {user?.display_name || initials(user?.email ?? '', '·')}
         </p>
-        {user?.display_name && <p className="truncate px-2.5 text-[11.5px] text-ink-faint">{user.email}</p>}
+        {user?.display_name && <p className="truncate text-[11.5px] font-bold">{user.email}</p>}
       </div>
 
       <NewNotebookDialog open={nbDialog} onOpenChange={setNbDialog} />

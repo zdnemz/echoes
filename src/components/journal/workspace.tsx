@@ -15,7 +15,6 @@ import Link from 'next/link'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { List, MagnifyingGlass } from '@phosphor-icons/react/dist/ssr'
 import { Wordmark } from '@/components/brand'
-import { Grain } from '@/components/grain'
 import { UnconfiguredNotice } from '@/components/unconfigured'
 import { Rail } from './rail'
 import { NotebookView } from './notebook-view'
@@ -117,8 +116,8 @@ export function urlFromView(v: View): string {
 
 function RestoreSkeleton() {
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-paper text-ink">
-      <header className="h-16 border-b border-line" />
+    <div className="flex min-h-[100dvh] flex-col bg-background font-mono text-foreground">
+      <header className="h-16 border-b-[3px] border-foreground" />
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6 md:flex-row">
         <div className="w-full space-y-3 md:w-64">
           <div className="skeleton-line h-3 w-20" />
@@ -139,14 +138,14 @@ function RestoreSkeleton() {
 
 function SignedOutGate() {
   return (
-    <div className="flex min-h-[100dvh] flex-col items-start justify-center bg-paper px-6 text-ink sm:px-10">
+    <div className="flex min-h-[100dvh] flex-col items-start justify-center bg-background px-6 font-mono text-foreground sm:px-10">
       <Wordmark className="text-xl" />
-      <p className="mt-6 max-w-[46ch] font-serif text-lg leading-relaxed text-ink-soft">
+      <p className="mt-6 max-w-[46ch] border-l-4 border-accent pl-4 text-lg font-bold leading-relaxed">
         This room is for account holders. Taking you back to the front door…
       </p>
       <Link
         href="/login"
-        className="mt-6 font-mono text-[11px] uppercase tracking-[0.16em] text-clay-ink underline underline-offset-4"
+        className="mt-6 border-2 border-foreground px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.16em] hover:bg-muted"
       >
         sign in or create an account
       </Link>
@@ -232,19 +231,17 @@ export function Workspace() {
   }
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-paper text-ink">
-      <Grain />
-
+    <div className="flex min-h-[100dvh] flex-col bg-background font-mono text-foreground">
       {/* ------------------------------------------------ top bar */}
-      <header className="sticky top-0 z-30 border-b border-line bg-paper/90 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b-[3px] border-foreground bg-background">
         <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-3 px-4 sm:px-6">
           <button
             type="button"
             onClick={() => setRailOpen(true)}
-            className="press -ml-1 rounded-md p-2 text-ink-soft hover:bg-paper-deep lg:hidden"
+            className="press -ml-1 border-2 border-transparent p-1.5 hover:border-foreground lg:hidden"
             aria-label="Open navigation"
           >
-            <List className="h-5 w-5" />
+            <List className="h-5 w-5" weight="bold" />
           </button>
 
           <Link href="/journal" aria-label="Echoes journal" className="press text-base">
@@ -255,10 +252,10 @@ export function Workspace() {
           <button
             type="button"
             onClick={() => navigate({ kind: 'search', q: '' })}
-            className="press ml-auto rounded-md p-2 text-ink-soft hover:bg-paper-deep sm:hidden"
+            className="press ml-auto border-2 border-transparent p-1.5 hover:border-foreground sm:hidden"
             aria-label="Search your entries"
           >
-            <MagnifyingGlass className="h-5 w-5" />
+            <MagnifyingGlass className="h-5 w-5" weight="bold" />
           </button>
 
           <form
@@ -270,13 +267,16 @@ export function Workspace() {
             }}
           >
             <div className="relative w-full">
-              <MagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+              <MagnifyingGlass
+                weight="bold"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+              />
               <input
                 name="q"
                 type="search"
-                placeholder="search your entries…"
+                placeholder="SEARCH YOUR ENTRIES…"
                 aria-label="Search your entries"
-                className="h-9 w-full rounded-md border border-line bg-paper-raised pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-clay-soft focus:outline-none focus:ring-2 focus:ring-clay-soft/40"
+                className="h-9 w-full border-2 border-foreground bg-background pl-9 pr-3 text-[13px] font-bold placeholder:text-muted-foreground focus:border-accent focus:outline-none"
               />
             </div>
           </form>
@@ -294,7 +294,7 @@ export function Workspace() {
 
         {/* mobile rail */}
         <Sheet open={railOpen} onOpenChange={setRailOpen}>
-          <SheetContent side="left" className="w-72 overflow-y-auto bg-paper p-5">
+          <SheetContent side="left" className="w-72 overflow-y-auto bg-background p-5">
             <SheetTitle className="sr-only">Navigation</SheetTitle>
             <Rail notebooks={all} view={view} onNavigate={navigate} embedded />
           </SheetContent>
@@ -304,8 +304,8 @@ export function Workspace() {
         <main className="min-w-0 flex-1 py-6 lg:py-8 lg:pl-7">
           {unconfigured ? (
             <div className="mx-4 lg:mx-0 lg:max-w-2xl">
-              <h1 className="font-display text-2xl text-ink">Almost there</h1>
-              <p className="mt-2 text-[13.5px] text-ink-soft">
+              <h1 className="font-display text-2xl uppercase">Almost there</h1>
+              <p className="mt-2 border-l-4 border-accent pl-3 text-[13.5px] font-bold">
                 You&apos;re signed in — the data layer just isn&apos;t connected on this deployment yet.
               </p>
               <div className="mt-5">
@@ -380,20 +380,22 @@ function FirstRunGate({ onNavigate }: { onNavigate: (v: View) => void }) {
 
   return (
     <div className="mx-4 max-w-lg lg:mx-0">
-      <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-clay">first run</p>
-      <h1 className="font-display mt-4 text-3xl leading-tight text-ink">A journal begins with one notebook.</h1>
-      <p className="mt-4 max-w-[54ch] text-[14px] leading-relaxed text-ink-soft">
+      <p className="inline-block border-2 border-foreground bg-foreground px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-background">
+        first run
+      </p>
+      <h1 className="font-display mt-4 text-3xl uppercase">A journal begins with one notebook.</h1>
+      <p className="mt-4 max-w-[54ch] border-l-4 border-accent pl-4 text-[14px] font-bold leading-relaxed">
         Give it a name that makes you want to open it — &ldquo;Morning pages&rdquo;, &ldquo;Field notes&rdquo;,
         &ldquo;The kitchen table&rdquo;. You can share this one later, or never; the rest stay yours alone.
       </p>
-      <div className="mt-6 flex flex-wrap gap-2.5">
+      <div className="mt-6 flex flex-wrap gap-3">
         {['Morning pages', 'Field notes', 'Kitchen table', 'Overnight thoughts'].map((t) => (
           <button
             key={t}
             type="button"
             disabled={creating}
             onClick={() => start(t)}
-            className="press rounded-full border border-line bg-paper-raised px-4 py-2 text-[13px] text-ink-soft hover:border-clay-soft hover:text-ink disabled:opacity-50"
+            className="press border-2 border-foreground bg-background px-4 py-2 text-[13px] font-bold uppercase shadow-brutal-sm hover:bg-muted disabled:opacity-50"
           >
             {t}
           </button>
@@ -401,7 +403,7 @@ function FirstRunGate({ onNavigate }: { onNavigate: (v: View) => void }) {
       </div>
 
       {error && (
-        <p role="alert" className="mt-4 text-[12.5px] leading-relaxed text-ember">
+        <p role="alert" className="mt-4 border-2 border-destructive px-3 py-2 text-[12.5px] font-bold text-destructive">
           {error}
         </p>
       )}

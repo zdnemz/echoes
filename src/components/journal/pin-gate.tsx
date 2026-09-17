@@ -39,14 +39,14 @@ export function PinGate() {
 
 function Shell({ title, blurb, children }: { title: string; blurb: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-paper px-5 text-ink">
-      <div className="w-full max-w-sm rounded-xl border border-line bg-paper-raised p-6 shadow-lift sm:p-8">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-5 font-mono text-foreground">
+      <div className="w-full max-w-sm border-2 border-foreground bg-background p-6 shadow-brutal sm:p-8">
         <div className="flex flex-col items-center gap-3 text-center">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-clay-soft text-clay">
+          <span className="flex h-11 w-11 items-center justify-center border-2 border-foreground bg-accent text-background">
             <LockKey weight="duotone" className="h-6 w-6" />
           </span>
-          <h2 className="font-display text-xl tracking-tight">{title}</h2>
-          <p className="text-[12px] leading-relaxed text-ink-soft">{blurb}</p>
+          <h2 className="font-display text-xl uppercase">{title}</h2>
+          <p className="border-l-4 border-accent pl-3 text-left text-[12px] font-bold leading-relaxed">{blurb}</p>
         </div>
         <div className="mt-6">{children}</div>
       </div>
@@ -98,7 +98,7 @@ function CreatePin() {
             autoComplete="off"
             value={pin}
             onChange={(e) => setPin(sanitize(e.target.value))}
-            className="h-10 bg-paper focus-visible:ring-clay-soft"
+            className="h-10"
             placeholder="4 to 8 digits"
             autoFocus
             required
@@ -115,16 +115,18 @@ function CreatePin() {
             autoComplete="off"
             value={confirm}
             onChange={(e) => setConfirm(sanitize(e.target.value))}
-            className="h-10 bg-paper focus-visible:ring-clay-soft"
+            className="h-10"
             placeholder="same digits again"
             required
           />
         </div>
-        {error && <p className="text-[12px] text-ember">{error}</p>}
+        {error && (
+          <p className="border-2 border-destructive px-3 py-2 text-[12px] font-bold text-destructive">{error}</p>
+        )}
         <p className="text-[11.5px] leading-snug text-ink-faint">
           There is no recovery: if you forget this PIN, your entries cannot be read on any device — not even by us.
         </p>
-        <Button type="submit" disabled={busy} className="press h-10 gap-2 shadow-ink">
+        <Button type="submit" disabled={busy} className="h-10 gap-2">
           {busy ? (
             <>
               <CircleNotch weight="bold" className="h-4 w-4 animate-spin" /> Locking…
@@ -215,14 +217,16 @@ function UnlockPin() {
             autoComplete="off"
             value={pin}
             onChange={(e) => setPin(sanitize(e.target.value))}
-            className="h-10 bg-paper focus-visible:ring-clay-soft"
+            className="h-10"
             placeholder="4 to 8 digits"
             autoFocus
             required
           />
         </div>
-        {error && <p className="text-[12px] text-ember">{error}</p>}
-        <Button type="submit" disabled={busy || passkeyBusy} className="press h-10 gap-2 shadow-ink">
+        {error && (
+          <p className="border-2 border-destructive px-3 py-2 text-[12px] font-bold text-destructive">{error}</p>
+        )}
+        <Button type="submit" disabled={busy || passkeyBusy} className="h-10 gap-2">
           {busy ? (
             <>
               <CircleNotch weight="bold" className="h-4 w-4 animate-spin" /> Unlocking…
@@ -239,7 +243,7 @@ function UnlockPin() {
             variant="outline"
             disabled={busy || passkeyBusy}
             onClick={() => void unlockViaPasskey()}
-            className="press h-10 gap-2 border-line bg-paper"
+            className="h-10 gap-2"
           >
             {passkeyBusy ? (
               <>
