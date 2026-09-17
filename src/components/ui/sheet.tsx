@@ -62,11 +62,14 @@ function SheetContent({
         )}
         {...props}
       >
-        {children}
-        <SheetPrimitive.Close className="absolute top-4 right-4 grid size-8 place-items-center border-2 border-transparent transition-colors hover:border-foreground hover:bg-muted focus:border-accent focus:outline-hidden disabled:pointer-events-none">
+        {/* In-flow, not absolute: a corner-positioned button overlapped any
+           full-bleed content (the rail's filter input sat under it). The flex
+           column right-aligns it, so it still reads as the top-right closer. */}
+        <SheetPrimitive.Close className="self-end grid size-8 place-items-center border-2 border-transparent transition-colors hover:border-foreground hover:bg-muted focus:border-accent focus:outline-hidden disabled:pointer-events-none">
           <X className="size-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>
+        {children}
       </SheetPrimitive.Content>
     </SheetPortal>
   )
