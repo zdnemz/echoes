@@ -1,9 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#faf6ee"/>
-  <g transform="translate(8 8) scale(2)" fill="none">
-    <circle cx="6.5" cy="12" r="1.9" fill="#b85c3e"/>
-    <path d="M10.2 8.2a5.6 5.6 0 0 1 0 7.6" stroke="#b85c3e" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M14 5.6a9.4 9.4 0 0 1 0 12.8" stroke="#b85c3e" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M17.8 3a13.2 13.2 0 0 1 0 18" stroke="#b85c3e" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+  <!-- Hard offset shadow -->
+  <rect x="8" y="8" width="52" height="52" fill="#FF3B00"/>
+  <!-- Main square badge -->
+  <rect x="4" y="4" width="52" height="52" fill="#0A0A0A"/>
+  <!-- Echoes geometric soundwave -->
+  <g fill="none">
+    <!-- Origin square -->
+    <rect x="13" y="27" width="9" height="10" fill="#FFFFFF"/>
+    <!-- Wave 1 (white) -->
+    <path d="M28 21 H34 V43 H28" stroke="#FFFFFF" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter"/>
+    <!-- Wave 2 (white) -->
+    <path d="M39 15 H45 V49 H39" stroke="#FFFFFF" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter"/>
+    <!-- Wave 3 (accent) -->
+    <path d="M49 9 H53 V55 H49" stroke="#FF3B00" stroke-width="3.5" stroke-linecap="square" stroke-linejoin="miter"/>
   </g>
 </svg>
