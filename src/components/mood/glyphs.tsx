@@ -13,25 +13,25 @@ export type Mood = (typeof MOODS)[number]
 export const MOOD_META: Record<Mood, { label: string; color: string; tint: string; note: string }> = {
   great: {
     label: 'Radiant',
-    color: 'var(--mood-great)',
-    tint: 'rgba(189,143,52,0.12)',
+    color: 'var(--accent)',
+    tint: 'var(--muted)',
     note: 'the kind of day you want to keep',
   },
-  good: { label: 'Steady', color: 'var(--mood-good)', tint: 'rgba(124,142,90,0.13)', note: 'quiet, solid, fine' },
-  okay: { label: 'Even', color: 'var(--mood-okay)', tint: 'rgba(162,154,137,0.16)', note: 'nothing to report' },
+  good: { label: 'Steady', color: 'var(--fg)', tint: 'var(--muted)', note: 'quiet, solid, fine' },
+  okay: { label: 'Even', color: 'var(--fg)', tint: 'var(--muted)', note: 'nothing to report' },
   low: {
     label: 'Heavy',
-    color: 'var(--mood-low)',
-    tint: 'rgba(176,134,118,0.13)',
+    color: 'var(--accent)',
+    tint: 'var(--muted)',
     note: 'weather dragging at the edges',
   },
-  rough: { label: 'Weathered', color: 'var(--mood-rough)', tint: 'rgba(111,82,70,0.12)', note: 'write it down anyway' },
+  rough: { label: 'Weathered', color: 'var(--fg)', tint: 'var(--muted)', note: 'write it down anyway' },
 }
 
 const stroke = {
   fill: 'none',
   stroke: 'currentColor',
-  strokeWidth: 1.5,
+  strokeWidth: 2,
   strokeLinecap: 'round' as const,
   strokeLinejoin: 'round' as const,
 }

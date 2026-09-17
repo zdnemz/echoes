@@ -199,14 +199,32 @@
     box-shadow: 0 0 0 var(--fg) !important;
   }
 
-  .shadow-brutal {
-    box-shadow: 4px 4px 0 var(--fg);
+  .shadow-brutal,
+  .shadow-diffuse,
+  .shadow-lift,
+  .shadow-lg,
+  .shadow-md {
+    box-shadow: 4px 4px 0 var(--fg) !important;
   }
-  .shadow-brutal-sm {
-    box-shadow: 2px 2px 0 var(--fg);
+  .shadow-brutal-sm,
+  .shadow-sm,
+  .shadow-xs {
+    box-shadow: 2px 2px 0 var(--fg) !important;
   }
-  .shadow-brutal-accent {
-    box-shadow: 4px 4px 0 var(--accent);
+  .shadow-brutal-accent,
+  .shadow-ink {
+    box-shadow: 4px 4px 0 var(--accent) !important;
+  }
+
+  .rounded-full,
+  .rounded-2xl,
+  .rounded-xl,
+  .rounded-lg,
+  .rounded-md,
+  .rounded-sm,
+  .rounded,
+  .rounded-xs {
+    border-radius: 0 !important;
   }
 
   .measure {
@@ -226,7 +244,7 @@
 }
 
 /* ------------------------------------------------ WYSIWYG journal page
-   MDXEditor arrives in Radix slate/blue; re-token it to Paper & Ink.
+   MDXEditor arrives in Radix slate/blue; re-token it to Neo-brutalism.
    DELIBERATELY UNLAYERED: the editor stylesheet is unlayered, and
    unlayered rules beat same-specificity layered ones every time — the
    first version of this block sat in @layer components and lost
@@ -257,12 +275,11 @@
   padding: 0;
 }
 
-/* The writing surface: same serif voice and measure as the old
-   textarea, headings/lists/quotes inherit it. */
+/* The writing surface: mono voice and measure. */
 .mdxeditor .echoes-rich {
-  font-family: var(--font-newsreader), 'Newsreader', Georgia, 'Times New Roman', serif;
-  font-size: 16px;
-  line-height: 1.85;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  line-height: 1.8;
   color: var(--ink);
   padding-left: 0;
   padding-right: 0;
@@ -272,78 +289,80 @@
   outline: none;
 }
 
-/* WYSIWYG body typography — Lexical emits bare h1/p/ul/a tags and
-     Tailwind preflight strips their defaults, so without this a heading
-     looks exactly like body text. Mirrors MarkdownView (the reading mode)
-     so writing shows the final page. */
+/* WYSIWYG body typography */
 .mdxeditor .echoes-rich h1,
 .mdxeditor .echoes-rich h2,
 .mdxeditor .echoes-rich h3 {
-  font-family: var(--font-newsreader), 'Newsreader', Georgia, 'Times New Roman', serif;
-  font-weight: 500;
-  letter-spacing: -0.015em;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
   color: var(--ink);
 }
 .mdxeditor .echoes-rich h1 {
   font-size: 1.875rem;
-  line-height: 1.25;
+  line-height: 1.2;
   margin: 2rem 0 0.75rem;
 }
 .mdxeditor .echoes-rich h2 {
   font-size: 1.5rem;
-  line-height: 1.25;
+  line-height: 1.2;
   margin: 1.75rem 0 0.625rem;
 }
 .mdxeditor .echoes-rich h3 {
   font-size: 1.25rem;
-  line-height: 1.375;
+  line-height: 1.3;
   margin: 1.5rem 0 0.5rem;
 }
 .mdxeditor .echoes-rich p {
   margin-bottom: 1rem;
   line-height: 1.75;
-  color: var(--ink-soft);
+  color: var(--ink);
+  font-weight: 500;
 }
 .mdxeditor .echoes-rich a {
   color: var(--clay-ink);
   text-decoration: underline;
-  text-decoration-color: var(--clay-soft);
+  text-decoration-color: var(--accent);
   text-underline-offset: 3px;
 }
 .mdxeditor .echoes-rich ul {
-  list-style: disc;
+  list-style: square;
   padding-left: 1.25rem;
   margin-bottom: 1rem;
   line-height: 1.7;
-  color: var(--ink-soft);
 }
 .mdxeditor .echoes-rich ol {
   list-style: decimal;
   padding-left: 1.25rem;
   margin-bottom: 1rem;
   line-height: 1.7;
-  color: var(--ink-soft);
 }
 .mdxeditor .echoes-rich blockquote {
-  border-inline-start: 2px solid var(--clay);
-  padding-inline-start: 1rem;
+  border-inline-start: 4px solid var(--accent);
+  background-color: var(--muted);
+  padding: 1rem;
   margin: 1.25rem 0;
-  font-style: italic;
-  color: var(--ink-soft);
+  font-weight: 700;
 }
 .mdxeditor .echoes-rich hr {
   border: 0;
-  border-top: 1px solid var(--line);
+  border-top: 2px solid var(--line);
   margin: 1.75rem 0;
 }
 .mdxeditor .echoes-rich code {
-  background-color: var(--paper-deep);
-  color: var(--clay-ink);
+  background-color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 0.1em 0.3em;
+  color: var(--accent);
+  font-weight: 700;
 }
 .mdxeditor .echoes-rich pre {
-  background-color: var(--paper-deep);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  background-color: var(--fg);
+  color: var(--bg);
+  border: 2px solid var(--line);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--accent);
   padding: 0.875rem;
   overflow-x: auto;
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -353,6 +372,7 @@
 }
 .mdxeditor .echoes-rich pre code {
   background-color: transparent;
-  color: var(--ink);
+  color: var(--bg);
+  border: 0;
   padding: 0;
 }
