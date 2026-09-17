@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { Hero } from '@/components/landing/hero'
 import { FeatureStories } from '@/components/landing/features'
 import { MoodStrip } from '@/components/landing/mood-strip'
-import { KitchenTableStory } from '@/components/landing/story'
 import { PricingTeaser } from '@/components/marketing/pricing-teaser'
 import { Testimonials } from '@/components/marketing/testimonials'
 import { AuthSection } from '@/components/landing/auth-section'
@@ -14,18 +13,12 @@ export const metadata: Metadata = {
   alternates: { canonical: '/' },
 }
 
-/**
- * Echoes — the marketing home. Server component throughout; the only client
- * islands are the hero artifact, the timeline and the footer health dot.
- * Sign-in lives on /login, registration on /register.
- */
 export default function HomePage() {
   return (
     <>
       <Hero />
       <FeatureStories />
       <MoodStrip />
-      <KitchenTableStory />
       <PricingTeaser />
       <Testimonials />
       <AuthSection />
