@@ -20,6 +20,7 @@ import { MOODS, MOOD_META, MoodGlyph, type Mood } from '@/components/mood/glyphs
 import { useCopy } from '@/hooks/use-copy'
 import { useRovingSelection } from '@/hooks/use-roving-selection'
 import { useSession } from '@/lib/auth/session'
+import { InstallAppSection } from '@/components/pwa/install-app-section'
 import { getDefaultMood, getGroupLayout, setDefaultMood, setGroupLayout, type GroupLayout } from '@/lib/prefs'
 
 /** Explicit "none" first: a radiogroup must always have a checked member. */
@@ -272,6 +273,9 @@ export function SettingsView() {
         <Section title="Privacy">
           <PrivacyStatus />
         </Section>
+
+        {/* ------------------------------------------------ install */}
+        <InstallAppSection />
 
         {/* ------------------------------------------------ account */}
         <Section title="Account">
