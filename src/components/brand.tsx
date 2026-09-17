@@ -20,11 +20,15 @@ export function EchoMark({ className = 'h-5 w-5' }: { className?: string }) {
   )
 }
 
-export function Wordmark({ className = '' }: { className?: string }) {
+export function Wordmark({ className = '', onDark = false }: { className?: string; onDark?: boolean }) {
   return (
-    <span className={`inline-flex items-center gap-2 text-ink ${className}`}>
-      <EchoMark className="h-[1.15em] w-[1.15em] text-clay" />
-      <span className="font-display text-[1.06em] leading-none tracking-tight">Echoes</span>
+    <span className={`inline-flex items-center gap-2 ${onDark ? 'text-background' : 'text-foreground'} ${className}`}>
+      <span
+        className={`grid place-items-center border-2 ${onDark ? 'border-background bg-background text-foreground' : 'border-foreground bg-foreground text-background'}`}
+      >
+        <EchoMark className="h-[1.15em] w-[1.15em]" />
+      </span>
+      <span className="font-mono text-[1.06em] font-black uppercase leading-none tracking-tight">Echoes</span>
     </span>
   )
 }

@@ -16,15 +16,19 @@ const LINKS = [
 
 export function SiteNav() {
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-paper/85 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b-[3px] border-foreground bg-background">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6">
         <Link href="/" aria-label="Echoes — home" className="press text-lg">
           <Wordmark />
         </Link>
 
-        <nav aria-label="Marketing pages" className="hidden items-center gap-6 md:flex">
+        <nav aria-label="Marketing pages" className="hidden items-center gap-2 md:flex">
           {LINKS.map((l) => (
-            <Link key={l.href} href={l.href} className="text-[13.5px] text-ink-soft transition-colors hover:text-ink">
+            <Link
+              key={l.href}
+              href={l.href}
+              className="border-2 border-transparent px-2 py-1 text-[13px] font-bold uppercase tracking-wide hover:border-foreground hover:bg-muted"
+            >
               {l.label}
             </Link>
           ))}
@@ -33,11 +37,11 @@ export function SiteNav() {
         <div className="ml-auto flex items-center gap-3">
           <Link
             href="/login"
-            className="text-[13.5px] text-ink-soft underline-offset-4 transition-colors hover:text-ink hover:underline"
+            className="border-2 border-transparent px-2 py-1 text-[13px] font-bold uppercase tracking-wide underline-offset-4 hover:border-foreground hover:underline hover:decoration-accent hover:decoration-[3px]"
           >
             Sign in
           </Link>
-          <Button asChild size="sm" className="press shadow-ink h-9 gap-1.5">
+          <Button asChild size="sm">
             <Link href="/register">
               Start free <ArrowRight weight="bold" className="h-3.5 w-3.5" />
             </Link>
@@ -48,14 +52,17 @@ export function SiteNav() {
       {/* compact link row for small screens */}
       <nav
         aria-label="Marketing pages"
-        className="flex items-center gap-5 overflow-x-auto border-t border-line px-4 py-2 *:shrink-0 md:hidden"
+        className="flex items-center gap-5 overflow-x-auto border-t-2 border-foreground px-4 py-2 *:shrink-0 md:hidden"
       >
         {LINKS.map((l) => (
-          <Link key={l.href} href={l.href} className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-soft">
+          <Link key={l.href} href={l.href} className="font-mono text-[11px] font-bold uppercase tracking-[0.12em]">
             {l.label}
           </Link>
         ))}
-        <Link href="/journal" className="ml-auto font-mono text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+        <Link
+          href="/journal"
+          className="ml-auto font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-accent"
+        >
           Open journal
         </Link>
       </nav>

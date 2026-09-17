@@ -16,14 +16,16 @@ function FooterCol({
 }) {
   return (
     <div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">{heading}</p>
+      <p className="inline-block bg-accent px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-background">
+        {heading}
+      </p>
       <ul className="mt-4 space-y-2.5">
         {links.map((l) => (
           <li key={l.href + l.label}>
             <Link
               href={l.href}
               {...(l.external ? { target: '_blank', rel: 'noreferrer' } : {})}
-              className="text-[13px] text-ink-soft transition-colors hover:text-ink"
+              className="text-[13px] font-bold uppercase tracking-wide text-background/80 underline-offset-4 hover:text-background hover:underline hover:decoration-accent hover:decoration-2"
             >
               {l.label}
             </Link>
@@ -36,16 +38,18 @@ function FooterCol({
 
 export function SiteFooter() {
   return (
-    <footer className="mt-auto border-t border-line bg-paper">
+    <footer className="mt-auto border-t-[3px] border-foreground bg-foreground text-background">
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-2">
-            <Wordmark className="text-lg" />
-            <p className="mt-3.5 max-w-[38ch] text-[12.5px] leading-relaxed text-ink-faint">
+            <Wordmark className="text-lg" onDark />
+            <p className="mt-3.5 max-w-[38ch] border-2 border-background/30 p-3 text-[12.5px] font-bold leading-relaxed text-background/80">
               A quiet place for loud thoughts. Private notebooks of markdown entries — moods, tags, search — and one
               notebook shared with the people who matter. Built by Stillwater Studio.
             </p>
-            <p className="mt-4 font-mono text-[10.5px] text-ink-faint">hello@echoes.app · Singapore</p>
+            <p className="mt-4 font-mono text-[10.5px] font-bold uppercase tracking-widest text-background/60">
+              hello@echoes.app · Singapore
+            </p>
           </div>
           <FooterCol
             heading="Product"
@@ -65,12 +69,12 @@ export function SiteFooter() {
           />
         </div>
 
-        <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-line pt-6">
+        <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 border-t-2 border-background/30 pt-6">
           <LiveStatusDot />
-          <p className="font-mono text-[10.5px] text-ink-faint">
+          <p className="font-mono text-[10.5px] font-bold uppercase tracking-widest text-background/60">
             © {new Date().getFullYear()} Stillwater Studio · Echoes
           </p>
-          <p className="ml-auto font-mono text-[10.5px] text-ink-faint">
+          <p className="ml-auto border-2 border-background bg-accent px-2 py-0.5 font-mono text-[10.5px] font-bold uppercase tracking-widest text-background">
             every entry private, unless you say otherwise
           </p>
         </div>
