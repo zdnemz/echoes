@@ -51,12 +51,12 @@ export function PricingCards() {
   return (
     <div>
       {/* billing cadence toggle */}
-      <div className="flex items-center justify-center gap-3" role="group" aria-label="Billing period">
+      <div className="flex items-center justify-center gap-0" role="group" aria-label="Billing period">
         <button
           type="button"
           onClick={() => setAnnual(false)}
-          className={`press rounded-full px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] ${
-            !annual ? 'bg-ink text-paper' : 'border border-line text-ink-soft hover:text-ink'
+          className={`press border-2 border-foreground px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.12em] ${
+            !annual ? 'bg-foreground text-background' : 'bg-background hover:bg-muted'
           }`}
         >
           Monthly
@@ -64,8 +64,8 @@ export function PricingCards() {
         <button
           type="button"
           onClick={() => setAnnual(true)}
-          className={`press rounded-full px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] ${
-            annual ? 'bg-ink text-paper' : 'border border-line text-ink-soft hover:text-ink'
+          className={`press -ml-0.5 border-2 border-foreground px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.12em] ${
+            annual ? 'bg-accent text-background' : 'bg-background hover:bg-muted'
           }`}
         >
           Annual · 2 months free
@@ -79,42 +79,38 @@ export function PricingCards() {
           return (
             <article
               key={tier.name}
-              className={`flex flex-col rounded-xl p-7 ${
-                tier.featured
-                  ? 'border border-clay/50 bg-paper-raised shadow-lift'
-                  : 'border border-line bg-paper-raised'
+              className={`flex flex-col border-2 border-foreground bg-background p-7 ${
+                tier.featured ? 'shadow-brutal-accent' : 'shadow-brutal'
               }`}
             >
               <div className="flex items-baseline justify-between">
-                <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-ink-faint">{tier.name}</p>
+                <p className="bg-foreground px-2 py-0.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.16em] text-background">
+                  {tier.name}
+                </p>
                 {tier.featured ? (
-                  <span className="rounded-full bg-clay-tint px-2.5 py-1 font-mono text-[9.5px] uppercase tracking-[0.12em] text-clay-ink">
+                  <span className="bg-accent px-2 py-1 font-mono text-[9.5px] font-bold uppercase tracking-[0.12em] text-background">
                     most popular
                   </span>
                 ) : null}
               </div>
 
               <p className="mt-5 flex items-baseline gap-1.5">
-                <span className="font-display text-[2.6rem] leading-none text-ink">${price}</span>
-                <span className="text-[12px] text-ink-faint">{cadence}</span>
+                <span className="font-mono text-[2.6rem] font-black leading-none">${price}</span>
+                <span className="font-mono text-[12px] font-bold uppercase">{cadence}</span>
               </p>
-              <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">{tier.blurb}</p>
+              <p className="mt-3 text-[13px] font-bold leading-relaxed">{tier.blurb}</p>
 
-              <ul className="mt-6 space-y-3 border-t border-line pt-6">
+              <ul className="mt-6 space-y-3 border-t-2 border-foreground pt-6">
                 {tier.points.map((p) => (
-                  <li key={p} className="flex items-start gap-2.5 text-[12.5px] leading-snug text-ink-soft">
-                    <Check weight="bold" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sage" />
+                  <li key={p} className="flex items-start gap-2.5 text-[12.5px] font-bold leading-snug">
+                    <Check weight="bold" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
                     {p}
                   </li>
                 ))}
               </ul>
 
               <div className="mt-7">
-                <Button
-                  asChild
-                  variant={tier.featured ? 'default' : 'outline'}
-                  className={`press h-10 w-full ${tier.featured ? 'shadow-ink' : ''}`}
-                >
+                <Button asChild variant={tier.featured ? 'destructive' : 'outline'} className="h-10 w-full">
                   <Link href="/register">{tier.cta}</Link>
                 </Button>
               </div>

@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/marketing/page-header'
 import { Button } from '@/components/ui/button'
 import { MarkdownView } from '@/components/markdown/markdown-view'
 import { MOOD_META, MOODS, MoodGlyph } from '@/components/mood/glyphs'
-import { avatarTone, initials } from '@/lib/format'
+import { initials } from '@/lib/format'
 import {
   ArrowRight,
   Check,
@@ -26,14 +26,10 @@ export const metadata: Metadata = {
 
 // ------------------------------------------------------------- shared bits
 
-function PersonDot({ name, ring = false }: { name: string; ring?: boolean }) {
-  const tone = avatarTone(name)
+function PersonDot({ name }: { name: string }) {
   return (
     <span
-      className={`flex h-7 w-7 items-center justify-center rounded-full font-mono text-[10px] font-semibold ${
-        ring ? 'ring-2 ring-paper-raised' : ''
-      }`}
-      style={{ background: tone.bg, color: tone.fg }}
+      className="flex h-7 w-7 items-center justify-center border-2 border-foreground bg-foreground font-mono text-[10px] font-bold text-background"
       aria-label={name}
     >
       {initials(name)}
@@ -57,16 +53,22 @@ function Row({
   flip?: boolean
 }) {
   return (
-    <div className="grid items-center gap-12 border-t border-line py-16 first:border-t-0 lg:grid-cols-2 lg:gap-20 lg:py-20">
+    <div className="grid items-center gap-12 border-t-[3px] border-foreground py-16 first:border-t-0 lg:grid-cols-2 lg:gap-20 lg:py-20">
       <div className={flip ? 'order-last lg:order-first' : ''}>
-        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-clay">{eyebrow}</p>
-        <h2 className="font-display mt-4 max-w-[22ch] text-3xl leading-tight tracking-tight text-ink">{title}</h2>
-        <p className="mt-5 max-w-[52ch] text-[14.5px] leading-relaxed text-ink-soft">{body}</p>
-        <ul className="mt-7 divide-y divide-line border-y border-line">
-          {bullets.map((b) => (
-            <li key={b.label} className="py-3.5">
-              <p className="text-[13.5px] font-medium text-ink">{b.label}</p>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-faint">{b.desc}</p>
+        <p className="inline-block border-2 border-foreground bg-foreground px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-background">
+          {eyebrow}
+        </p>
+        <h2 className="font-display mt-4 max-w-[22ch] text-3xl uppercase">{title}</h2>
+        <p className="mt-5 max-w-[52ch] border-l-4 border-accent pl-4 text-[14.5px] font-bold leading-relaxed">
+          {body}
+        </p>
+        <ul className="mt-7 border-2 border-foreground shadow-brutal-sm">
+          {bullets.map((b, i) => (
+            <li key={b.label} className={`flex gap-4 p-4 ${i > 0 ? 'border-t-2 border-foreground' : ''}`}>
+              <span className="h-fit shrink-0 bg-foreground px-2 py-1 font-mono text-[10.5px] font-bold uppercase tracking-[0.12em] text-background">
+                {b.label}
+              </span>
+              <span className="text-[12.5px] font-bold leading-relaxed">{b.desc}</span>
             </li>
           ))}
         </ul>
@@ -81,29 +83,29 @@ function Row({
 function EditorDemo() {
   return (
     <figure>
-      <div className="overflow-hidden rounded-lg border border-line bg-paper-raised shadow-diffuse">
-        <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+      <div className="overflow-hidden border-2 border-foreground bg-background shadow-brutal">
+        <div className="flex items-center justify-between border-b-2 border-foreground px-4 py-2.5">
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
             Kitchen Table · entry
           </span>
           <span className="font-mono text-[10px] text-ink-faint">⌘S to save</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2">
-          <div className="border-line p-4 font-mono text-[12px] leading-6 text-ink-soft sm:border-r">
+          <div className="p-4 font-mono text-[12px] font-bold leading-6 sm:border-r-2">
             <p>## Sunday, the long walk</p>
             <p>&nbsp;</p>
             <p>We took the river path past the mill</p>
             <p>and turned back only when the</p>
             <p>
               light went **amber**.
-              <span className="ml-0.5 inline-block h-3.5 w-[7px] animate-pulse bg-clay/70 align-middle" />
+              <span className="ml-0.5 inline-block h-3.5 w-[7px] animate-pulse bg-accent align-middle" />
             </p>
             <p>&nbsp;</p>
             <p>- herons, two</p>
             <p>- the rowing crew, loud</p>
             <p>- silence, finally</p>
           </div>
-          <div className="bg-paper/60 p-4">
+          <div className="border-t-2 border-foreground bg-muted p-4 sm:border-t-0">
             <MarkdownView className="text-[13px]">
               {`## Sunday, the long walk
 
@@ -116,7 +118,7 @@ We took the river path past the mill and turned back only when the light went **
           </div>
         </div>
       </div>
-      <figcaption className="mt-3 font-mono text-[10px] text-ink-faint">
+      <figcaption className="mt-3 border-l-4 border-accent pl-3 font-mono text-[10px] font-bold uppercase">
         Raw markdown on the left, typeset on the right — the split keeps both honest.
       </figcaption>
     </figure>
@@ -126,7 +128,7 @@ We took the river path past the mill and turned back only when the light went **
 function MoodDemo() {
   return (
     <figure>
-      <div className="overflow-hidden rounded-lg border border-line bg-paper-raised shadow-diffuse p-5">
+      <div className="overflow-hidden border-2 border-foreground bg-background shadow-brutal p-5">
         <div className="flex items-center justify-between">
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">A month of evenings</span>
           <span className="font-mono text-[10px] text-ink-faint">scroll back</span>
@@ -169,7 +171,7 @@ function MoodDemo() {
             </span>
           ))}
         </div>
-        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line pt-4">
+        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t-2 border-foreground pt-4">
           {MOODS.map((m) => (
             <span key={m} className="inline-flex items-center gap-1.5">
               <span style={{ color: MOOD_META[m].color }}>
@@ -180,7 +182,7 @@ function MoodDemo() {
           ))}
         </div>
       </div>
-      <figcaption className="mt-3 font-mono text-[10px] text-ink-faint">
+      <figcaption className="mt-3 border-l-4 border-accent pl-3 font-mono text-[10px] font-bold uppercase">
         Five hand-drawn marks — a month at a glance, no charts required.
       </figcaption>
     </figure>
@@ -190,13 +192,13 @@ function MoodDemo() {
 function SearchDemo() {
   return (
     <figure>
-      <div className="overflow-hidden rounded-lg border border-line bg-paper-raised shadow-diffuse">
-        <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+      <div className="overflow-hidden border-2 border-foreground bg-background shadow-brutal">
+        <div className="flex items-center gap-3 border-b-2 border-foreground px-4 py-3">
           <MagnifyingGlass weight="bold" className="h-4 w-4 text-ink-faint" />
           <span className="font-mono text-[12.5px] text-ink">sourdough</span>
           <span className="ml-auto font-mono text-[10px] text-ink-faint">4 entries · full text</span>
         </div>
-        <ul className="divide-y divide-line">
+        <ul className="divide-y-2 divide-foreground">
           {[
             { date: 'Sep 08', title: 'Bread notes, week 36', hint: '…the starter finally smells like apples —' },
             { date: 'Aug 31', title: 'Bread notes, week 35', hint: '…second attempt at the sourdough batards…' },
@@ -207,12 +209,12 @@ function SearchDemo() {
                 <span className="font-mono text-[10px] text-ink-faint">{r.date}</span>
                 <span className="text-[13px] text-ink">{r.title}</span>
               </div>
-              <p className="mt-1 pl-[52px] font-serif text-[12px] italic text-ink-faint">{r.hint}</p>
+              <p className="mt-1 border-l-4 border-accent pl-3 text-[12px] font-bold">{r.hint}</p>
             </li>
           ))}
         </ul>
       </div>
-      <figcaption className="mt-3 font-mono text-[10px] text-ink-faint">
+      <figcaption className="mt-3 border-l-4 border-accent pl-3 font-mono text-[10px] font-bold uppercase">
         Search reaches into every entry body — your words, findable years later.
       </figcaption>
     </figure>
@@ -222,19 +224,19 @@ function SearchDemo() {
 function SharingDemo() {
   return (
     <figure>
-      <div className="overflow-hidden rounded-lg border border-line bg-paper-raised shadow-diffuse">
-        <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+      <div className="overflow-hidden border-2 border-foreground bg-background shadow-brutal">
+        <div className="flex items-center gap-3 border-b-2 border-foreground px-4 py-3">
           <span className="font-display text-[15px] text-ink">Kitchen Table</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-clay-tint px-2.5 py-0.5 font-mono text-[10px] text-clay-ink">
+          <span className="inline-flex items-center gap-1.5 border-2 border-foreground bg-accent px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-background">
             <LinkSimple weight="bold" className="h-3 w-3" /> shared · Family
           </span>
-          <span className="ml-auto flex -space-x-1.5">
-            <PersonDot name="Maya Lindqvist" ring />
-            <PersonDot name="Jonas Adeyemi" ring />
+          <span className="ml-auto flex">
+            <PersonDot name="Maya Lindqvist" />
+            <PersonDot name="Jonas Adeyemi" />
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2">
-          <div className="border-line p-4 sm:border-r">
+          <div className="p-4 sm:border-r-2">
             <div className="flex items-center justify-between">
               <span className="font-mono text-[10px] text-ink-faint">Maya's screen · 06:41</span>
               <Eye weight="light" className="h-3.5 w-3.5 text-clay" />
@@ -244,23 +246,22 @@ function SharingDemo() {
               Bought the last sourdough before the crowd thickened…
             </p>
           </div>
-          <div className="bg-paper/60 p-4">
+          <div className="border-t-2 border-foreground bg-muted p-4 sm:border-t-0">
             <div className="flex items-center justify-between">
               <span className="font-mono text-[10px] text-ink-faint">Jonas's screen · 06:41</span>
-              <span className="relative flex h-3.5 w-3.5 items-center justify-center">
-                <span className="absolute h-1.5 w-1.5 rounded-full bg-sage opacity-60 animate-breathe" />
-                <span className="h-1.5 w-1.5 rounded-full bg-sage" />
-              </span>
+              <span className="h-2 w-2 bg-accent" aria-hidden="true" />
             </div>
             <div className="mt-3 space-y-2">
-              <div className="h-2.5 w-3/5 rounded-sm bg-clay/25 animate-shimmer" />
-              <div className="h-2 w-full rounded-sm bg-paper-sink" />
-              <div className="h-2 w-4/5 rounded-sm bg-paper-sink" />
+              <div className="h-2.5 w-3/5 bg-accent" />
+              <div className="h-2 w-full bg-foreground/15" />
+              <div className="h-2 w-4/5 bg-foreground/15" />
             </div>
-            <p className="mt-3 font-mono text-[10px] text-ink-faint">landing, streaming — no refresh</p>
+            <p className="mt-3 border-l-4 border-accent pl-3 font-mono text-[10px] font-bold uppercase">
+              landing, streaming — no refresh
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 border-t border-line px-4 py-2.5">
+        <div className="flex items-center gap-3 border-t-2 border-foreground px-4 py-2.5">
           <Clock weight="light" className="h-3.5 w-3.5 text-ink-faint" />
           <span className="font-mono text-[10px] text-ink-soft">edits and deletions stream too</span>
           <span className="ml-auto inline-flex items-center gap-1.5 font-mono text-[10px] text-ink-faint">
@@ -268,7 +269,7 @@ function SharingDemo() {
           </span>
         </div>
       </div>
-      <figcaption className="mt-3 font-mono text-[10px] text-ink-faint">
+      <figcaption className="mt-3 border-l-4 border-accent pl-3 font-mono text-[10px] font-bold uppercase">
         One notebook, two screens, zero refreshes — and a per-entry opt-out, visibly honored.
       </figcaption>
     </figure>
@@ -278,12 +279,12 @@ function SharingDemo() {
 function GroupsDemo() {
   return (
     <figure>
-      <div className="overflow-hidden rounded-lg border border-line bg-paper-raised shadow-diffuse">
-        <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+      <div className="overflow-hidden border-2 border-foreground bg-background shadow-brutal">
+        <div className="flex items-center justify-between border-b-2 border-foreground px-4 py-2.5">
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">Group · Family</span>
           <span className="font-mono text-[10px] text-ink-faint">2 members</span>
         </div>
-        <ul className="divide-y divide-line">
+        <ul className="divide-y-2 divide-foreground">
           <li className="flex items-center gap-3 px-4 py-3">
             <PersonDot name="Maya Lindqvist" />
             <div>
@@ -299,8 +300,8 @@ function GroupsDemo() {
             </div>
           </li>
           <li className="flex items-center gap-3 px-4 py-3">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-line-strong text-ink-faint">
-              <UserPlus weight="light" className="h-4 w-4" />
+            <span className="flex h-7 w-7 items-center justify-center border-2 border-dashed border-foreground">
+              <UserPlus weight="bold" className="h-4 w-4" />
             </span>
             <div>
               <p className="text-[13px] text-ink-soft">Share a link</p>
@@ -309,7 +310,7 @@ function GroupsDemo() {
           </li>
         </ul>
       </div>
-      <figcaption className="mt-3 font-mono text-[10px] text-ink-faint">
+      <figcaption className="mt-3 border-l-4 border-accent pl-3 font-mono text-[10px] font-bold uppercase">
         Groups stay small on purpose; invite links are revocable and expirable.
       </figcaption>
     </figure>
@@ -458,14 +459,14 @@ export default function FeaturesPage() {
           flip
         >
           <figure>
-            <div className="overflow-hidden rounded-lg border border-line bg-paper-raised shadow-diffuse">
-              <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+            <div className="overflow-hidden border-2 border-foreground bg-background shadow-brutal">
+              <div className="flex items-center justify-between border-b-2 border-foreground px-4 py-2.5">
                 <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
                   enforcement, not promises
                 </span>
                 <LockSimple weight="light" className="h-3.5 w-3.5 text-ink-faint" />
               </div>
-              <ul className="divide-y divide-line">
+              <ul className="divide-y-2 divide-foreground">
                 {[
                   'Row-level security on profiles, notebooks, entries, groups, join requests',
                   'Google OAuth via PKCE — the anon key never leaves the server',
@@ -480,29 +481,29 @@ export default function FeaturesPage() {
                 ))}
               </ul>
             </div>
-            <figcaption className="mt-3 font-mono text-[10px] text-ink-faint">
+            <figcaption className="mt-3 border-l-4 border-accent pl-3 font-mono text-[10px] font-bold uppercase">
               The security posture, itemized. The RLS policies are in the repo, in SQL.
             </figcaption>
           </figure>
         </Row>
 
         {/* CTA */}
-        <section className="mt-8 border-t border-line py-16 md:py-20">
-          <div className="rounded-xl border border-line bg-paper-deep px-6 py-12 text-center sm:px-12">
-            <h2 className="font-display text-3xl leading-tight tracking-tight text-ink">Start your first notebook.</h2>
-            <p className="mx-auto mt-4 max-w-[52ch] text-[14px] leading-relaxed text-ink-soft">
+        <section className="mt-8 border-t-[3px] border-foreground py-16 md:py-20">
+          <div className="border-2 border-foreground bg-foreground px-6 py-12 text-center text-background shadow-brutal-accent sm:px-12">
+            <h2 className="font-display text-3xl uppercase">Start your first notebook.</h2>
+            <p className="mx-auto mt-4 max-w-[52ch] text-[14px] font-bold leading-relaxed text-background/80">
               Free forever for the journal itself — three notebooks, one shared, every feature above. Google sign-in
               takes about nine seconds.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-              <Button asChild size="lg" className="press h-11 gap-2 px-6 shadow-ink">
+              <Button asChild size="lg" variant="destructive">
                 <Link href="/register">
                   Start free <ArrowRight weight="bold" className="h-4 w-4" />
                 </Link>
               </Button>
               <Link
                 href="/pricing"
-                className="text-[13.5px] text-ink-soft underline decoration-line-strong underline-offset-[5px] transition-colors hover:text-ink hover:decoration-clay"
+                className="border-2 border-background px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide hover:bg-accent"
               >
                 Or see pricing
               </Link>

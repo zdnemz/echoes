@@ -37,19 +37,24 @@ const SECTIONS = [
 export default function PrivacyPage() {
   return (
     <div className="mx-auto w-full max-w-[64ch] px-4 py-14 sm:px-6 md:py-20">
-      <p className="font-mono text-[10.5px] uppercase tracking-[0.2em] text-clay">fine print</p>
-      <h1 className="font-display mt-4 text-4xl leading-tight tracking-tight text-ink">Privacy, plainly</h1>
-      <div className="mt-10 divide-y divide-line border-t border-line">
-        {SECTIONS.map((s) => (
-          <section key={s.heading} className="py-7">
-            <h2 className="font-display text-xl text-ink">{s.heading}</h2>
-            <p className="measure mt-3 text-[14px] leading-relaxed text-ink-soft">{s.body}</p>
+      <p className="inline-block border-2 border-foreground bg-foreground px-2 py-1 font-mono text-[10.5px] font-bold uppercase tracking-[0.2em] text-background">
+        fine print
+      </p>
+      <h1 className="font-display mt-4 text-4xl uppercase">Privacy, plainly</h1>
+      <div className="mt-10 space-y-4">
+        {SECTIONS.map((s, i) => (
+          <section key={s.heading} className="border-2 border-foreground bg-background p-6 shadow-brutal-sm">
+            <h2 className="font-display text-xl uppercase">
+              <span className="mr-2 bg-accent px-1.5 py-0.5 text-background">{i + 1}</span>
+              {s.heading}
+            </h2>
+            <p className="measure mt-3 text-[14px] font-bold leading-relaxed">{s.body}</p>
           </section>
         ))}
       </div>
-      <p className="mt-8 font-mono text-[10.5px] text-ink-faint">
+      <p className="mt-8 inline-block border-2 border-foreground bg-muted px-3 py-2 font-mono text-[10.5px] font-bold uppercase">
         placeholder copy — not legal counsel ·{' '}
-        <Link href="/terms" className="underline underline-offset-4 hover:text-ink-soft">
+        <Link href="/terms" className="border-b-[3px] border-accent hover:bg-accent hover:text-background">
           terms
         </Link>
       </p>

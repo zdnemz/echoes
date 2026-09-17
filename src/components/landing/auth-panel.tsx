@@ -244,10 +244,10 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
   return (
     <div
       id="begin-panel"
-      className="w-full max-w-md rounded-xl border border-line bg-paper-raised p-6 shadow-lift sm:p-8"
+      className="w-full max-w-md border-2 border-foreground bg-background p-6 text-foreground shadow-brutal sm:p-8"
     >
-      <h3 className="font-display text-2xl tracking-tight text-ink">Your notebooks await</h3>
-      <p className="mt-2 text-[12.5px] leading-relaxed text-ink-soft">
+      <h3 className="font-display text-2xl uppercase">Your notebooks await</h3>
+      <p className="mt-2 border-l-4 border-accent pl-3 text-[12.5px] font-bold leading-relaxed">
         One account, private by default. Share later, only if you want to.
       </p>
 
@@ -265,7 +265,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
         variant="outline"
         disabled={oauthBusy || busy}
         onClick={handleGoogle}
-        className="press mt-5 h-10 w-full gap-2.5 bg-paper"
+        className="mt-5 h-10 w-full gap-2.5"
       >
         {oauthBusy ? (
           <>
@@ -279,16 +279,15 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
       </Button>
 
       <div className="my-5 flex items-center gap-3" aria-hidden="true">
-        <span className="h-px flex-1 bg-line" />
-        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">or use email</span>
-        <span className="h-px flex-1 bg-line" />
+        <span className="h-0.5 flex-1 bg-foreground" />
+        <span className="bg-foreground px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-background">
+          or use email
+        </span>
+        <span className="h-0.5 flex-1 bg-foreground" />
       </div>
 
       {confirmationPending && (
-        <div
-          role="status"
-          className="mt-5 rounded-lg border border-sage/40 bg-sage-tint/70 px-4 py-3 text-[12.5px] text-ink-soft"
-        >
+        <div role="status" className="mt-5 border-2 border-foreground bg-muted px-4 py-3 text-[12.5px] font-bold">
           Account created — confirm the email we just sent, then sign in below.
         </div>
       )}
@@ -298,7 +297,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
           role="tablist"
           aria-label="Sign-in methods"
           onKeyDown={tabKeys.onKeyDown}
-          className="grid h-9 w-full grid-cols-3 items-center justify-center rounded-lg bg-paper-deep p-1 text-ink-soft"
+          className="grid w-full grid-cols-3 items-center justify-center border-2 border-foreground bg-muted p-1"
         >
           {(
             [
@@ -317,8 +316,8 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
               aria-selected={tab === t.value}
               tabIndex={tabKeys.tabIndexFor(t.value)}
               onClick={() => setTab(t.value)}
-              className={`inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-[12px] font-medium transition-colors ${
-                tab === t.value ? 'bg-paper-raised text-ink shadow-sm' : 'hover:text-ink'
+              className={`inline-flex items-center justify-center whitespace-nowrap px-3 py-2 font-mono text-[12px] font-bold uppercase transition-colors ${
+                tab === t.value ? 'bg-foreground text-background' : 'hover:bg-background'
               }`}
             >
               {t.label}
@@ -337,7 +336,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="h-10 bg-paper focus-visible:ring-clay-soft"
+                  className="h-10 font-bold"
                   placeholder="you@wherever.com"
                   required
                 />
@@ -349,13 +348,15 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-10 bg-paper focus-visible:ring-clay-soft"
+                  className="h-10 font-bold"
                   placeholder="your password"
                   required
                 />
               </Field>
-              {error && tab === 'signin' && <p className="text-[12px] text-ember">{error}</p>}
-              <Button type="submit" disabled={busy} className="press h-10 gap-2 shadow-ink">
+              {error && tab === 'signin' && (
+                <p className="border-2 border-destructive px-3 py-2 text-[12px] font-bold text-destructive">{error}</p>
+              )}
+              <Button type="submit" disabled={busy} className="h-10 gap-2">
                 {busy ? (
                   <>
                     <CircleNotch weight="bold" className="h-4 w-4 animate-spin" /> Signing in…
@@ -377,7 +378,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
                   id="signup-name"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  className="h-10 bg-paper focus-visible:ring-clay-soft"
+                  className="h-10 font-bold"
                   placeholder="Maya Lindqvist"
                   autoComplete="name"
                 />
@@ -389,7 +390,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="h-10 bg-paper focus-visible:ring-clay-soft"
+                  className="h-10 font-bold"
                   placeholder="you@wherever.com"
                   required
                 />
@@ -401,7 +402,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
                   autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-10 bg-paper focus-visible:ring-clay-soft"
+                  className="h-10 font-bold"
                   placeholder="a phrase you'll remember"
                   required
                 />
@@ -418,13 +419,15 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
                   autoComplete="off"
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                  className="h-10 bg-paper focus-visible:ring-clay-soft"
+                  className="h-10 font-bold"
                   placeholder="4 to 8 digits"
                   required
                 />
               </Field>
-              {error && tab === 'signup' && <p className="text-[12px] text-ember">{error}</p>}
-              <Button type="submit" disabled={busy} className="press h-10 gap-2 shadow-ink">
+              {error && tab === 'signup' && (
+                <p className="border-2 border-destructive px-3 py-2 text-[12px] font-bold text-destructive">{error}</p>
+              )}
+              <Button type="submit" disabled={busy} className="h-10 gap-2">
                 {busy ? (
                   <>
                     <CircleNotch weight="bold" className="h-4 w-4 animate-spin" /> Creating…
@@ -448,13 +451,15 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
                   autoComplete="email"
                   value={magicEmail}
                   onChange={(e) => setMagicEmail(e.target.value)}
-                  className="h-10 bg-paper focus-visible:ring-clay-soft"
+                  className="h-10 font-bold"
                   placeholder="you@wherever.com"
                   required
                 />
               </Field>
-              {error && tab === 'magic' && <p className="text-[12px] text-ember">{error}</p>}
-              <Button type="submit" disabled={busy} className="press h-10 gap-2 shadow-ink">
+              {error && tab === 'magic' && (
+                <p className="border-2 border-destructive px-3 py-2 text-[12px] font-bold text-destructive">{error}</p>
+              )}
+              <Button type="submit" disabled={busy} className="h-10 gap-2">
                 {busy ? (
                   <>
                     <CircleNotch weight="bold" className="h-4 w-4 animate-spin" /> Sending…
@@ -468,7 +473,7 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
             </form>
 
             {magicSent && (
-              <div className="mt-5 rounded-lg border border-sage/40 bg-sage-tint/60 px-4 py-3.5">
+              <div className="mt-5 border-2 border-foreground bg-muted px-4 py-3.5">
                 <p className="flex items-center gap-2 text-[12.5px] font-medium text-ink">
                   <Check weight="bold" className="h-4 w-4 text-sage" /> {magicSent.message}
                 </p>
@@ -478,14 +483,14 @@ export function AuthPanel({ initialTab = 'signin' }: { initialTab?: 'signin' | '
                       dev mode — the link itself
                     </p>
                     <div className="mt-1.5 flex items-center gap-2">
-                      <code className="min-w-0 flex-1 truncate rounded-md border border-line bg-paper px-2.5 py-1.5 font-mono text-[10.5px] text-ink-soft">
+                      <code className="min-w-0 flex-1 truncate border-2 border-foreground bg-background px-2.5 py-1.5 font-mono text-[10.5px] font-bold">
                         {magicSent.dev_link}
                       </code>
                       <Button
                         type="button"
                         variant="outline"
                         size="icon"
-                        className="press h-8 w-8 shrink-0"
+                        className="h-8 w-8 shrink-0"
                         onClick={copyDevLink}
                         aria-label="Copy the dev magic link"
                       >

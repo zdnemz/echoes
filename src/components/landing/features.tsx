@@ -60,7 +60,7 @@ function EditorArtifact() {
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2">
-          <div className="border-foreground p-4 font-mono text-[12px] leading-6 sm:border-r-2">
+          <div className="p-4 font-mono text-[12px] leading-6 sm:border-r-2">
             <p># A slow morning</p>
             <p>&nbsp;</p>
             <p>Woke before the alarm. The</p>
@@ -72,7 +72,7 @@ function EditorArtifact() {
             <p>&gt; write it down before</p>
             <p>&gt; it becomes yesterday</p>
           </div>
-          <div className="bg-muted p-4">
+          <div className="border-t-2 border-foreground bg-muted p-4 sm:border-t-0">
             <MarkdownView className="text-[13px]">
               {`# A slow morning
 

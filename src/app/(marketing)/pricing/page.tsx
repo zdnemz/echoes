@@ -63,37 +63,42 @@ export default function PricingPage() {
       <section className="mx-auto max-w-4xl px-4 pb-16 sm:px-6">
         <PricingCards />
 
-        <p className="mt-6 text-center font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint">
+        <p className="mt-6 inline-block w-full border-2 border-foreground bg-muted px-3 py-2 text-center font-mono text-[10.5px] font-bold uppercase tracking-[0.14em]">
           billing activates at launch · beta accounts run free · early signups keep 6 months free
         </p>
       </section>
 
       {/* comparison */}
       <section className="mx-auto max-w-4xl px-4 pb-16 sm:px-6">
-        <h2 className="font-display text-2xl tracking-tight text-ink">The fine differences</h2>
-        <div className="mt-6 overflow-x-auto rounded-lg border border-line">
-          <table className="w-full min-w-[560px] border-collapse bg-paper-raised text-left">
+        <h2 className="font-display text-2xl uppercase">The fine differences</h2>
+        <div className="mt-6 overflow-x-auto border-2 border-foreground shadow-brutal">
+          <table className="w-full min-w-[560px] border-collapse bg-background text-left">
             <thead>
-              <tr className="border-b border-line">
-                <th scope="col" className="px-4 py-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+              <tr className="border-b-2 border-foreground bg-foreground text-background">
+                <th scope="col" className="px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.14em]">
                   Feature
                 </th>
-                <th scope="col" className="px-4 py-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+                <th scope="col" className="px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.14em]">
                   Free
                 </th>
-                <th scope="col" className="px-4 py-3 font-mono text-[10px] uppercase tracking-[0.14em] text-clay">
+                <th
+                  scope="col"
+                  className="bg-accent px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.14em]"
+                >
                   Pro
                 </th>
               </tr>
             </thead>
             <tbody>
               {COMPARISON.map((row) => (
-                <tr key={row.feature} className="border-b border-line last:border-b-0">
-                  <th scope="row" className="px-4 py-3 text-[13px] font-normal text-ink">
+                <tr key={row.feature} className="border-b-2 border-foreground last:border-b-0">
+                  <th scope="row" className="px-4 py-3 text-[13px] font-bold">
                     {row.feature}
                   </th>
-                  <td className="px-4 py-3 text-[12.5px] text-ink-soft">{row.free}</td>
-                  <td className="px-4 py-3 text-[12.5px] text-ink">{row.pro}</td>
+                  <td className="px-4 py-3 text-[12.5px] font-bold">{row.free}</td>
+                  <td className="border-l-2 border-foreground bg-muted px-4 py-3 text-[12.5px] font-black">
+                    {row.pro}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -103,20 +108,22 @@ export default function PricingPage() {
 
       {/* FAQ */}
       <section className="mx-auto max-w-4xl px-4 pb-16 sm:px-6">
-        <h2 className="font-display text-2xl tracking-tight text-ink">Asked, answered</h2>
-        <div className="mt-6 divide-y divide-line border-y border-line">
+        <h2 className="font-display text-2xl uppercase">Asked, answered</h2>
+        <div className="mt-6 space-y-4">
           {FAQ.map((item) => (
-            <details key={item.q} className="group py-5">
-              <summary className="flex cursor-pointer list-none items-center gap-4 text-[14px] font-medium text-ink transition-colors hover:text-clay-ink">
+            <details key={item.q} className="group border-2 border-foreground bg-background shadow-brutal-sm">
+              <summary className="flex cursor-pointer list-none items-center gap-4 p-4 text-[14px] font-black uppercase hover:bg-muted">
                 <span className="flex-1">{item.q}</span>
                 <span
                   aria-hidden="true"
-                  className="font-mono text-[16px] leading-none text-ink-faint transition-transform group-open:rotate-45"
+                  className="grid h-7 w-7 shrink-0 place-items-center border-2 border-foreground bg-accent font-mono text-[16px] font-black leading-none text-background transition-transform group-open:rotate-45"
                 >
                   +
                 </span>
               </summary>
-              <p className="measure mt-3.5 pl-1 text-[13px] leading-relaxed text-ink-soft">{item.a}</p>
+              <p className="measure border-t-2 border-foreground bg-muted p-4 text-[13px] font-bold leading-relaxed">
+                {item.a}
+              </p>
             </details>
           ))}
         </div>
@@ -124,20 +131,20 @@ export default function PricingPage() {
 
       {/* CTA */}
       <section className="mx-auto max-w-4xl px-4 pb-20 sm:px-6">
-        <div className="rounded-xl border border-line bg-paper-deep px-6 py-10 text-center sm:px-12">
-          <h2 className="font-display text-2xl tracking-tight text-ink">Still deciding?</h2>
-          <p className="mx-auto mt-3 max-w-[46ch] text-[13.5px] leading-relaxed text-ink-soft">
+        <div className="border-2 border-foreground bg-foreground px-6 py-10 text-center text-background shadow-brutal-accent sm:px-12">
+          <h2 className="font-display text-2xl uppercase">Still deciding?</h2>
+          <p className="mx-auto mt-3 max-w-[46ch] text-[13.5px] font-bold leading-relaxed text-background/80">
             Start on free — you'll know within a week of writing whether you want the room. No card, no countdown.
           </p>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-4">
-            <Button asChild className="press h-10 gap-2 shadow-ink">
+            <Button asChild variant="destructive">
               <Link href="/register">
                 Start free <ArrowRight weight="bold" className="h-3.5 w-3.5" />
               </Link>
             </Button>
             <Link
               href="/features"
-              className="text-[13.5px] text-ink-soft underline decoration-line-strong underline-offset-[5px] transition-colors hover:text-ink hover:decoration-clay"
+              className="border-2 border-background px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide hover:bg-accent"
             >
               Read the features first
             </Link>
