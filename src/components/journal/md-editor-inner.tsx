@@ -200,7 +200,7 @@ function JournalToolbar() {
     <div
       role="toolbar"
       aria-label="Format text"
-      className="flex flex-wrap items-center gap-0.5 border-b border-line pb-2.5"
+      className="flex flex-wrap items-center gap-1 border-b-2 border-foreground pb-2.5"
     >
       {buttons.map((b) => (
         <button
@@ -213,8 +213,10 @@ function JournalToolbar() {
           // it the formatting target — is lost on mousedown.
           onMouseDown={(e) => e.preventDefault()}
           onClick={b.run}
-          className={`press rounded-md p-2 transition-colors ${
-            b.active ? 'bg-paper-deep text-ink shadow-sm' : 'text-ink-faint hover:bg-paper-deep hover:text-ink'
+          className={`press border-2 p-1.5 transition-colors ${
+            b.active
+              ? 'border-foreground bg-foreground text-background'
+              : 'border-transparent text-foreground hover:border-foreground hover:bg-muted'
           }`}
         >
           {b.icon}

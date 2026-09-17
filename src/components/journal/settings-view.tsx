@@ -33,8 +33,10 @@ import { lock as lockVault } from '@/lib/crypto/vault'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-line bg-paper-raised p-5 sm:p-6">
-      <h2 className="font-mono text-[11px] uppercase tracking-[0.18em] text-clay">{title}</h2>
+    <section className="border-2 border-foreground bg-background p-5 shadow-brutal sm:p-6">
+      <h2 className="inline-block bg-foreground px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-background">
+        {title}
+      </h2>
       <div className="mt-4">{children}</div>
     </section>
   )
@@ -42,8 +44,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line py-3.5 first:border-t-0 first:pt-0 last:pb-0">
-      <p className="text-[13px] font-medium text-ink">{label}</p>
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 border-foreground py-3.5 first:border-t-0 first:pt-0 last:pb-0">
+      <p className="text-[13px] font-bold">{label}</p>
       <div className="flex min-w-0 items-center gap-2">{children}</div>
     </div>
   )
@@ -246,30 +248,32 @@ export function SettingsView() {
 
   return (
     <div className="mx-4 max-w-2xl lg:mx-0">
-      <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-clay">settings</p>
-      <h1 className="font-display mt-3 text-3xl leading-tight tracking-tight text-ink">Yours to arrange.</h1>
-      <p className="mt-2 text-[13.5px] text-ink-soft">Profile, account, preferences and the app itself.</p>
+      <p className="inline-block bg-foreground px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-background">
+        settings
+      </p>
+      <h1 className="font-display mt-3 text-3xl uppercase">Yours to arrange.</h1>
+      <p className="mt-2 border-l-4 border-accent pl-3 text-[13.5px] font-bold">
+        Profile, account, preferences and the app itself.
+      </p>
 
-      <div className="mt-7 space-y-4">
+      <div className="mt-7 space-y-6">
         {/* ------------------------------------------------ profile */}
         <Section title="Profile">
           <form onSubmit={saveName} className="flex flex-col gap-3">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="settings-name" className="text-[12.5px]">
-                Display name
-              </Label>
+              <Label htmlFor="settings-name">Display name</Label>
               <Input
                 id="settings-name"
                 value={draftName}
                 onChange={(e) => setName(e.target.value)}
                 maxLength={80}
-                className="h-10 bg-paper"
+                className="h-10"
                 placeholder="Maya Lindqvist"
               />
-              <p className="text-[11.5px] text-ink-faint">What shared notebooks call you.</p>
+              <p className="text-[11.5px] font-bold">What shared notebooks call you.</p>
             </div>
             <div>
-              <Button type="submit" disabled={savingName} className="press h-9 gap-1.5 shadow-ink">
+              <Button type="submit" disabled={savingName} className="h-9 gap-1.5">
                 {savingName ? (
                   <>
                     <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> Saving…
@@ -293,64 +297,55 @@ export function SettingsView() {
         {/* ------------------------------------------------ account */}
         <Section title="Account">
           <Row label="Email">
-            <span className="font-mono text-[12px] text-ink-soft">{user.email ?? '—'}</span>
+            <span className="font-mono text-[12px] font-bold">{user.email ?? '—'}</span>
           </Row>
           <Row label="User id">
-            <code className="max-w-[16ch] truncate font-mono text-[12px] text-ink-soft">{user.id}</code>
+            <code className="max-w-[16ch] truncate font-mono text-[12px] font-bold">{user.id}</code>
             <Button
               type="button"
               variant="outline"
               size="icon"
               onClick={() => copy(user.id)}
               aria-label="Copy user id"
-              className="press h-8 w-8 shrink-0"
+              className="h-8 w-8 shrink-0"
             >
               {copied ? (
-                <Check weight="bold" className="h-3.5 w-3.5 text-sage" />
+                <Check weight="bold" className="h-3.5 w-3.5 text-accent" />
               ) : (
-                <Copy weight="regular" className="h-3.5 w-3.5" />
+                <Copy weight="bold" className="h-3.5 w-3.5" />
               )}
             </Button>
           </Row>
-          <form onSubmit={changePassword} className="mt-2 flex flex-col gap-3 border-t border-line pt-4">
-            <p className="text-[13px] font-medium text-ink">Change password</p>
+          <form onSubmit={changePassword} className="mt-2 flex flex-col gap-3 border-t-2 border-foreground pt-4">
+            <p className="text-[13px] font-black uppercase">Change password</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="settings-pw1" className="text-[12.5px]">
-                  New password
-                </Label>
+                <Label htmlFor="settings-pw1">New password</Label>
                 <Input
                   id="settings-pw1"
                   type="password"
                   autoComplete="new-password"
                   value={pw1}
                   onChange={(e) => setPw1(e.target.value)}
-                  className="h-10 bg-paper"
+                  className="h-10"
                   placeholder="at least 8 characters"
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="settings-pw2" className="text-[12.5px]">
-                  Repeat it
-                </Label>
+                <Label htmlFor="settings-pw2">Repeat it</Label>
                 <Input
                   id="settings-pw2"
                   type="password"
                   autoComplete="new-password"
                   value={pw2}
                   onChange={(e) => setPw2(e.target.value)}
-                  className="h-10 bg-paper"
+                  className="h-10"
                   placeholder="same as above"
                 />
               </div>
             </div>
             <div>
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={savingPw}
-                className="press h-9 gap-1.5 border-line bg-paper"
-              >
+              <Button type="submit" variant="outline" disabled={savingPw} className="h-9 gap-1.5">
                 {savingPw ? (
                   <>
                     <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> Updating…
@@ -361,12 +356,12 @@ export function SettingsView() {
               </Button>
             </div>
           </form>
-          <div className="mt-2 border-t border-line pt-4">
+          <div className="mt-2 border-t-2 border-foreground pt-4">
             <Button
               type="button"
               variant="ghost"
               onClick={() => logout()}
-              className="press h-9 gap-1.5 text-ember hover:text-ember"
+              className="h-9 gap-1.5 text-accent hover:bg-accent hover:text-background"
             >
               Sign out of this device
             </Button>
@@ -375,19 +370,17 @@ export function SettingsView() {
 
         {/* ------------------------------------------------ encryption PIN */}
         <Section title="Encryption PIN">
-          <p className="text-[13px] font-medium text-ink">This PIN unlocks your journal on every device</p>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-ink-faint">
+          <p className="text-[13px] font-bold">This PIN unlocks your journal on every device</p>
+          <p className="mt-1 border-l-4 border-accent pl-3 text-[11.5px] font-bold leading-relaxed">
             Your entries are sealed in the browser before they are stored; the key opens only with this PIN. Signing in
             somewhere new asks for it — that is what lets a second device read everything the first one wrote. There is
             no recovery path: forget it and the entries stay sealed forever, even from us.
           </p>
-          <form onSubmit={changePin} className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
-            <p className="text-[13px] font-medium text-ink">Change PIN</p>
+          <form onSubmit={changePin} className="mt-4 flex flex-col gap-3 border-t-2 border-foreground pt-4">
+            <p className="text-[13px] font-black uppercase">Change PIN</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="settings-old-pin" className="text-[12.5px]">
-                  Current PIN
-                </Label>
+                <Label htmlFor="settings-old-pin">Current PIN</Label>
                 <Input
                   id="settings-old-pin"
                   type="password"
@@ -395,15 +388,13 @@ export function SettingsView() {
                   autoComplete="off"
                   value={oldPin}
                   onChange={(e) => setOldPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                  className="h-10 bg-paper"
+                  className="h-10"
                   placeholder="required to change"
                   required
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="settings-new-pin" className="text-[12.5px]">
-                  New PIN
-                </Label>
+                <Label htmlFor="settings-new-pin">New PIN</Label>
                 <Input
                   id="settings-new-pin"
                   type="password"
@@ -411,19 +402,14 @@ export function SettingsView() {
                   autoComplete="off"
                   value={newPin}
                   onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                  className="h-10 bg-paper"
+                  className="h-10"
                   placeholder="4 to 8 digits"
                   required
                 />
               </div>
             </div>
             <div>
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={savingPin}
-                className="press h-9 gap-1.5 border-line bg-paper"
-              >
+              <Button type="submit" variant="outline" disabled={savingPin} className="h-9 gap-1.5">
                 {savingPin ? (
                   <>
                     <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> Re-wrapping…
@@ -434,8 +420,8 @@ export function SettingsView() {
               </Button>
             </div>
           </form>
-          <div className="mt-2 border-t border-line pt-4">
-            <Button type="button" variant="ghost" onClick={() => lockVault()} className="press h-9 gap-1.5">
+          <div className="mt-2 border-t-2 border-foreground pt-4">
+            <Button type="button" variant="ghost" onClick={() => lockVault()} className="h-9 gap-1.5">
               Lock the journal now
             </Button>
           </div>
@@ -443,19 +429,19 @@ export function SettingsView() {
 
         {/* ------------------------------------------------ passkey */}
         <Section title="Passkey">
-          <p className="text-[13px] font-medium text-ink">Unlock this browser without typing the PIN</p>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-ink-faint">
+          <p className="text-[13px] font-bold">Unlock this browser without typing the PIN</p>
+          <p className="mt-1 border-l-4 border-accent pl-3 text-[11.5px] font-bold leading-relaxed">
             A passkey is bound to this browser only — lose it and nothing happens, the PIN still opens the account
             everywhere. It never replaces the PIN, it just skips typing it here.
           </p>
-          <div className="mt-4 border-t border-line pt-4">
+          <div className="mt-4 border-t-2 border-foreground pt-4">
             {passkeySet ? (
               <Button
                 type="button"
                 variant="outline"
                 disabled={savingPasskey}
                 onClick={() => void dropPasskey()}
-                className="press h-9 gap-1.5 border-line bg-paper"
+                className="h-9 gap-1.5"
               >
                 {savingPasskey ? (
                   <>
@@ -471,7 +457,7 @@ export function SettingsView() {
                 variant="outline"
                 disabled={savingPasskey}
                 onClick={() => void addPasskey()}
-                className="press h-9 gap-1.5 border-line bg-paper"
+                className="h-9 gap-1.5"
               >
                 {savingPasskey ? (
                   <>
@@ -487,8 +473,8 @@ export function SettingsView() {
 
         {/* ------------------------------------------------ preferences */}
         <Section title="Preferences">
-          <p className="text-[13px] font-medium text-ink">Default mood for new entries</p>
-          <p className="mt-1 text-[11.5px] text-ink-faint">Pre-selected when you compose. Kept on this device only.</p>
+          <p className="text-[13px] font-bold">Default mood for new entries</p>
+          <p className="mt-1 text-[11.5px] font-bold">Pre-selected when you compose. Kept on this device only.</p>
           <div
             className="mt-3 flex flex-wrap gap-2"
             role="radiogroup"
@@ -502,15 +488,13 @@ export function SettingsView() {
               aria-checked={defaultMood === null}
               tabIndex={moodGroup.tabIndexFor(null)}
               onClick={() => pickMood(null)}
-              className={`press rounded-full border px-3.5 py-1.5 font-mono text-[11px] ${
-                defaultMood === null
-                  ? 'border-clay-soft bg-clay-tint text-clay-ink'
-                  : 'border-line bg-paper text-ink-faint hover:text-ink'
+              className={`press border-2 border-foreground px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase transition-colors ${
+                defaultMood === null ? 'bg-foreground text-background' : 'bg-background hover:bg-muted'
               }`}
             >
               none
             </button>
-            {MOODS.map((m, i) => (
+            {MOODS.map((m) => (
               <button
                 key={m}
                 ref={moodGroup.registerItem(m)}
@@ -520,10 +504,8 @@ export function SettingsView() {
                 tabIndex={moodGroup.tabIndexFor(m)}
                 onClick={() => pickMood(m)}
                 title={MOOD_META[m].label}
-                className={`press inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] ${
-                  defaultMood === m
-                    ? 'border-clay-soft bg-clay-tint text-clay-ink'
-                    : 'border-line bg-paper text-ink-soft hover:text-ink'
+                className={`press inline-flex items-center gap-1.5 border-2 border-foreground px-3 py-1.5 font-mono text-[11px] font-bold uppercase transition-colors ${
+                  defaultMood === m ? 'bg-accent text-background' : 'bg-background hover:bg-muted'
                 }`}
               >
                 <MoodGlyph mood={m} className="h-3.5 w-3.5" />
@@ -532,9 +514,9 @@ export function SettingsView() {
             ))}
           </div>
 
-          <div className="mt-5 border-t border-line pt-4">
-            <p className="text-[13px] font-medium text-ink">Group journal layout</p>
-            <p className="mt-1 text-[11.5px] text-ink-faint">
+          <div className="mt-5 border-t-2 border-foreground pt-4">
+            <p className="text-[13px] font-bold">Group journal layout</p>
+            <p className="mt-1 text-[11.5px] font-bold">
               How shared entries are shown in a group. Kept on this device only.
             </p>
             <div
@@ -550,10 +532,8 @@ export function SettingsView() {
                 aria-checked={groupLayout === 'list'}
                 tabIndex={layoutGroup.tabIndexFor('list')}
                 onClick={() => pickLayout('list')}
-                className={`press rounded-full border px-3.5 py-1.5 font-mono text-[11px] ${
-                  groupLayout === 'list'
-                    ? 'border-clay-soft bg-clay-tint text-clay-ink'
-                    : 'border-line bg-paper text-ink-faint hover:text-ink'
+                className={`press border-2 border-foreground px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase transition-colors ${
+                  groupLayout === 'list' ? 'bg-foreground text-background' : 'bg-background hover:bg-muted'
                 }`}
               >
                 list
@@ -565,10 +545,8 @@ export function SettingsView() {
                 aria-checked={groupLayout === 'chat'}
                 tabIndex={layoutGroup.tabIndexFor('chat')}
                 onClick={() => pickLayout('chat')}
-                className={`press rounded-full border px-3.5 py-1.5 font-mono text-[11px] ${
-                  groupLayout === 'chat'
-                    ? 'border-clay-soft bg-clay-tint text-clay-ink'
-                    : 'border-line bg-paper text-ink-faint hover:text-ink'
+                className={`press border-2 border-foreground px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase transition-colors ${
+                  groupLayout === 'chat' ? 'bg-foreground text-background' : 'bg-background hover:bg-muted'
                 }`}
               >
                 chatroom
@@ -584,9 +562,9 @@ export function SettingsView() {
             <span
               role="status"
               aria-live="polite"
-              className={`inline-flex items-center gap-1.5 font-mono text-[12px] ${backendOk ? 'text-sage' : 'text-ember'}`}
+              className={`inline-flex items-center gap-1.5 font-mono text-[12px] font-bold uppercase ${backendOk ? 'text-accent' : 'text-destructive'}`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${backendOk ? 'bg-sage' : 'bg-ember'}`} aria-hidden />
+              <span className={`h-2 w-2 ${backendOk ? 'bg-accent' : 'bg-destructive'}`} aria-hidden />
               {/* A failed request used to render 'checking...' forever. */}
               {health.isError
                 ? 'unreachable'
@@ -598,14 +576,17 @@ export function SettingsView() {
             </span>
           </Row>
           <Row label="Legal">
-            <span className="flex items-center gap-3 font-mono text-[12px]">
+            <span className="flex items-center gap-3 font-mono text-[12px] font-bold uppercase">
               <Link
                 href="/privacy"
-                className="inline-flex items-center gap-1 text-clay-ink underline underline-offset-2"
+                className="inline-flex items-center gap-1 border-b-[2px] border-accent hover:bg-accent hover:text-background"
               >
                 Privacy <ArrowSquareOut className="h-3 w-3" />
               </Link>
-              <Link href="/terms" className="inline-flex items-center gap-1 text-clay-ink underline underline-offset-2">
+              <Link
+                href="/terms"
+                className="inline-flex items-center gap-1 border-b-[2px] border-accent hover:bg-accent hover:text-background"
+              >
                 Terms <ArrowSquareOut className="h-3 w-3" />
               </Link>
             </span>

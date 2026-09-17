@@ -91,9 +91,9 @@ function RenameDialog({ notebook, onClose }: { notebook: Notebook; onClose: () =
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-sm border-line bg-paper-raised">
+      <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle className="font-display text-lg text-ink">Rename notebook</DialogTitle>
+          <DialogTitle className="text-lg">Rename notebook</DialogTitle>
           {/* Radix warns (and screen readers get a dangling reference)
               when a dialog has no description. */}
           <DialogDescription className="sr-only">
@@ -102,22 +102,20 @@ function RenameDialog({ notebook, onClose }: { notebook: Notebook; onClose: () =
         </DialogHeader>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="rename-title" className="text-[12.5px]">
-              Name
-            </Label>
+            <Label htmlFor="rename-title">Name</Label>
             <Input
               id="rename-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               autoFocus
-              className="h-10 bg-paper"
+              className="h-10"
             />
           </div>
           <DialogFooter className="mt-1 gap-2">
-            <Button type="button" variant="ghost" onClick={onClose} className="press h-9">
+            <Button type="button" variant="ghost" onClick={onClose} className="h-9">
               Cancel
             </Button>
-            <Button type="submit" disabled={update.isPending} className="press h-9 shadow-ink">
+            <Button type="submit" disabled={update.isPending} className="h-9">
               {update.isPending ? 'Saving…' : 'Rename'}
             </Button>
           </DialogFooter>
@@ -160,44 +158,52 @@ function ShareDialog({ notebook, onClose }: { notebook: Notebook; onClose: () =>
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md border-line bg-paper-raised">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-display text-lg text-ink">Share “{notebook.title}”</DialogTitle>
-          <DialogDescription className="text-[12.5px] leading-relaxed text-ink-soft">
+          <DialogTitle className="text-lg">Share “{notebook.title}”</DialogTitle>
+          <DialogDescription className="text-[12.5px] font-bold leading-relaxed">
             One notebook, one group. Entries stay shared until you opt individual ones out — or unlink the notebook
             entirely.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-2 divide-y divide-line overflow-hidden rounded-lg border border-line">
+        <div className="mt-2 overflow-hidden border-2 border-foreground">
           <button
             type="button"
             onClick={() => apply(null)}
-            className={`press flex w-full items-center gap-3 px-4 py-3 text-left text-[13.5px] transition-colors ${
-              selected === null ? 'bg-paper-deep' : 'hover:bg-paper-deep/50'
+            className={`press flex w-full items-center gap-3 px-4 py-3 text-left text-[13.5px] font-bold transition-colors ${
+              selected === null ? 'bg-foreground text-background' : 'hover:bg-muted'
             }`}
           >
-            <Lock weight="regular" className="h-4 w-4 shrink-0 text-ink-faint" />
-            <span className="flex-1 text-ink">Keep it private</span>
-            {selected === null && <span className="font-mono text-[10px] text-clay">current</span>}
+            <Lock weight="bold" className="h-4 w-4 shrink-0" />
+            <span className="flex-1">Keep it private</span>
+            {selected === null && (
+              <span className="border border-background px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase text-background">
+                current
+              </span>
+            )}
           </button>
           {mine.map((g) => (
             <button
               key={g.id}
               type="button"
               onClick={() => apply(g.id)}
-              className={`press flex w-full items-center gap-3 px-4 py-3 text-left text-[13.5px] transition-colors ${
-                selected === g.id ? 'bg-paper-deep' : 'hover:bg-paper-deep/50'
+              className={`press flex w-full items-center gap-3 border-t-2 border-foreground px-4 py-3 text-left text-[13.5px] font-bold transition-colors ${
+                selected === g.id ? 'bg-foreground text-background' : 'hover:bg-muted'
               }`}
             >
-              <LinkSimple weight="regular" className="h-4 w-4 shrink-0 text-clay" />
-              <span className="flex-1 text-ink">{g.name}</span>
-              <span className="font-mono text-[10px] text-ink-faint">×{g.member_count}</span>
-              {selected === g.id && <span className="font-mono text-[10px] text-clay">current</span>}
+              <LinkSimple weight="bold" className="h-4 w-4 shrink-0" />
+              <span className="flex-1">{g.name}</span>
+              <span className="font-mono text-[10px] font-bold uppercase">×{g.member_count}</span>
+              {selected === g.id && (
+                <span className="bg-accent px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase text-background">
+                  current
+                </span>
+              )}
             </button>
           ))}
           {mine.length === 0 && (
-            <p className="px-4 py-3 text-[12.5px] leading-relaxed text-ink-faint">
+            <p className="border-t-2 border-foreground bg-muted px-4 py-3 text-[12.5px] font-bold leading-relaxed">
               You don&apos;t belong to any groups yet — create one in the rail&apos;s Groups section first.
             </p>
           )}
@@ -318,7 +324,7 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
       <div className="mx-4 lg:mx-0">
         <div className="skeleton-line h-8 w-52" />
         <div className="skeleton-line mt-4 h-4 w-32" />
-        <div className="mt-6 divide-y divide-line border-y border-line">
+        <div className="mt-6 border-t-2 border-foreground">
           <EntryRowSkeleton />
           <EntryRowSkeleton />
           <EntryRowSkeleton />
@@ -336,19 +342,19 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
       <header>
         <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
           <div className="min-w-0 flex-1">
-            <h1 className="font-display text-3xl leading-tight tracking-tight text-ink">{notebook.title}</h1>
+            <h1 className="font-display text-3xl uppercase">{notebook.title}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
               {groupName ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-clay-tint px-2.5 py-0.5 font-mono text-[10px] text-clay-ink">
+                <span className="inline-flex items-center gap-1.5 border-2 border-foreground bg-accent px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-background">
                   <LinkSimple weight="bold" className="h-2.5 w-2.5" />
                   shared with {groupName}
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+                <span className="inline-flex items-center gap-1.5 border-2 border-foreground bg-foreground px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-background">
                   <Lock weight="fill" className="h-3 w-3" /> private
                 </span>
               )}
-              <span className="font-mono text-[10.5px] text-ink-faint">
+              <span className="font-mono text-[10.5px] font-bold uppercase">
                 {total} {total === 1 ? 'entry' : 'entries'}
               </span>
             </div>
@@ -358,7 +364,7 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
             <Button
               variant="outline"
               size="icon"
-              className="press h-9 w-9 border-line bg-paper-raised"
+              className="h-9 w-9"
               aria-label="Export notebook as markdown"
               title="Export as .md"
               onClick={exportNotebook}
@@ -375,7 +381,7 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
                 <Button
                   variant="outline"
                   size="icon"
-                  className="press h-9 w-9 border-line bg-paper-raised"
+                  className="h-9 w-9"
                   aria-label="Import a markdown file"
                   title="Import .md"
                   onClick={() => fileRef.current?.click()}
@@ -402,31 +408,19 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
             {isOwner && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="press h-9 w-9 border-line bg-paper-raised"
-                    aria-label="Notebook actions"
-                  >
+                  <Button variant="outline" size="icon" className="h-9 w-9" aria-label="Notebook actions">
                     <DotsThree weight="bold" className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="border-line bg-paper-raised">
-                  <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
-                    Notebook
-                  </DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => setRenameOpen(true)} className="gap-2 text-[13px]">
-                    Rename
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setShareOpen(true)} className="gap-2 text-[13px]">
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Notebook</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => setRenameOpen(true)}>Rename</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShareOpen(true)}>
                     Sharing… {groupName ? `· ${groupName}` : '· private'}
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator className="bg-line" />
-                  <DropdownMenuItem
-                    onClick={() => setDeleteOpen(true)}
-                    className="gap-2 text-[13px] text-ember focus:text-ember"
-                  >
-                    <TrashSimple weight="regular" className="h-3.5 w-3.5" /> Delete notebook
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setDeleteOpen(true)} variant="destructive">
+                    <TrashSimple weight="bold" className="h-3.5 w-3.5" /> Delete notebook
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -435,7 +429,7 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
             {isOwner && (
               <Button
                 size="sm"
-                className="press h-9 gap-1.5 shadow-ink"
+                className="h-9 gap-1.5"
                 onClick={() => onNavigate({ kind: 'compose', notebookId: notebook.id })}
               >
                 <PenNib weight="bold" className="h-3.5 w-3.5" /> New entry
@@ -446,12 +440,12 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
       </header>
 
       {/* ------------------------------------------------ mood filter */}
-      <div className="mt-6 flex flex-wrap items-center gap-1.5 border-b border-line pb-3">
+      <div className="mt-6 flex flex-wrap items-center gap-2 border-b-2 border-foreground pb-3">
         <button
           type="button"
           onClick={() => setMood(undefined)}
-          className={`press rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
-            mood === undefined ? 'bg-ink text-paper' : 'text-ink-faint hover:bg-paper-deep'
+          className={`press border-2 border-foreground px-3 py-1.5 font-mono text-[11px] font-bold uppercase transition-colors ${
+            mood === undefined ? 'bg-foreground text-background' : 'bg-background hover:bg-muted'
           }`}
         >
           All moods
@@ -466,20 +460,21 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
               onClick={() => setMood(active ? undefined : m)}
               aria-pressed={active}
               title={meta.note}
-              className={`press inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors`}
-              style={active ? { background: meta.tint, color: meta.color } : { color: 'var(--ink-faint)' }}
+              className={`press inline-flex items-center gap-1.5 border-2 border-foreground px-3 py-1.5 font-mono text-[11px] font-bold uppercase transition-colors ${
+                active ? 'bg-accent text-background' : 'bg-background hover:bg-muted'
+              }`}
             >
               <MoodGlyph mood={m} className="h-3.5 w-3.5" />
               {meta.label}
             </button>
           )
         })}
-        <CaretDown weight="bold" className="ml-auto hidden h-3 w-3 text-ink-ghost" aria-hidden />
+        <CaretDown weight="bold" className="ml-auto hidden h-3 w-3" aria-hidden />
       </div>
 
       {/* ------------------------------------------------ entries */}
       {entries.isLoading ? (
-        <ul className="divide-y divide-line border-b border-line">
+        <ul className="divide-y-2 divide-foreground border-b-2 border-foreground">
           <EntryRowSkeleton />
           <EntryRowSkeleton />
           <EntryRowSkeleton />
@@ -501,7 +496,7 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
         />
       ) : (
         <>
-          <ul className="divide-y divide-line border-b border-line">
+          <ul className="divide-y-2 divide-foreground border-b-2 border-foreground">
             {list.map((entry) => (
               <EntryRow
                 key={entry.id}
@@ -518,7 +513,7 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
               <Button
                 variant="outline"
                 size="sm"
-                className="press h-9 border-line bg-paper-raised"
+                className="h-9"
                 onClick={() => entries.fetchNextPage()}
                 disabled={entries.isFetchingNextPage}
               >
@@ -534,18 +529,18 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
       {shareOpen && <ShareDialog key={notebook.id} notebook={notebook} onClose={() => setShareOpen(false)} />}
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent className="border-line bg-paper-raised">
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="font-display text-lg text-ink">Delete “{notebook.title}”?</AlertDialogTitle>
-            <AlertDialogDescription className="text-[12.5px] leading-relaxed text-ink-soft">
+            <AlertDialogTitle className="text-lg">Delete “{notebook.title}”?</AlertDialogTitle>
+            <AlertDialogDescription className="text-[12.5px] font-bold leading-relaxed">
               The notebook and every entry in it — {total} in all — are removed permanently. If it&apos;s shared,
               members lose access the moment it&apos;s gone. There is no undo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel className="press h-9">Keep it</AlertDialogCancel>
+            <AlertDialogCancel className="h-9">Keep it</AlertDialogCancel>
             <AlertDialogAction
-              className="press h-9 bg-ember text-white hover:bg-ember/90"
+              className="h-9"
               onClick={async () => {
                 try {
                   await remove.mutateAsync(notebook.id)
@@ -582,34 +577,36 @@ function EmptyState({
     <div className="mx-auto max-w-md py-16 text-center">
       {hasFilter ? (
         <>
-          <p className="font-display text-2xl text-ink">Nothing in this weather.</p>
-          <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">No entries carry that mood here — yet.</p>
+          <p className="font-display text-2xl uppercase">Nothing in this weather.</p>
+          <p className="mt-3 border-l-4 border-accent pl-3 text-left text-[13px] font-bold leading-relaxed">
+            No entries carry that mood here — yet.
+          </p>
           <button
             type="button"
             onClick={onClearFilter}
-            className="mt-5 font-mono text-[11px] uppercase tracking-[0.16em] text-clay-ink underline underline-offset-4"
+            className="mt-5 border-2 border-foreground px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.16em] hover:bg-muted"
           >
             clear the filter
           </button>
         </>
       ) : isOwner ? (
         <>
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-line bg-paper-raised">
-            <PenNib weight="light" className="h-6 w-6 text-clay" />
+          <div className="mx-auto flex h-14 w-14 items-center justify-center border-2 border-foreground bg-accent text-background">
+            <PenNib weight="bold" className="h-6 w-6" />
           </div>
-          <p className="font-display mt-6 text-2xl text-ink">This notebook is still blank.</p>
-          <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">
+          <p className="font-display mt-6 text-2xl uppercase">This notebook is still blank.</p>
+          <p className="mt-3 border-l-4 border-accent pl-3 text-left text-[13px] font-bold leading-relaxed">
             The first entry doesn&apos;t need to be important. The bread, the weather, the argument, the walk — start
             anywhere.
           </p>
-          <Button onClick={onWrite} className="press mt-6 h-10 gap-2 shadow-ink">
+          <Button onClick={onWrite} className="mt-6 h-10 gap-2">
             <PenNib weight="bold" className="h-4 w-4" /> Write the first entry
           </Button>
         </>
       ) : (
         <>
-          <p className="font-display text-2xl text-ink">Nothing shared yet.</p>
-          <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">
+          <p className="font-display text-2xl uppercase">Nothing shared yet.</p>
+          <p className="mt-3 border-l-4 border-accent pl-3 text-left text-[13px] font-bold leading-relaxed">
             Entries appear here once the notebook&apos;s owner saves them — the ones they chose to share.
           </p>
         </>

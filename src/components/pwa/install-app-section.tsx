@@ -32,17 +32,19 @@ export function InstallAppSection() {
   }
 
   return (
-    <section className="rounded-xl border border-line bg-paper-raised p-5 sm:p-6">
-      <h2 className="font-mono text-[11px] uppercase tracking-[0.18em] text-clay">Install</h2>
+    <section className="border-2 border-foreground bg-background p-5 shadow-brutal sm:p-6">
+      <h2 className="inline-block bg-foreground px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-background">
+        Install
+      </h2>
       <div className="mt-4">
-        <p className="text-[13px] leading-relaxed text-ink-soft">
+        <p className="text-[13px] font-bold leading-relaxed">
           Keep Echoes on your home screen — opens full-screen, no browser chrome, and your queued offline entries sync
           the moment you&rsquo;re back online.
         </p>
 
         {canPrompt ? (
           <div className="mt-4">
-            <Button onClick={install} disabled={busy} className="press h-9 gap-1.5 shadow-ink">
+            <Button onClick={install} disabled={busy} className="h-9 gap-1.5">
               {busy ? (
                 <>
                   <DownloadSimple weight="bold" className="h-3.5 w-3.5 animate-bounce" /> Waiting…
@@ -60,25 +62,25 @@ export function InstallAppSection() {
           </div>
         ) : ios ? (
           // iOS Safari can't be programmatically prompted; walk the user there.
-          <div className="mt-4 rounded-lg border border-line bg-paper p-4">
-            <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-ink">
-              <ShareNetwork weight="bold" className="h-4 w-4 text-clay" /> In Safari, tap the Share button
+          <div className="mt-4 border-2 border-foreground bg-muted p-4">
+            <p className="flex items-center gap-1.5 text-[12.5px] font-bold">
+              <ShareNetwork weight="bold" className="h-4 w-4 text-accent" /> In Safari, tap the Share button
             </p>
-            <ol className="mt-2 space-y-1.5 pl-4 text-[12px] leading-relaxed text-ink-soft">
+            <ol className="mt-2 space-y-1.5 pl-4 text-[12px] font-bold leading-relaxed">
               <li>1. Tap the Share icon in the toolbar.</li>
               <li>
-                2. Choose <span className="font-medium text-ink">Add to Home Screen</span>.
+                2. Choose <span className="font-black">Add to Home Screen</span>.
               </li>
               <li>
-                3. Tap <span className="font-medium text-ink">Add</span>.
+                3. Tap <span className="font-black">Add</span>.
               </li>
             </ol>
           </div>
         ) : (
-          <p className="mt-3 text-[11.5px] leading-relaxed text-ink-faint">
+          <p className="mt-3 text-[11.5px] font-bold leading-relaxed">
             Install this app from your browser&rsquo;s menu — look for{' '}
-            <span className="font-medium text-ink-soft">Install Echoes</span> or{' '}
-            <span className="font-medium text-ink-soft">Add to Home Screen</span>.
+            <span className="bg-muted px-1 py-0.5 font-bold">Install Echoes</span> or{' '}
+            <span className="bg-muted px-1 py-0.5 font-bold">Add to Home Screen</span>.
           </p>
         )}
       </div>

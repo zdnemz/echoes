@@ -104,13 +104,15 @@ function MoodPicker({
             tabIndex={group.tabIndexFor(m)}
             disabled={disabled}
             onClick={() => onChange(m)}
-            className={`press inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
-              active && !m ? 'text-ink-soft' : ''
+            className={`press inline-flex items-center gap-1.5 border-2 border-foreground px-2.5 py-1 font-mono text-[11px] font-bold uppercase transition-colors ${
+              active
+                ? m
+                  ? 'bg-accent text-background'
+                  : 'bg-foreground text-background'
+                : 'bg-background hover:bg-muted'
             }`}
-            style={active && meta ? { background: meta.tint, color: meta.color } : { color: 'var(--ink-faint)' }}
           >
             {m ? <MoodGlyph mood={m} className="h-3.5 w-3.5" /> : null}
-            {/* Always reserve an accessible name; the label may be visually hidden. */}
             <span className={active || !m ? 'inline' : 'hidden sm:inline'}>{m ? meta!.label : 'none'}</span>
           </button>
         )
@@ -146,15 +148,16 @@ function TagsInput({
       {tags.map((t) => (
         <span
           key={t}
-          className="inline-flex items-center gap-1 rounded-full bg-paper-deep px-2.5 py-1 font-mono text-[10.5px] text-ink-soft"
+          className="inline-flex items-center gap-1 border-2 border-foreground bg-muted px-2 py-0.5 font-mono text-[10.5px] font-bold uppercase"
         >
-          #{t}
+          <span className="text-accent">#</span>
+          {t}
           {!disabled && (
             <button
               type="button"
               onClick={() => onChange(tags.filter((x) => x !== t))}
               aria-label={`Remove tag ${t}`}
-              className="press text-ink-faint hover:text-ember"
+              className="press ml-1 font-black hover:text-accent"
             >
               ×
             </button>
@@ -492,11 +495,11 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           <button
             type="button"
             onClick={back}
-            className="press -ml-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint hover:text-ink"
+            className="press -ml-1 inline-flex items-center gap-1.5 border-2 border-foreground px-2.5 py-1 font-mono text-[10.5px] font-bold uppercase hover:bg-muted"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> back to {backLabel}
           </button>
-          <p className="mt-16 text-center text-[13px] text-ink-faint">
+          <p className="mt-16 text-center text-[13px] font-bold">
             {reading === null && entry.encrypted
               ? 'This entry was written on another device — open it there to read it.'
               : 'Opening…'}
@@ -511,34 +514,32 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
         <button
           type="button"
           onClick={back}
-          className="press -ml-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint hover:text-ink"
+          className="press -ml-1 inline-flex items-center gap-1.5 border-2 border-foreground px-2.5 py-1 font-mono text-[10.5px] font-bold uppercase hover:bg-muted"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> back to {backLabel}
         </button>
 
-        <header className="mt-6 border-b border-line pb-6">
-          <p className="font-mono text-[10.5px] text-ink-faint">{entry.created_at.slice(0, 10)} · shared entry</p>
-          <h1 className="font-display mt-2 text-3xl leading-tight tracking-tight text-ink">{displayTitle}</h1>
+        <header className="mt-6 border-b-2 border-foreground pb-6">
+          <p className="font-mono text-[10.5px] font-bold uppercase">{entry.created_at.slice(0, 10)} · shared entry</p>
+          <h1 className="font-display mt-2 text-3xl uppercase">{displayTitle}</h1>
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
             {entry.mood && (
-              <span
-                style={{ color: `var(--mood-${entry.mood})` }}
-                className="inline-flex items-center gap-1.5 text-[11.5px]"
-              >
+              <span className="inline-flex items-center gap-1.5 border-2 border-foreground bg-muted px-2 py-0.5 font-mono text-[11px] font-bold uppercase">
                 <MoodGlyph mood={entry.mood} className="h-4 w-4" /> {MOOD_META[entry.mood].label}
               </span>
             )}
             {entry.tags.map((t) => (
-              <span key={t} className="font-mono text-[10.5px] text-ink-faint">
-                #{t}
+              <span key={t} className="border border-foreground px-1.5 py-0.5 font-mono text-[10.5px] font-bold">
+                <span className="text-accent">#</span>
+                {t}
               </span>
             ))}
             {entry.readers && entry.readers.length > 0 && (
               <span
-                className="ml-auto font-mono text-[10.5px] text-ink-faint"
+                className="ml-auto font-mono text-[10.5px] font-bold uppercase text-accent"
                 title={`Dilihat oleh: ${entry.readers.map((r) => r.display_name || 'Someone').join(', ')}`}
               >
-                <Eye weight="light" className="mr-1 inline h-3.5 w-3.5" />
+                <Eye weight="bold" className="mr-1 inline h-3.5 w-3.5" />
                 dilihat oleh {entry.readers.map((r) => r.display_name || 'Someone').join(', ')}
               </span>
             )}
@@ -564,23 +565,23 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
         <button
           type="button"
           onClick={back}
-          className="press -ml-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint hover:text-ink"
+          className="press -ml-1 inline-flex items-center gap-1.5 border-2 border-foreground px-2.5 py-1 font-mono text-[10.5px] font-bold uppercase hover:bg-muted"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> back to {backLabel}
         </button>
 
         <span className="ml-auto flex items-center gap-2.5">
-          <span className="hidden items-center gap-1.5 font-mono text-[10.5px] text-ink-faint sm:flex">
+          <span className="hidden items-center gap-1.5 font-mono text-[10.5px] font-bold sm:flex">
             {saving ? (
               <>
-                <CircleNotch weight="bold" className="h-3 w-3 animate-spin text-clay" /> saving…
+                <CircleNotch weight="bold" className="h-3 w-3 animate-spin text-accent" /> saving…
               </>
             ) : (
               <>
                 {dirty ? (
-                  <span className="h-1.5 w-1.5 rounded-full bg-clay" />
+                  <span className="h-2 w-2 bg-accent" />
                 ) : (
-                  <Check weight="bold" className="h-3 w-3 text-sage" />
+                  <Check weight="bold" className="h-3 w-3 text-accent" />
                 )}
                 {savedLabel}
               </>
@@ -596,7 +597,7 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
               <Button
                 variant="outline"
                 size="icon"
-                className="press h-9 w-9 border-line bg-paper-raised"
+                className="h-9 w-9"
                 aria-label="Export entry as markdown"
                 title="Export as .md"
                 onClick={exportEntry}
@@ -606,18 +607,18 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
               <Button
                 variant="outline"
                 size="icon"
-                className="press h-9 w-9 border-line bg-paper-raised text-ember"
+                className="h-9 w-9 text-accent hover:bg-accent hover:text-background"
                 aria-label="Delete entry"
                 onClick={() => setDeleteOpen(true)}
               >
-                <TrashSimple weight="regular" className="h-4 w-4" />
+                <TrashSimple weight="bold" className="h-4 w-4" />
               </Button>
             </>
           )}
 
           <Button
             size="sm"
-            className="press h-9 gap-1.5 shadow-ink"
+            className="h-9 gap-1.5"
             onClick={save}
             // Not before the entry has hydrated: the form fields still hold
             // their empty defaults, and saving would blank the entry's mood.
@@ -637,17 +638,17 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
       </div>
 
       {/* meta rail */}
-      <div className="mt-5 space-y-3.5 border-b border-line pb-5">
+      <div className="mt-5 space-y-3.5 border-b-2 border-foreground pb-5">
         <input
           value={title}
           onChange={(e) => {
             setTitle(e.target.value)
             markDirty()
           }}
-          placeholder="Untitled entry"
+          placeholder="UNTITLED ENTRY"
           aria-label="Entry title"
           maxLength={200}
-          className="w-full border-0 bg-transparent p-0 font-display text-3xl leading-tight tracking-tight text-ink placeholder:text-ink-ghost/70 focus:outline-none"
+          className="w-full border-0 bg-transparent p-0 font-display text-3xl uppercase leading-tight tracking-tight placeholder:text-muted-foreground focus:outline-none"
         />
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5">
           <MoodPicker
@@ -675,8 +676,8 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
               markDirty()
             }}
             aria-pressed={isShared}
-            className={`press inline-flex items-center gap-2 rounded-full px-3 py-1.5 font-mono text-[10.5px] transition-colors ${
-              isShared ? 'bg-clay-tint text-clay-ink' : 'bg-paper-sink text-ink-soft'
+            className={`press inline-flex items-center gap-2 border-2 border-foreground px-3 py-1.5 font-mono text-[10.5px] font-bold uppercase transition-colors ${
+              isShared ? 'bg-accent text-background' : 'bg-background hover:bg-muted'
             }`}
             title={
               isShared
@@ -686,21 +687,21 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
           >
             {isShared ? (
               <>
-                <Eye weight="light" className="h-3.5 w-3.5" /> shared with the group
+                <Eye weight="bold" className="h-3.5 w-3.5" /> shared with the group
               </>
             ) : (
               <>
-                <EyeSlash weight="fill" className="h-3.5 w-3.5" /> kept private from the group
+                <EyeSlash weight="bold" className="h-3.5 w-3.5" /> kept private from the group
               </>
             )}
           </button>
         )}
         {entry?.readers && entry.readers.length > 0 && (
           <p
-            className="font-mono text-[10.5px] text-ink-faint"
+            className="font-mono text-[10.5px] font-bold uppercase text-accent"
             title={`Dilihat oleh: ${entry.readers.map((r) => r.display_name || 'Someone').join(', ')}`}
           >
-            <Eye weight="light" className="mr-1 inline h-3.5 w-3.5" />
+            <Eye weight="bold" className="mr-1 inline h-3.5 w-3.5" />
             dilihat oleh {entry.readers.map((r) => r.display_name || 'Someone').join(', ')}
           </p>
         )}
@@ -723,18 +724,18 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
 
       {/* delete confirm */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent className="border-line bg-paper-raised">
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="font-display text-lg text-ink">Delete this entry?</AlertDialogTitle>
-            <AlertDialogDescription className="text-[12.5px] leading-relaxed text-ink-soft">
+            <AlertDialogTitle className="text-lg">Delete this entry?</AlertDialogTitle>
+            <AlertDialogDescription className="text-[12.5px] font-bold leading-relaxed">
               &ldquo;{title.trim() || 'Untitled entry'}&rdquo; goes away for good — from your notebook and from any
               group it&apos;s shared with. No undo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel className="press h-9">Keep it</AlertDialogCancel>
+            <AlertDialogCancel className="h-9">Keep it</AlertDialogCancel>
             <AlertDialogAction
-              className="press h-9 bg-ember text-white hover:bg-ember/90"
+              className="h-9"
               onClick={async () => {
                 if (!entry) return
                 try {

@@ -1249,10 +1249,10 @@ function GroupJournalTab({
 
       {/* Link or Create Notebook Dialog */}
       <Dialog open={linkModalOpen} onOpenChange={setLinkModalOpen}>
-        <DialogContent className="max-w-md border-line bg-paper-raised">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-display text-lg text-ink">Write in {group.name}</DialogTitle>
-            <DialogDescription className="text-[12.5px] leading-relaxed text-ink-soft">
+            <DialogTitle className="text-lg">Write in {group.name}</DialogTitle>
+            <DialogDescription className="text-[12.5px] font-bold leading-relaxed">
               Entries in Echoes belong to notebooks. Link an existing notebook to this group or start a dedicated one.
             </DialogDescription>
           </DialogHeader>
@@ -1387,9 +1387,9 @@ function RenameGroupDialog({ group, onClose }: { group: Group; onClose: () => vo
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-sm border-line bg-paper-raised">
+      <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle className="font-display text-lg text-ink">Rename group</DialogTitle>
+          <DialogTitle className="text-lg">Rename group</DialogTitle>
           {/* Radix warns (and screen readers get a dangling reference)
               when a dialog has no description. */}
           <DialogDescription className="sr-only">
@@ -1398,22 +1398,14 @@ function RenameGroupDialog({ group, onClose }: { group: Group; onClose: () => vo
         </DialogHeader>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="group-name" className="text-[12.5px]">
-              Name
-            </Label>
-            <Input
-              id="group-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoFocus
-              className="h-10 bg-paper"
-            />
+            <Label htmlFor="group-name">Name</Label>
+            <Input id="group-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus className="h-10" />
           </div>
           <DialogFooter className="mt-1 gap-2">
-            <Button type="button" variant="ghost" onClick={onClose} className="press h-9">
+            <Button type="button" variant="ghost" onClick={onClose} className="h-9">
               Cancel
             </Button>
-            <Button type="submit" disabled={rename.isPending} className="press h-9 shadow-ink">
+            <Button type="submit" disabled={rename.isPending} className="h-9">
               {rename.isPending ? 'Saving…' : 'Rename'}
             </Button>
           </DialogFooter>
@@ -1483,9 +1475,11 @@ export function GroupsView({
     <div className={selectedGroupId ? 'lg:mx-0' : 'mx-4 lg:mx-0'}>
       <div className={`flex items-center gap-4 ${selectedGroupId ? 'hidden lg:flex' : 'flex'}`}>
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-clay">groups</p>
-          <h1 className="font-display mt-2 text-3xl leading-tight tracking-tight text-ink">Sharing circles</h1>
-          <p className="mt-2 max-w-[60ch] text-[13px] leading-relaxed text-ink-soft">
+          <p className="inline-block bg-foreground px-2 py-0.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.18em] text-background">
+            groups
+          </p>
+          <h1 className="font-display mt-2 text-3xl uppercase">Sharing circles</h1>
+          <p className="mt-2 max-w-[60ch] border-l-4 border-accent pl-3 text-[13px] font-bold leading-relaxed">
             A group is a few people you trust with one notebook. Owners invite and remove; anyone can link their own
             notebook to it.
           </p>
@@ -1493,7 +1487,7 @@ export function GroupsView({
         <Button
           variant="outline"
           size="sm"
-          className="press h-9 gap-1.5 border-line bg-paper-raised lg:hidden"
+          className="h-9 gap-1.5 lg:hidden"
           onClick={() => onNavigate({ kind: 'groups' })}
         >
           <ArrowLeft className="h-3.5 w-3.5" /> All groups
@@ -1863,18 +1857,18 @@ export function GroupsView({
           {renameOpen && <RenameGroupDialog key={group.id} group={group} onClose={() => setRenameOpen(false)} />}
 
           <AlertDialog open={leaveOpen} onOpenChange={setLeaveOpen}>
-            <AlertDialogContent className="border-line bg-paper-raised">
+            <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle className="font-display text-lg text-ink">Leave {group.name}?</AlertDialogTitle>
-                <AlertDialogDescription className="text-[12.5px] leading-relaxed text-ink-soft">
+                <AlertDialogTitle className="text-lg">Leave {group.name}?</AlertDialogTitle>
+                <AlertDialogDescription className="text-[12.5px] font-bold leading-relaxed">
                   You lose access to notebooks shared with this group the moment you leave. You can only return through
                   a fresh invite link.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter className="gap-2">
-                <AlertDialogCancel className="press h-9">Stay</AlertDialogCancel>
+                <AlertDialogCancel className="h-9">Stay</AlertDialogCancel>
                 <AlertDialogAction
-                  className="press h-9 bg-ember text-white hover:bg-ember/90"
+                  className="h-9"
                   onClick={async () => {
                     try {
                       await leave.mutateAsync(group.id)
@@ -1892,18 +1886,18 @@ export function GroupsView({
           </AlertDialog>
 
           <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-            <AlertDialogContent className="border-line bg-paper-raised">
+            <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle className="font-display text-lg text-ink">Delete {group.name}?</AlertDialogTitle>
-                <AlertDialogDescription className="text-[12.5px] leading-relaxed text-ink-soft">
+                <AlertDialogTitle className="text-lg">Delete {group.name}?</AlertDialogTitle>
+                <AlertDialogDescription className="text-[12.5px] font-bold leading-relaxed">
                   Memberships and invites vanish, and every notebook linked to this group becomes private again —
                   instantly, for everyone. No undo.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter className="gap-2">
-                <AlertDialogCancel className="press h-9">Keep it</AlertDialogCancel>
+                <AlertDialogCancel className="h-9">Keep it</AlertDialogCancel>
                 <AlertDialogAction
-                  className="press h-9 bg-ember text-white hover:bg-ember/90"
+                  className="h-9"
                   onClick={async () => {
                     try {
                       await removeGroup.mutateAsync(group.id)

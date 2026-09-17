@@ -119,16 +119,18 @@ export function ReflectView() {
 
   return (
     <div className="mx-auto flex min-h-[70dvh] w-full max-w-2xl flex-col px-4 lg:px-0">
-      <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-clay">reflect</p>
-      <h1 className="font-display mt-2 text-3xl leading-tight tracking-tight text-ink">A companion, not an archive</h1>
-      <p className="mt-2 max-w-[60ch] text-[13px] leading-relaxed text-ink-soft">
+      <p className="inline-block bg-foreground px-2 py-0.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.18em] text-background">
+        reflect
+      </p>
+      <h1 className="font-display mt-2 text-3xl uppercase">A companion, not an archive</h1>
+      <p className="mt-2 max-w-[60ch] border-l-4 border-accent pl-3 text-[13px] font-bold leading-relaxed">
         Tick the notebooks it may read — nothing else is in scope — then ask what your own words add up to.
       </p>
 
       {/* scope picker */}
-      <div className="mt-5 rounded-xl border border-line bg-paper-raised p-3.5">
+      <div className="mt-5 border-2 border-foreground bg-background p-4 shadow-brutal-sm">
         <div className="flex items-center justify-between gap-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">
+          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em]">
             May read · {selected.length}/{mine.length}
           </p>
           {turns.length > 0 && (
@@ -142,7 +144,7 @@ export function ReflectView() {
                   // nothing stored
                 }
               }}
-              className="press font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint hover:text-ink"
+              className="press border border-foreground px-2 py-0.5 font-mono text-[10px] font-bold uppercase hover:bg-muted"
             >
               clear chat
             </button>
@@ -151,9 +153,9 @@ export function ReflectView() {
         {notebooks.isLoading ? (
           <div className="skeleton-line mt-2 h-9 w-full" />
         ) : mine.length === 0 ? (
-          <p className="mt-2 text-[12.5px] text-ink-faint">No notebooks of your own yet — write one first.</p>
+          <p className="mt-2 text-[12.5px] font-bold">No notebooks of your own yet — write one first.</p>
         ) : (
-          <ul className="mt-2 flex flex-wrap gap-1.5">
+          <ul className="mt-2 flex flex-wrap gap-2">
             {mine.map((nb) => {
               const on = selected.includes(nb.id)
               return (
@@ -162,8 +164,8 @@ export function ReflectView() {
                     type="button"
                     onClick={() => toggle(nb.id)}
                     aria-pressed={on}
-                    className={`press rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                      on ? 'bg-ink text-paper' : 'border border-line text-ink-soft hover:border-line-strong'
+                    className={`press border-2 border-foreground px-3 py-1 font-mono text-[11px] font-bold uppercase transition-colors ${
+                      on ? 'bg-accent text-background' : 'bg-background hover:bg-muted'
                     }`}
                   >
                     {nb.title}
@@ -176,18 +178,18 @@ export function ReflectView() {
       </div>
 
       {notice && (
-        <p className="mt-4 rounded-lg border border-line bg-paper-raised px-4 py-3 text-[12.5px] text-ink-soft">
-          {notice}
-        </p>
+        <p className="mt-4 border-2 border-destructive px-4 py-3 text-[12.5px] font-bold text-destructive">{notice}</p>
       )}
 
       {/* thread */}
       <ul className="mt-6 flex-1 space-y-4" aria-label="Conversation" aria-live="polite">
         {turns.length === 0 && (
-          <li className="rounded-xl border border-dashed border-line-strong px-6 py-10 text-center">
-            <Sparkle weight="light" className="mx-auto h-6 w-6 text-ink-ghost" />
-            <p className="font-display mt-3 text-lg text-ink">Start with a week, a mood, a question</p>
-            <p className="mx-auto mt-1.5 max-w-[44ch] text-[12.5px] text-ink-faint">
+          <li className="border-2 border-foreground bg-muted p-8 text-center shadow-brutal-sm">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center border-2 border-foreground bg-accent text-background">
+              <Sparkle weight="bold" className="h-6 w-6" />
+            </div>
+            <p className="font-display mt-4 text-lg uppercase">Start with a week, a mood, a question</p>
+            <p className="mx-auto mt-2 max-w-[44ch] text-[12.5px] font-bold leading-relaxed">
               “What kept coming up this month?” — “How did my sleep entries sound?” The companion reads what you ticked
               above, nothing more.
             </p>
@@ -198,15 +200,17 @@ export function ReflectView() {
           return (
             <li key={i} className={`flex ${mineMsg ? 'justify-end' : 'justify-start'}`}>
               <div
-                className={`max-w-[85%] px-3.5 py-2.5 sm:max-w-[80%] ${
+                className={`max-w-[85%] border-2 border-foreground p-3.5 sm:max-w-[80%] ${
                   mineMsg
-                    ? 'rounded-2xl rounded-br-md bg-ink text-paper'
-                    : 'rounded-2xl rounded-bl-md border border-line bg-paper-raised text-ink'
+                    ? 'bg-foreground text-background shadow-brutal-sm'
+                    : 'bg-background text-foreground shadow-brutal-sm'
                 }`}
               >
-                <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed">{t.content}</p>
+                <p className="whitespace-pre-wrap text-[13.5px] font-bold leading-relaxed">{t.content}</p>
                 {t.tools && t.tools.length > 0 && (
-                  <p className="mt-1.5 font-mono text-[10px] text-ink-faint">checked: {t.tools.join(', ')}</p>
+                  <p className="mt-1.5 font-mono text-[10px] font-bold uppercase opacity-60">
+                    checked: {t.tools.join(', ')}
+                  </p>
                 )}
               </div>
             </li>
@@ -214,8 +218,8 @@ export function ReflectView() {
         })}
         {busy && (
           <li className="flex justify-start">
-            <p className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-line bg-paper-raised px-3.5 py-2.5 text-[13px] text-ink-faint">
-              <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin text-clay" />
+            <p className="flex items-center gap-2 border-2 border-foreground bg-background p-3 text-[13px] font-bold shadow-brutal-sm">
+              <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin text-accent" />
               Reading what you ticked…
             </p>
           </li>
@@ -224,7 +228,7 @@ export function ReflectView() {
       <div ref={endRef} />
 
       {/* composer */}
-      <form onSubmit={send} className="sticky bottom-0 mt-4 flex items-end gap-2 bg-paper py-3">
+      <form onSubmit={send} className="sticky bottom-0 mt-4 flex items-end gap-2 bg-background py-3">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -233,7 +237,7 @@ export function ReflectView() {
           }
           aria-label="Ask the companion"
           disabled={selected.length === 0}
-          className="h-11 flex-1 rounded-xl border border-line bg-paper-raised px-3.5 text-[13.5px] text-ink placeholder:text-ink-faint focus:border-clay-soft focus:outline-none focus:ring-2 focus:ring-clay-soft/40 disabled:opacity-60"
+          className="h-11 flex-1 border-2 border-foreground bg-background px-3.5 font-mono text-[13.5px] font-bold placeholder:text-muted-foreground focus:border-accent focus:outline-none disabled:opacity-60"
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) void send(e as unknown as React.FormEvent)
           }}
@@ -242,10 +246,10 @@ export function ReflectView() {
           type="submit"
           size="icon"
           disabled={!input.trim() || busy || selected.length === 0}
-          className="press h-11 w-11 shrink-0 rounded-xl shadow-ink"
+          className="h-11 w-11 shrink-0"
           aria-label="Send"
         >
-          <PaperPlaneTilt weight="fill" className="h-4 w-4" />
+          <PaperPlaneTilt weight="bold" className="h-4 w-4" />
         </Button>
       </form>
     </div>
