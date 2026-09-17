@@ -143,10 +143,9 @@ function UnlockPin() {
   const [pin, setPin] = useState('')
   const [busy, setBusy] = useState(false)
   const [passkeyBusy, setPasskeyBusy] = useState(false)
-  const [passkeyOffer, setPasskeyOffer] = useState(false)
+  const [passkeyOffer, setPasskeyOffer] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // A registered passkey is discovered from the bundle — never assumed.
   useEffect(() => {
     let alive = true
     void import('@/lib/api/endpoints')
@@ -154,7 +153,9 @@ function UnlockPin() {
       .then((bundle) => {
         if (alive) setPasskeyOffer(Boolean(bundle.passkey))
       })
-      .catch(() => null)
+      .catch(() => {
+        if (alive) setPasskeyOffer(false)
+      })
     return () => {
       alive = false
     }

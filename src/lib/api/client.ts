@@ -13,6 +13,16 @@
 const TOKEN_KEY = 'echoes.session.token'
 const REFRESH_KEY = 'echoes.session.refresh'
 const SESSION_KEY = 'echoes.session.user'
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 30
+
+function setCookie(token: string | null) {
+  if (typeof window === 'undefined') return
+  if (token) {
+    document.cookie = `${TOKEN_KEY}=${encodeURIComponent(token)}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`
+  } else {
+    document.cookie = `${TOKEN_KEY}=; path=/; max-age=0`
+  }
+}
 
 export class ApiError extends Error {
   status: number
@@ -73,6 +83,7 @@ export function getToken(): string | null {
 export function setToken(token: string | null) {
   cachedToken = token
   tokenRead = true
+  setCookie(token)
   if (typeof window === 'undefined') return
   if (token === null) {
     window.localStorage.removeItem(TOKEN_KEY)
