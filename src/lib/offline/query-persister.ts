@@ -30,6 +30,15 @@ function openDb(): Promise<IDBDatabase> | null {
       }
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
+      // A blocked open (another tab holding an old version) never fires
+      // success or error; resolve null so the caller no-ops instead of hanging
+      // forever behind a promise that will never settle.
+      req.onblocked = () => reject(new Error('indexedDB open blocked'))
+    })
+    // Don't cache a failure: a transient open error must not poison every later
+    // read/write for the life of the tab.
+    dbPromise.catch(() => {
+      dbPromise = null
     })
   }
   return dbPromise
@@ -38,40 +47,51 @@ function openDb(): Promise<IDBDatabase> | null {
 function read(key: string): Promise<string | null> {
   const db = openDb()
   if (!db) return Promise.resolve(null)
-  return db.then(
-    (d) =>
-      new Promise((resolve) => {
-        const req = d.transaction(STORE, 'readonly').objectStore(STORE).get(key)
-        req.onsuccess = () => resolve((req.result as string | undefined) ?? null)
-        req.onerror = () => resolve(null)
-      }),
+  return (
+    db
+      .then(
+        (d) =>
+          new Promise<string | null>((resolve) => {
+            const req = d.transaction(STORE, 'readonly').objectStore(STORE).get(key)
+            req.onsuccess = () => resolve((req.result as string | undefined) ?? null)
+            req.onerror = () => resolve(null)
+          }),
+      )
+      // A read that errors is a miss, never a throw: the persister treats a throw
+      // as "this cache is corrupt" and deletes it, which would take the offline
+      // journal down with it.
+      .catch(() => null)
   )
 }
 
 function write(key: string, value: string): Promise<void> {
   const db = openDb()
   if (!db) return Promise.resolve()
-  return db.then(
-    (d) =>
-      new Promise((resolve) => {
-        const req = d.transaction(STORE, 'readwrite').objectStore(STORE).put(value, key)
-        req.onsuccess = () => resolve()
-        req.onerror = () => resolve() // A full quota or lock never breaks the app.
-      }),
-  )
+  return db
+    .then(
+      (d) =>
+        new Promise<void>((resolve) => {
+          const req = d.transaction(STORE, 'readwrite').objectStore(STORE).put(value, key)
+          req.onsuccess = () => resolve()
+          req.onerror = () => resolve() // A full quota or lock never breaks the app.
+        }),
+    )
+    .catch(() => undefined)
 }
 
 function clear(key: string): Promise<void> {
   const db = openDb()
   if (!db) return Promise.resolve()
-  return db.then(
-    (d) =>
-      new Promise((resolve) => {
-        const req = d.transaction(STORE, 'readwrite').objectStore(STORE).delete(key)
-        req.onsuccess = () => resolve()
-        req.onerror = () => resolve()
-      }),
-  )
+  return db
+    .then(
+      (d) =>
+        new Promise<void>((resolve) => {
+          const req = d.transaction(STORE, 'readwrite').objectStore(STORE).delete(key)
+          req.onsuccess = () => resolve()
+          req.onerror = () => resolve()
+        }),
+    )
+    .catch(() => undefined)
 }
 
 export const idbPersister = createAsyncStoragePersister({
