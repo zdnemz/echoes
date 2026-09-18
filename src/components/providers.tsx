@@ -33,7 +33,22 @@ export function Providers({ children }: { children: ReactNode }) {
   )
 
   return (
-    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister: idbPersister, maxAge: Infinity }}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{
+        persister: idbPersister,
+        maxAge: Infinity,
+        dehydrateOptions: {
+          // Keep any query that still holds data, not just the ones currently
+          // 'success'. Offline, a refetch that fails flips the query to 'error'
+          // while the cached rows survive in memory — and the default filter
+          // would drop exactly those rows from the persisted snapshot. One
+          // offline error in a session would then erase the cache, so the next
+          // cold start showed nothing until the network came back.
+          shouldDehydrateQuery: (query) => query.state.data !== undefined,
+        },
+      }}
+    >
       <SessionProvider>
         <OutboxSyncBridge />
         {children}
