@@ -136,6 +136,27 @@ export function persistSession(session: { access_token: string; refresh_token?: 
  */
 let refreshInFlight: Promise<boolean> | null = null
 
+/**
+ * `fetch` with a deadline. A dead network that `navigator.onLine` still calls
+ * online would otherwise leave the promise pending for a minute or more; the
+ * timeout turns that into an ordinary AbortError the caller maps to a NETWORK
+ * drop. A caller-supplied `signal` still wins — we abort on whichever fires
+ * first, and clear the timer so a resolved response leaves no dangling handle.
+ */
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  const caller = init.signal
+  const onCallerAbort = () => controller.abort()
+  caller?.addEventListener('abort', onCallerAbort)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+    caller?.removeEventListener('abort', onCallerAbort)
+  }
+}
+
 async function tryRefreshSession(): Promise<boolean> {
   const refreshToken = getRefreshToken()
   if (!refreshToken) return false
@@ -171,6 +192,16 @@ async function tryRefreshSession(): Promise<boolean> {
   return refreshInFlight
 }
 
+/**
+ * How long a request may hang before it is treated as a network drop. The
+ * browser's own `navigator.onLine` is not trustworthy — turning wifi off often
+ * leaves it `true`, so the fetch above never runs and `fetch` below sits on a
+ * dead socket (tens of seconds, sometimes forever). Every offline path keys off
+ * a NETWORK error arriving promptly: without this the vault stays 'resolving'
+ * behind a skeleton, and an offline write never reaches the outbox.
+ */
+const REQUEST_TIMEOUT_MS = 8_000
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   // Offline: fail fast as a NETWORK drop rather than issuing a fetch the
   // browser will reject anyway. This is the one place every caller funnels
@@ -194,8 +225,11 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
   let res: Response
   try {
-    res = await fetch(path, { ...init, headers })
+    res = await fetchWithTimeout(path, { ...init, headers })
   } catch (cause) {
+    // A caller-supplied abort is a cancellation, not a dead network — let the
+    // original reason surface instead of pretending the server was unreachable.
+    if (cause instanceof DOMException && cause.name === 'AbortError' && init?.signal?.aborted) throw cause
     throw new ApiError(0, 'NETWORK', 'Could not reach the server', String(cause))
   }
 
@@ -207,8 +241,9 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       if (!retryHeaders.has('content-type') && init?.body) retryHeaders.set('content-type', 'application/json')
       retryHeaders.set('authorization', `Bearer ${getToken()}`)
       try {
-        res = await fetch(path, { ...init, headers: retryHeaders })
+        res = await fetchWithTimeout(path, { ...init, headers: retryHeaders })
       } catch (cause) {
+        if (cause instanceof DOMException && cause.name === 'AbortError' && init?.signal?.aborted) throw cause
         throw new ApiError(0, 'NETWORK', 'Could not reach the server', String(cause))
       }
       if (res.status === 401) {

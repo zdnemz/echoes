@@ -10,7 +10,9 @@ import { api, ApiError, isNetworkDrop } from './client'
  * error it produces is the NETWORK drop the outbox and fallbacks key off.
  */
 
-const fetchMock = mock(() => Promise.resolve(new Response(JSON.stringify({ ok: true }))))
+const fetchMock = mock((_url: RequestInfo | URL, _init?: RequestInit) =>
+  Promise.resolve(new Response(JSON.stringify({ ok: true }))),
+)
 
 // Save the real globals: this runner shares a process with other test files,
 // so a leaked mock fetch (always { ok: true }) or a deleted navigator breaks
@@ -68,5 +70,49 @@ describe('offline guard', () => {
     setOnline(undefined)
     await api('/api/health')
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  test(
+    'a fetch that never settles becomes a NETWORK drop, not a hang',
+    async () => {
+      // The real reason this matters: turning wifi off often leaves
+      // navigator.onLine true, so the guard above is skipped and the request
+      // sits on a dead socket. Every offline path — the vault's key-state
+      // resolve, an offline write reaching the outbox — keys off a prompt
+      // NETWORK error.
+      setOnline(true)
+      fetchMock.mockImplementationOnce(
+        (_url, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('The operation was aborted.', 'AbortError')),
+            )
+          }),
+      )
+      const started = Date.now()
+      const err = await api('/api/notebooks').catch((e) => e)
+      expect(isNetworkDrop(err)).toBe(true)
+      // Bounded by the client's own deadline, not the (never-arriving) response.
+      expect(Date.now() - started).toBeLessThan(15_000)
+    },
+    { timeout: 15_000 },
+  )
+
+  test('a caller-supplied abort stays a cancellation, not a NETWORK drop', async () => {
+    setOnline(true)
+    const controller = new AbortController()
+    fetchMock.mockImplementationOnce(
+      (_url, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError')),
+          )
+        }),
+    )
+    const p = api('/api/notebooks', { signal: controller.signal }).catch((e) => e)
+    controller.abort()
+    const err = await p
+    expect(err).toBeInstanceOf(DOMException)
+    expect(isNetworkDrop(err)).toBe(false)
   })
 })
