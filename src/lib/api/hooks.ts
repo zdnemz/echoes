@@ -8,7 +8,7 @@
 
 import { useMutation, useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import * as api from './endpoints'
-import type { Entry, EntryKeyWrap, Group, GroupDetail, Paginated } from './types'
+import type { Entry, EntryKeyWrap, Group, GroupDetail, Notebook, Paginated } from './types'
 import type { Mood } from '@/components/mood/glyphs'
 import { useSession } from '@/lib/auth/session'
 import { ApiError, isNetworkDrop, isUnconfigured, isUnauthorized } from './client'
@@ -255,35 +255,64 @@ function placeholderEntry(id: string, notebookId: string, authorId: string, inpu
 }
 
 /**
- * Splice an offline-written entry into every cached list for its notebook so
- * it shows without a network round-trip. The lists are infinite queries keyed
- * `['entries', notebookId, mood]`. A brand-new entry is newest, so it goes at
- * the head of page 1 where the API would have put it; an edit replaces the row
- * in place. Skips caches that never loaded — there is no page shape to extend,
- * and the sync will refetch them.
+ * Splice an offline-written entry into every cached list it belongs in, so it
+ * shows without a network round-trip. Two lists matter:
+ *  - the notebook journal, infinite queries keyed `['entries', notebookId, mood]`
+ *  - the group journal, keyed `['group-entries', groupId, ...filters]` — only
+ *    when the entry's notebook is shared into a group.
+ *
+ * A brand-new entry is newest, so it goes at the head of page 1 where the API
+ * would have put it; an edit replaces the row in place. When a list has no
+ * cached page yet (never loaded this session, or evicted) one is seeded from
+ * the entry alone — otherwise the write would land nowhere and stay invisible
+ * until the next reconnect.
  */
-function insertEntryIntoLists(qc: QueryClient, entry: Entry): void {
-  qc.setQueriesData<{ pages: Paginated<Entry>[]; pageParams: unknown[] }>(
-    { queryKey: ['entries', entry.notebook_id] },
-    (old) => {
-      if (!old?.pages?.length) return old
-      let found = false
-      const pages = old.pages.map((page) => ({
-        ...page,
-        data: page.data.map((e) => {
-          if (e.id !== entry.id) return e
-          found = true
-          return entry
-        }),
-      }))
-      if (found) return { ...old, pages }
-      const [first, ...rest] = pages
-      return {
-        ...old,
-        pages: [{ ...first, data: [entry, ...first.data] }, ...rest],
-      }
-    },
-  )
+export function insertEntryIntoLists(qc: QueryClient, entry: Entry): void {
+  spliceIntoList(qc, ['entries', entry.notebook_id], ['entries', entry.notebook_id, 'all'], entry)
+
+  const groupId = groupIdForNotebook(qc, entry.notebook_id)
+  if (groupId && entry.is_shared) {
+    spliceIntoList(qc, ['group-entries', groupId], ['group-entries', groupId, '', '', '', '', '', ''], entry)
+  }
+}
+
+/** The group a notebook is shared into, from the notebooks cache. */
+function groupIdForNotebook(qc: QueryClient, notebookId: string): string | null {
+  const notebooks = qc.getQueryData<Paginated<Notebook>>(['notebooks'])
+  return notebooks?.data.find((nb) => nb.id === notebookId)?.group_id ?? null
+}
+
+/**
+ * Upsert `entry` into every cached infinite list under `keyPrefix`; when none
+ * is cached, seed `defaultKey` (the unfiltered list) so the write is visible
+ * without a network round-trip.
+ */
+function spliceIntoList(qc: QueryClient, keyPrefix: unknown[], defaultKey: unknown[], entry: Entry): void {
+  let matched = false
+  // `setQueriesData` only visits queries already in the cache, so an absent
+  // list has to be seeded below.
+  qc.setQueriesData<{ pages: Paginated<Entry>[]; pageParams: unknown[] }>({ queryKey: keyPrefix }, (old) => {
+    if (!old?.pages?.length) return old
+    matched = true
+    let found = false
+    const pages = old.pages.map((page) => ({
+      ...page,
+      data: page.data.map((e) => {
+        if (e.id !== entry.id) return e
+        found = true
+        return entry
+      }),
+    }))
+    if (found) return { ...old, pages }
+    const [first, ...rest] = pages
+    return { ...old, pages: [{ ...first, data: [entry, ...first.data] }, ...rest] }
+  })
+  if (!matched && qc.getQueryData(defaultKey) === undefined) {
+    qc.setQueryData(defaultKey, {
+      pages: [{ data: [entry], pagination: { page: 1, limit: 20, total: 1 } }],
+      pageParams: [1],
+    })
+  }
 }
 
 // ---------------------------------------------------------------- group journal
