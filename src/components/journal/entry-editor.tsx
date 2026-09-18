@@ -461,7 +461,10 @@ export function EntryEditor({ mode, onNavigate }: { mode: Mode; onNavigate: (v: 
   // --------------------------------------------------------------- loading
 
   if (!mode.compose && !entry) {
-    if (entryQuery?.isError) {
+    // A warm cache survives an offline refetch: `data` is still set while
+    // `isError` is true, so only fall through to the error when there is
+    // nothing to read.
+    if (entryQuery?.isError && !entryQuery.data) {
       return (
         <div className="mx-4 lg:mx-0">
           <p className="text-[13.5px] text-ember">

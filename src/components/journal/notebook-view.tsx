@@ -480,7 +480,7 @@ export function NotebookView({ notebookId, onNavigate }: { notebookId: string; o
           <EntryRowSkeleton />
           <EntryRowSkeleton />
         </ul>
-      ) : entries.isError ? (
+      ) : entries.isError && list.length === 0 ? (
         <QueryError
           error={entries.error}
           fallback="Couldn't load entries."
