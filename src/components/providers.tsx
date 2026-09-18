@@ -6,7 +6,7 @@
  * during first render, so server and client markup always agree).
  */
 
-import { useState, type ReactNode } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { QueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { Toaster } from 'sonner'
@@ -31,6 +31,13 @@ export function Providers({ children }: { children: ReactNode }) {
         },
       }),
   )
+
+  // Dev-only handle so an offline repro can be inspected from the console:
+  //   __qc.getQueryCache().getAll().map(q => [q.queryKey, q.state.status, q.state.data === undefined])
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production' || typeof window === 'undefined') return
+    ;(window as unknown as { __qc?: QueryClient }).__qc = queryClient
+  }, [queryClient])
 
   return (
     <PersistQueryClientProvider

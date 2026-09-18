@@ -268,6 +268,18 @@ function placeholderEntry(id: string, notebookId: string, authorId: string, inpu
  * until the next reconnect.
  */
 export function insertEntryIntoLists(qc: QueryClient, entry: Entry): void {
+  if (process.env.NODE_ENV !== 'production') {
+    console.debug('[offline] insertEntryIntoLists', {
+      id: entry.id,
+      notebook: entry.notebook_id,
+      is_shared: entry.is_shared,
+      keysBefore: qc
+        .getQueryCache()
+        .getAll()
+        .map((q) => q.queryKey)
+        .filter((k) => k[0] === 'entries' || k[0] === 'group-entries'),
+    })
+  }
   spliceIntoList(qc, ['entries', entry.notebook_id], ['entries', entry.notebook_id, 'all'], entry)
 
   const groupId = groupIdForNotebook(qc, entry.notebook_id)
