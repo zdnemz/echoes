@@ -36,10 +36,10 @@ import {
   unwrapKey,
   wrapKey,
 } from './envelope'
-import { api, getToken, json } from '@/lib/api/client'
+import { api, getToken, isNetworkDrop, json } from '@/lib/api/client'
 import { getAccountKeys, publishAccountKeys, type AccountKeyBundle, type GroupKeyWraps } from '@/lib/api/endpoints'
 import { clearSessionKek, loadSessionKek, saveSessionKek } from './session-store'
-import { getBundle, saveBundle } from './bundle-store'
+import { getBundle, loadBundle, saveBundle } from './bundle-store'
 
 /** A remembered browser re-asks the PIN only after 30 idle days. */
 const REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -141,9 +141,32 @@ async function resolveKeyState(): Promise<void> {
     }
     keyState = 'locked'
   } catch (err) {
-    // 404 = the account never chose a PIN. 401 = the session is gone; the
-    // auth layer will route to the landing, so the state here is inert.
-    keyState = hasStatus(err, 404) || hasStatus(err, 401) ? 'unprovisioned' : 'locked'
+    if (hasStatus(err, 404) || hasStatus(err, 401)) {
+      keyState = 'unprovisioned'
+    } else if (isNetworkDrop(err)) {
+      const cached = await loadBundle().catch(() => null)
+      if (cached?.salt && cached?.wrapped_dek && cached?.wrapped_private_key) {
+        const remembered = await loadSessionKek()
+        if (remembered) {
+          try {
+            const dek = await unwrapKey(cached.wrapped_dek, remembered)
+            const identityPrivate = await importPrivateKey(await openText(cached.wrapped_private_key, dek))
+            vault = { dek, identityPrivate, identityPublic: cached.public_key ?? '' }
+            keyState = 'unlocked'
+            void saveSessionKek(remembered, REMEMBER_TTL_MS)
+            emit()
+            return
+          } catch {
+            await clearSessionKek()
+          }
+        }
+        keyState = 'locked'
+      } else {
+        keyState = 'locked'
+      }
+    } else {
+      keyState = 'locked'
+    }
   }
   emit()
 }
