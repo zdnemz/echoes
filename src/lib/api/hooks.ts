@@ -6,7 +6,7 @@
  * (notebook-scoped entry queries, not everything).
  */
 
-import { useMutation, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import * as api from './endpoints'
 import type { Entry, EntryKeyWrap, Group, GroupDetail, Paginated } from './types'
 import type { Mood } from '@/components/mood/glyphs'
@@ -151,7 +151,11 @@ export function useCreateEntry() {
       }
     },
     onSuccess: (entry) => {
-      qc.invalidateQueries({ queryKey: ['entries', entry.notebook_id] })
+      // Offline create (or edit): the entry only exists in the outbox, so an
+      // invalidation just refetches over a dead network and the row never
+      // shows. Put it straight into the list the user is looking at.
+      if (isLocalId(entry.id)) insertEntryIntoLists(qc, entry)
+      else qc.invalidateQueries({ queryKey: ['entries', entry.notebook_id] })
       qc.invalidateQueries({ queryKey: ['group-entries'] })
       qc.invalidateQueries({ queryKey: ['notebooks'] })
     },
@@ -182,7 +186,11 @@ export function useUpdateEntry() {
     },
     onSuccess: (entry) => {
       qc.setQueryData(['entry', entry.id], entry)
-      qc.invalidateQueries({ queryKey: ['entries', entry.notebook_id] })
+      // An offline edit lives only in the outbox; invalidating would refetch
+      // over a dead network and drop the row's new title from the list. Patch
+      // it in place instead.
+      if (isLocalId(entry.id)) insertEntryIntoLists(qc, entry)
+      else qc.invalidateQueries({ queryKey: ['entries', entry.notebook_id] })
       qc.invalidateQueries({ queryKey: ['group-entries'] })
       qc.invalidateQueries({ queryKey: ['search'] })
     },
@@ -244,6 +252,38 @@ function placeholderEntry(id: string, notebookId: string, authorId: string, inpu
     updated_at: now,
     key_wraps: input.key_wraps,
   }
+}
+
+/**
+ * Splice an offline-written entry into every cached list for its notebook so
+ * it shows without a network round-trip. The lists are infinite queries keyed
+ * `['entries', notebookId, mood]`. A brand-new entry is newest, so it goes at
+ * the head of page 1 where the API would have put it; an edit replaces the row
+ * in place. Skips caches that never loaded — there is no page shape to extend,
+ * and the sync will refetch them.
+ */
+function insertEntryIntoLists(qc: QueryClient, entry: Entry): void {
+  qc.setQueriesData<{ pages: Paginated<Entry>[]; pageParams: unknown[] }>(
+    { queryKey: ['entries', entry.notebook_id] },
+    (old) => {
+      if (!old?.pages?.length) return old
+      let found = false
+      const pages = old.pages.map((page) => ({
+        ...page,
+        data: page.data.map((e) => {
+          if (e.id !== entry.id) return e
+          found = true
+          return entry
+        }),
+      }))
+      if (found) return { ...old, pages }
+      const [first, ...rest] = pages
+      return {
+        ...old,
+        pages: [{ ...first, data: [entry, ...first.data] }, ...rest],
+      }
+    },
+  )
 }
 
 // ---------------------------------------------------------------- group journal
