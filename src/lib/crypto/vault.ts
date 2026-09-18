@@ -334,7 +334,10 @@ export async function getGroupCek(groupId: string): Promise<CryptoKey | null> {
     groupCeks.set(groupId, { key: cek, generation: mine.generation })
     return cek
   } catch (err) {
-    if (hasStatus(err, 404)) return null
+    // 404 = no box for me yet. A network drop is the same situation offline:
+    // the group box can't be fetched, so seal author-only rather than losing
+    // the write — a holder's next visit backfills the group wrap.
+    if (hasStatus(err, 404) || isNetworkDrop(err)) return null
     throw err
   }
 }
